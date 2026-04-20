@@ -122,6 +122,7 @@ The architecture above guarantees:
 | Frontend | `frontend/` |
 | Eval datasets | `evals/<agent_name>/` |
 | ADRs | `docs/decisions/` |
+| Deferred ideas (not yet decisions) | `docs/future-ideas.md` |
 
 ## Environments
 
