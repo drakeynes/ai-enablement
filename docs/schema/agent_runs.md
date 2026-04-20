@@ -16,7 +16,7 @@ The universal agent telemetry table. Every agent writes one row per run — succ
 | `trigger_metadata` | `jsonb` | What triggered it (Slack event payload, cron info, etc.) |
 | `input_summary` | `text` | Short human-readable input description |
 | `output_summary` | `text` | Short human-readable output description |
-| `status` | `text` | Not null. `success`, `escalated`, `error`, `skipped` |
+| `status` | `text` | Not null. `running` while in flight; terminal values `success`, `escalated`, `error`, `skipped` |
 | `confidence_score` | `float` | Optional, agent-reported |
 | `llm_model` | `text` | `claude-sonnet-4-6`, `claude-opus-4-7`, ... |
 | `llm_input_tokens` | `integer` | |
