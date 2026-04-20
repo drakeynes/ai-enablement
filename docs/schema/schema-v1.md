@@ -203,21 +203,35 @@ id                uuid PK
 external_id       text UNIQUE NOT NULL  -- Fathom's call ID
 source            text NOT NULL DEFAULT 'fathom'  -- allows adding other sources later
 title             text
-call_type         text  -- 'sales', 'onboarding', 'csm_check_in', 'coaching', 'unknown'
+call_category     text NOT NULL  -- 'client', 'internal', 'external', 'unclassified', 'excluded'
+call_type         text  -- 'sales', 'onboarding', 'csm_check_in', 'coaching', 'team_sync', 'leadership', 'unknown'
+classification_confidence float  -- 0-1, how sure we are of the category
+classification_method text  -- 'participant_match', 'title_pattern', 'llm_classified', 'manual'
+primary_client_id uuid REFERENCES clients(id)  -- for client calls, the primary client
 started_at        timestamptz NOT NULL
 duration_seconds  integer
 recording_url     text
 transcript        text  -- full transcript
 summary           text  -- Fathom's or our generated summary
+is_retrievable_by_client_agents boolean NOT NULL DEFAULT false  -- safety flag: can Ella retrieve context from this?
 raw_payload       jsonb NOT NULL  -- full Fathom API response
 ingested_at       timestamptz NOT NULL DEFAULT now()
 ```
 
-**Populated by:** Fathom ingestion (webhook + periodic pull).
+**Call categories explained:**
+- `client` — call with one or more known clients. Safe to index for client-facing agents, scoped to those clients.
+- `internal` — team-only meeting. Indexed for internal agents (CSM Co-Pilot, Exec Briefing) only. Never retrievable by Ella or other client-facing agents.
+- `external` — non-client external parties (vendors, unconverted prospects). Not indexed for retrieval by default.
+- `unclassified` — couldn't determine. Held for human review; no retrieval allowed until classified.
+- `excluded` — personal or irrelevant, tagged to skip future ingestion attempts.
 
-**Read by:** Ella (for client-specific context), CSM Co-Pilot, Sales Call Analysis Agent (later).
+**Safety:** `is_retrievable_by_client_agents` is the hard gate. Ella's retrieval queries MUST filter on this flag. Defaults to false. Only flipped to true after confident classification as a `client` call.
 
-**Note on `call_type`:** inferred via simple rules initially (call title patterns, participants), may use Claude for classification later.
+**Populated by:** Fathom ingestion (webhook + periodic pull). Classification runs at ingestion time using participant matching first, title patterns second, LLM classification as fallback.
+
+**Read by:** Ella (only `client` category, only for the matched client), CSM Co-Pilot (`client` + `internal`), Sales Call Analysis Agent later, Executive Briefing (`internal` + `client` summaries).
+
+**Note on `call_type`:** finer-grained sub-type within the category. For client calls: sales, onboarding, csm_check_in, coaching. For internal: team_sync, leadership, strategy. Inferred via rules + LLM classification.
 
 ---
 
