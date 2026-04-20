@@ -42,6 +42,77 @@ Dimension `1536` matches OpenAI `text-embedding-3-small`. Model choice is an ADR
 
 - `shared/kb_query.py` — the only place retrieval should happen. Agents never query this table directly.
 
+## Search Function
+
+`match_document_chunks` is the Postgres function that powers all retrieval. `shared/kb_query.py` wraps it via Supabase RPC; no agent should bypass this wrapper. Defined in migration `0008_kb_search.sql`.
+
+### Signature
+
+```sql
+match_document_chunks(
+  query_embedding  vector(1536),
+  match_count      int     default 8,
+  document_types   text[]  default null,
+  tags             text[]  default null,
+  min_similarity   float   default 0.0,
+  client_id        text    default null,
+  include_global   bool    default true
+)
+returns table (
+  chunk_id             uuid,
+  document_id          uuid,
+  document_type        text,
+  document_title       text,
+  document_created_at  timestamptz,
+  content              text,
+  chunk_index          int,
+  similarity           float,   -- 1 - cosine_distance, higher is closer
+  metadata             jsonb    -- chunk metadata merged with document metadata; document wins on key collision
+)
+```
+
+### Behavior
+
+**Global mode** (when `client_id is null`):
+- Returns chunks from `is_active = true` documents.
+- **Always excludes `document_type = 'call_summary'`**, even if the caller passes `call_summary` in `document_types`. This is the hard safety gate: no call summary ever leaks into a global query.
+
+**Client mode** (when `client_id is not null`):
+- Always includes `call_summary` chunks where `documents.metadata->>'client_id'` matches the passed `client_id`.
+- If `include_global = true` (default), also returns chunks from non-`call_summary` active documents in the same ranked list, single `match_count` cap.
+- If `include_global = false`, returns only that client's call summaries.
+
+**Filters applied in all modes:**
+- `document_types` (optional) — narrow to given types. Subject to the global `call_summary` exclusion in global mode.
+- `tags` (optional) — match documents with any overlapping tag.
+- `min_similarity` (default 0.0) — drop rows below this cosine similarity.
+- `match_count` (default 8) — LIMIT on the final ranked list.
+
+**Similarity metric:** `1 - (embedding <=> query_embedding)`, i.e. cosine similarity for normalized vectors. Higher = closer. Range is theoretically `[-1, 1]`; in practice positive for non-adversarial matches.
+
+**Metadata merge:** returned `metadata` is `chunk.metadata || document.metadata`. Document keys override chunk keys on collision so document-level tags (e.g. `client_id` on call summaries) are authoritative.
+
+### Example
+
+```sql
+-- Global FAQ/course match, top 5.
+select chunk_id, document_type, similarity
+from match_document_chunks(
+  query_embedding => '[0.1, 0.2, ...]'::vector,
+  match_count => 5,
+  document_types => array['faq', 'course_lesson']
+);
+
+-- Client-scoped match mixing call summaries with global docs.
+select chunk_id, document_type, similarity
+from match_document_chunks(
+  query_embedding => '[0.1, 0.2, ...]'::vector,
+  match_count => 8,
+  client_id => '<uuid>',
+  include_global => true
+);
+```
+
 ## Example Queries
 
 Top-k nearest chunks to a query embedding, filtered to a document type:

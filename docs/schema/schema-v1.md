@@ -2,7 +2,7 @@
 
 First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co-Pilot V1 need, with room to grow into CRM, marketing, and team-scoring data later without restructuring.
 
-**Status:** Implemented by migrations 0001–0007.
+**Status:** Implemented by migrations 0001–0008.
 
 ## Design Principles
 
@@ -499,3 +499,4 @@ Post-review constraint tweaks applied after the initial implementation, before m
 - **Source-scoped `calls.external_id` uniqueness.** Replaced the standalone unique on `external_id` with a composite `UNIQUE (source, external_id)`. Prevents a future Gong / Zoom id collision with an existing Fathom id. Captured in migration `0003_calls.sql`.
 - **Non-null `call_action_items.owner_type`.** Added `not null default 'unknown'` so every action item has an owner classification, even when extraction cannot resolve one. Captured in migration `0003_calls.sql`.
 - **Partial unique indexes on `team_members` and `clients`.** Replaced the full-table unique constraints on `email` / `slack_user_id` with partial unique indexes filtered on `archived_at is null`, so soft-archived records do not block re-enrollment / re-hire. Captured in migration `0007_partial_unique_archival.sql`. `slack_channels` left unchanged (uses `is_archived` boolean, not `archived_at`, and Slack channel id reuse is not a real scenario).
+- **`match_document_chunks` Postgres function.** Retrieval primitive wrapping filtered vector search, with the hard safety property that `call_summary` documents are excluded in global mode and scoped to a single client in client mode. Captured in migration `0008_kb_search.sql`; full contract documented in `document_chunks.md`.
