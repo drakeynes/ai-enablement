@@ -118,6 +118,8 @@ Documentation is not optional and not written "later." It ships alongside the co
   - Bad: `updates`, `fixed stuff`, `wip`
 - Never commit secrets. Run `git diff` before every commit to scan for keys.
 
+**Commit policy:** At the end of each meaningful unit of work (a feature complete, a migration applied, a file fully refactored), commit with a clear message following our convention. Do not commit half-finished work. Do not commit if tests/validation fail. Push to remote at the end of each session.
+
 ### Error Handling
 
 - External API calls always wrapped with retry + timeout + structured logging
