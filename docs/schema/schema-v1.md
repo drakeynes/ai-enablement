@@ -58,10 +58,11 @@ First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co
 
 | Table | Purpose |
 |-------|---------|
-| `accountability_submissions` | Daily/weekly client check-ins |
 | `nps_submissions` | NPS scores and feedback |
 | `client_health_scores` | Computed health scores per client per day |
 | `alerts` | Actionable alerts (churn risk, upsell, etc.) |
+
+**Note:** accountability submissions are not a separate table. They're ingested as Slack messages with `message_subtype = 'accountability_submission'`. See `slack_messages` for detail.
 
 ---
 
@@ -175,9 +176,10 @@ slack_channel_id  text NOT NULL  -- matches slack_channels.slack_channel_id
 slack_ts          text NOT NULL  -- Slack's timestamp, unique per message
 slack_thread_ts   text           -- null if not in a thread
 slack_user_id     text NOT NULL  -- author's Slack ID
-author_type       text NOT NULL  -- 'client', 'team_member', 'bot', 'unknown'
+author_type       text NOT NULL  -- 'client', 'team_member', 'bot', 'workflow', 'unknown'
 text              text NOT NULL
-message_type      text NOT NULL DEFAULT 'message'  -- 'message', 'thread_reply', 'bot_message'
+message_type      text NOT NULL DEFAULT 'message'  -- 'message', 'thread_reply', 'bot_message', 'workflow_submission'
+message_subtype   text           -- 'accountability_submission', 'nps_submission', etc. Tagged during ingestion.
 raw_payload       jsonb NOT NULL  -- full original event for future extraction
 sent_at           timestamptz NOT NULL
 ingested_at       timestamptz NOT NULL DEFAULT now()
@@ -186,7 +188,9 @@ UNIQUE (slack_channel_id, slack_ts)
 
 **Populated by:** Slack ingestion — historical backfill + real-time events going forward.
 
-**Read by:** Ella (for retrieval: "has this client asked this before"), CSM Co-Pilot (for sentiment/activity signals).
+**Read by:** Ella (for retrieval: "has this client asked this before"), CSM Co-Pilot (for sentiment/activity signals, accountability submissions, NPS submissions).
+
+**Note on accountability submissions:** clients submit accountability via a Slack Workflow form. The form submission posts back to the channel as a structured message. The ingestion pipeline tags these with `message_subtype = 'accountability_submission'` so CSM Co-Pilot can query them without re-parsing. The structured form fields are preserved in `raw_payload` and can be extracted into `metadata` during ingestion if we want fast access to specific fields.
 
 ---
 
@@ -281,9 +285,13 @@ archived_at       timestamptz
 UNIQUE (source, external_id)
 ```
 
-**Populated by:** Drive ingestion + manual seed for FAQs.
+**Populated by:** Drive ingestion + manual seed for FAQs + call ingestion (call summaries are created as documents with `document_type = 'call_summary'` and `metadata.call_id` linking back to `calls`).
 
 **Read by:** Ella (via `document_chunks` for retrieval).
+
+**Retrieval pattern:** course content, FAQs, and SOPs are globally retrievable by any client. Call summaries are filtered by client — Ella only retrieves a client's own call summaries when answering that client's questions. The filter is `metadata->>'client_id' = <asking_client_id>` for `document_type = 'call_summary'` rows.
+
+**On raw transcripts vs. summaries:** full transcripts are stored in `calls.transcript` but not indexed for retrieval. Only the summary + extracted key points land in `documents` / `document_chunks`. Raw transcripts are too noisy for retrieval; summaries give Ella clean, high-signal context.
 
 ---
 
@@ -385,31 +393,6 @@ created_at        timestamptz NOT NULL DEFAULT now()
 **Populated by:** HITL flows, Zain's QA work, CSM thumbs-up/down actions in Slack.
 
 **Read by:** eval harness, agent improvement workflows.
-
----
-
-### accountability_submissions
-
-Daily or weekly client check-ins. Structure depends on your current intake format — adjust columns to match.
-
-```
-id                uuid PK
-client_id         uuid NOT NULL REFERENCES clients(id)
-submission_date   date NOT NULL
-content           jsonb NOT NULL  -- flexible; shape depends on the form
-raw_text          text            -- if submitted as free text
-source            text NOT NULL   -- 'typeform', 'slack', 'manual'
-source_external_id text
-submitted_at      timestamptz NOT NULL
-ingested_at       timestamptz NOT NULL DEFAULT now()
-UNIQUE (source, source_external_id)
-```
-
-**Populated by:** whatever ingestion pipeline matches your intake (Typeform, Slack, etc.).
-
-**Read by:** CSM Co-Pilot.
-
-**Note:** `content` is deliberately loose jsonb for V1. When real submissions start landing, we'll see the common fields and refine the structure then.
 
 ---
 
