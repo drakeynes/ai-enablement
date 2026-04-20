@@ -12,7 +12,7 @@ Track follow-up commitments made on calls so CSM Co-Pilot can reason about accou
 |--------|------|-------|
 | `id` | `uuid` | PK |
 | `call_id` | `uuid` | FK → `calls.id`, not null, cascade delete |
-| `owner_type` | `text` | `client`, `team_member`, `unknown` |
+| `owner_type` | `text` | Not null, default `'unknown'`. One of `client`, `team_member`, `unknown` |
 | `owner_client_id` | `uuid` | FK → `clients.id`. Set when `owner_type = 'client'` |
 | `owner_team_member_id` | `uuid` | FK → `team_members.id`. Set when `owner_type = 'team_member'` |
 | `description` | `text` | Not null |

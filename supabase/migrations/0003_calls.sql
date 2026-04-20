@@ -95,7 +95,7 @@ alter table call_participants enable row level security;
 create table call_action_items (
   id                    uuid primary key default gen_random_uuid(),
   call_id               uuid not null references calls(id) on delete cascade,
-  owner_type            text,
+  owner_type            text not null default 'unknown',
   owner_client_id       uuid references clients(id),
   owner_team_member_id  uuid references team_members(id),
   description           text not null,
@@ -108,7 +108,7 @@ create table call_action_items (
 comment on table call_action_items is
   'Action items extracted from call summaries. Initially populated from Fathom; later enriched by Claude extraction on raw transcripts.';
 comment on column call_action_items.owner_type is
-  'Who owns the action: client, team_member, unknown. Drives which owner_* FK is set.';
+  'Who owns the action: client, team_member, unknown. Not null; defaults to unknown so extraction never leaves this field empty. Drives which owner_* FK is set.';
 comment on column call_action_items.status is
   'open, done, cancelled.';
 comment on column call_action_items.extracted_at is
