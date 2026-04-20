@@ -7,7 +7,7 @@
 -- ---------------------------------------------------------------------------
 create table calls (
   id                              uuid primary key default gen_random_uuid(),
-  external_id                     text not null unique,
+  external_id                     text not null,
   source                          text not null default 'fathom',
   title                           text,
   call_category                   text not null,
@@ -22,15 +22,16 @@ create table calls (
   summary                         text,
   is_retrievable_by_client_agents boolean not null default false,
   raw_payload                     jsonb not null,
-  ingested_at                     timestamptz not null default now()
+  ingested_at                     timestamptz not null default now(),
+  unique (source, external_id)
 );
 
 comment on table calls is
   'One row per recorded call. Source is Fathom today; schema allows additional sources later. Classification happens at ingestion time.';
 comment on column calls.external_id is
-  'Source-system call id (e.g. Fathom call id). Unique across sources when combined with source column values, though a single external_id collision across sources is not currently expected.';
+  'Source-system call id (e.g. Fathom call id). Unique together with source, not alone — a Gong id and a Fathom id may legitimately share a string value.';
 comment on column calls.source is
-  'Origin system: fathom today. Leaving this open lets us add gong, zoom, etc. without schema change.';
+  'Origin system: fathom today. Forms part of the (source, external_id) composite unique key. Adding gong, zoom, etc. later does not require schema change.';
 comment on column calls.call_category is
   'Primary safety-relevant classification: client, internal, external, unclassified, excluded. Controls which agents may read this call.';
 comment on column calls.call_type is

@@ -11,8 +11,8 @@ Canonical record of every call we've ingested, with safety classification baked 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `uuid` | PK |
-| `external_id` | `text` | Unique, not null. Source-system call id |
-| `source` | `text` | Default `fathom`. Supports adding `gong`, `zoom`, etc. later |
+| `external_id` | `text` | Not null. Source-system call id. Unique together with `source`, not alone |
+| `source` | `text` | Default `fathom`. Part of the `(source, external_id)` composite unique key. Supports adding `gong`, `zoom`, etc. later |
 | `title` | `text` | Optional |
 | `call_category` | `text` | Not null. `client`, `internal`, `external`, `unclassified`, `excluded` |
 | `call_type` | `text` | Sub-type: `sales`, `onboarding`, `csm_check_in`, `coaching`, `team_sync`, `leadership`, `strategy`, `unknown` |
@@ -27,6 +27,10 @@ Canonical record of every call we've ingested, with safety classification baked 
 | `is_retrievable_by_client_agents` | `boolean` | Default `false`. **Hard safety gate** |
 | `raw_payload` | `jsonb` | Not null. Full source API response |
 | `ingested_at` | `timestamptz` | Default `now()` |
+
+## Uniqueness
+
+`UNIQUE (source, external_id)` — composite. Two sources can share a string id without colliding, which matters once we add Gong, Zoom, or Google Meet alongside Fathom.
 
 ## Category Semantics
 
