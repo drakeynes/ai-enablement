@@ -11,15 +11,19 @@ Identify agency staff (CSMs, leadership, engineering, ops) so agents can attribu
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `uuid` | PK, default `gen_random_uuid()` |
-| `email` | `text` | Unique, not null. Primary join key for inbound sources (Fathom, Slack Connect emails) |
+| `email` | `text` | Not null. Partial-unique where `archived_at is null`. Primary join key for inbound sources (Fathom, Slack Connect emails) |
 | `full_name` | `text` | Not null |
 | `role` | `text` | Free-form: `csm`, `leadership`, `engineering`, `ops` |
-| `slack_user_id` | `text` | Unique. Slack `U...` id for mentions and matching |
+| `slack_user_id` | `text` | Partial-unique where `archived_at is null`. Slack `U...` id for mentions and matching |
 | `is_active` | `boolean` | Default `true`. Cheap filter; `archived_at` is the durable signal |
 | `metadata` | `jsonb` | Extensible blob for attributes we haven't promoted to columns |
 | `created_at` | `timestamptz` | Default `now()` |
 | `updated_at` | `timestamptz` | Default `now()`, bumped by trigger on update |
 | `archived_at` | `timestamptz` | Soft delete; null = current |
+
+## Uniqueness
+
+`email` and `slack_user_id` are unique only among non-archived rows (see migration `0007_partial_unique_archival.sql`). That lets a former team member be re-hired and re-added without hitting a collision on the archived row.
 
 ## Relationships
 

@@ -11,9 +11,9 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `uuid` | PK |
-| `email` | `text` | Unique, not null. Primary join key for Fathom participants and Slack Connect users |
+| `email` | `text` | Not null. Partial-unique where `archived_at is null`. Primary join key for Fathom participants and Slack Connect users |
 | `full_name` | `text` | Not null |
-| `slack_user_id` | `text` | Unique. Slack `U...` id when the client is in our Slack |
+| `slack_user_id` | `text` | Partial-unique where `archived_at is null`. Slack `U...` id when the client is in our Slack |
 | `phone` | `text` | Optional |
 | `timezone` | `text` | IANA tz name. Used for scheduling and display |
 | `journey_stage` | `text` | `onboarding`, `active`, `churning`, `churned`, `alumni` |
@@ -27,6 +27,10 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 | `archived_at` | `timestamptz` | Soft delete |
 
 `journey_stage` vs `status`: `journey_stage` is lifecycle bucket, `status` is present engagement. A client can be `journey_stage = 'active'` and `status = 'paused'` simultaneously.
+
+## Uniqueness
+
+`email` and `slack_user_id` are unique only among non-archived rows (see migration `0007_partial_unique_archival.sql`). A former client coming back into a program can be re-added without colliding with their archived record.
 
 ## Relationships
 
