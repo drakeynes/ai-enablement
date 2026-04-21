@@ -284,6 +284,100 @@ def test_build_client_payload_aus_tag_without_revenue():
 
 
 # ---------------------------------------------------------------------------
+# compute_archival_plan / apply_archival
+# ---------------------------------------------------------------------------
+
+
+def _mock_db_with_chain(mocker, existing_clients, channels=None, assignments=None):
+    """Build a supabase-py-shaped mock that returns canned rows for the three
+    SELECT paths compute_archival_plan touches."""
+    existing_clients = existing_clients or []
+    channels = channels or []
+    assignments = assignments or []
+
+    fake_db = mocker.MagicMock()
+
+    def table(name):
+        chain = mocker.MagicMock()
+        if name == "clients":
+            chain.select.return_value.is_.return_value.execute.return_value.data = existing_clients
+        if name == "slack_channels":
+            chain.select.return_value.in_.return_value.eq.return_value.execute.return_value.data = channels
+            chain.update.return_value.in_.return_value.eq.return_value.execute.return_value.data = channels
+        if name == "client_team_assignments":
+            chain.select.return_value.in_.return_value.is_.return_value.execute.return_value.data = assignments
+            chain.update.return_value.in_.return_value.is_.return_value.execute.return_value.data = assignments
+        # clients update path
+        chain.update.return_value.in_.return_value.execute.return_value.data = existing_clients
+        return chain
+
+    fake_db.table.side_effect = table
+    return fake_db
+
+
+def test_compute_archival_plan_identifies_non_proposed_clients(mocker):
+    existing = [
+        {"id": "c1", "email": "keep@example.com",  "full_name": "Keep Me",  "status": "active"},
+        {"id": "c2", "email": "drop@example.com",  "full_name": "Drop Me",  "status": "churned"},
+        {"id": "c3", "email": "drop2@example.com", "full_name": "Drop Too", "status": "churned"},
+    ]
+    channels = [{"id": "ch1"}, {"id": "ch2"}]           # two channels linked to archived clients
+    assignments = [{"id": "a1"}]                         # one active assignment linked
+
+    fake_db = _mock_db_with_chain(mocker, existing, channels, assignments)
+
+    plan = sc.compute_archival_plan(fake_db, proposed_emails={"keep@example.com"})
+
+    assert {row["email"] for row in plan.clients_to_archive} == {
+        "drop@example.com", "drop2@example.com",
+    }
+    assert plan.expected_channel_archivals == 2
+    assert plan.expected_assignment_unassignments == 1
+
+
+def test_compute_archival_plan_empty_when_all_proposed(mocker):
+    existing = [{"id": "c1", "email": "a@example.com", "full_name": "A", "status": "active"}]
+    fake_db = _mock_db_with_chain(mocker, existing)
+
+    plan = sc.compute_archival_plan(fake_db, proposed_emails={"a@example.com"})
+
+    assert plan.clients_to_archive == []
+    assert plan.expected_channel_archivals == 0
+    assert plan.expected_assignment_unassignments == 0
+
+
+def test_apply_archival_noop_on_empty_plan(mocker):
+    fake_db = mocker.MagicMock()
+    counts = sc.apply_archival(fake_db, sc.ArchivalPlan())
+    assert counts == (0, 0, 0)
+    fake_db.table.assert_not_called()
+
+
+def test_apply_archival_executes_all_three_writes(mocker):
+    plan = sc.ArchivalPlan(
+        clients_to_archive=[
+            {"id": "c1", "email": "drop@example.com", "full_name": "D", "status": "churned"},
+            {"id": "c2", "email": "drop2@example.com", "full_name": "D2", "status": "churned"},
+        ],
+        expected_channel_archivals=1,
+        expected_assignment_unassignments=1,
+    )
+
+    fake_db = _mock_db_with_chain(
+        mocker,
+        existing_clients=plan.clients_to_archive,
+        channels=[{"id": "ch1"}],
+        assignments=[{"id": "a1"}],
+    )
+
+    counts = sc.apply_archival(fake_db, plan)
+
+    # clients_count uses the update response; channels and assignments
+    # each reflect their returned row lists.
+    assert counts == (2, 1, 1)
+
+
+# ---------------------------------------------------------------------------
 # apply_log_breakdowns
 # ---------------------------------------------------------------------------
 
@@ -311,8 +405,7 @@ def test_apply_log_breakdowns_counts_status_journey_and_tags(mocker):
 # ---------------------------------------------------------------------------
 
 
-def test_main_dry_run_does_not_call_apply_paths(mocker, tmp_path):
-    # Craft a trivial sheet
+def _make_trivial_sheet(tmp_path):
     xlsx = tmp_path / "sheet.xlsx"
     import openpyxl as _openpyxl
     wb = _openpyxl.Workbook()
@@ -323,33 +416,46 @@ def test_main_dry_run_does_not_call_apply_paths(mocker, tmp_path):
     aus = wb.create_sheet("AUS TOTALS")
     aus.append(["Customer Name", "Client Emails", "Status", "Owner "])
     wb.save(xlsx)
+    return xlsx
+
+
+def test_main_dry_run_does_not_call_apply_paths(mocker, tmp_path):
+    xlsx = _make_trivial_sheet(tmp_path)
 
     fake_db = mocker.MagicMock()
-    fake_db.table.return_value.select.return_value.is_.return_value.in_.return_value.execute.return_value.data = []
     mocker.patch("scripts.seed_clients.get_client", return_value=fake_db)
+    mocker.patch(
+        "scripts.seed_clients.fetch_existing_client_emails", return_value={}
+    )
+    mocker.patch(
+        "scripts.seed_clients.compute_archival_plan", return_value=sc.ArchivalPlan()
+    )
     apply_clients_spy = mocker.patch("scripts.seed_clients.apply_clients")
+    apply_archival_spy = mocker.patch("scripts.seed_clients.apply_archival")
 
     rc = sc.main(["--input", str(xlsx)])
 
     assert rc == 0
     apply_clients_spy.assert_not_called()
+    apply_archival_spy.assert_not_called()
 
 
 def test_main_apply_calls_apply_paths(mocker, tmp_path):
-    xlsx = tmp_path / "sheet.xlsx"
-    import openpyxl as _openpyxl
-    wb = _openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "USA TOTALS"
-    ws.append(["Customer Name", "Client Emails", "Status", "Owner "])
-    ws.append(["Test Client", "tc@example.com", "Active", "Lou"])
-    aus = wb.create_sheet("AUS TOTALS")
-    aus.append(["Customer Name", "Client Emails", "Status", "Owner "])
-    wb.save(xlsx)
+    xlsx = _make_trivial_sheet(tmp_path)
 
     fake_db = mocker.MagicMock()
-    fake_db.table.return_value.select.return_value.is_.return_value.in_.return_value.execute.return_value.data = []
     mocker.patch("scripts.seed_clients.get_client", return_value=fake_db)
+    mocker.patch(
+        "scripts.seed_clients.fetch_existing_client_emails", return_value={}
+    )
+    mocker.patch(
+        "scripts.seed_clients.compute_archival_plan",
+        return_value=sc.ArchivalPlan(
+            clients_to_archive=[{"id": "old-1", "email": "x@x.com", "full_name": "X", "status": "churned"}],
+            expected_channel_archivals=0,
+            expected_assignment_unassignments=0,
+        ),
+    )
     apply_clients_spy = mocker.patch(
         "scripts.seed_clients.apply_clients", return_value=({"tc@example.com": "id-1"}, 1, 0)
     )
@@ -359,6 +465,9 @@ def test_main_apply_calls_apply_paths(mocker, tmp_path):
     )
     mocker.patch("scripts.seed_clients.apply_channels", return_value=0)
     mocker.patch("scripts.seed_clients.apply_assignments", return_value=1)
+    apply_archival_spy = mocker.patch(
+        "scripts.seed_clients.apply_archival", return_value=(1, 0, 0)
+    )
     mocker.patch("scripts.seed_clients.apply_log_breakdowns", return_value="(breakdown)")
     mocker.patch("scripts.seed_clients.write_log")
 
@@ -366,3 +475,4 @@ def test_main_apply_calls_apply_paths(mocker, tmp_path):
 
     assert rc == 0
     apply_clients_spy.assert_called_once()
+    apply_archival_spy.assert_called_once()

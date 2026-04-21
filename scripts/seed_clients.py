@@ -402,6 +402,20 @@ def locate_xlsx(explicit: str | None) -> Path:
 
 
 @dataclass
+class ArchivalPlan:
+    """Clients in the DB that are not in the new proposed set.
+
+    Applied with a cascade: clients.archived_at = now, matching
+    slack_channels.is_archived = true, active client_team_assignments
+    ended with unassigned_at = now. No deletes.
+    """
+
+    clients_to_archive: list[dict[str, Any]] = field(default_factory=list)
+    expected_channel_archivals: int = 0
+    expected_assignment_unassignments: int = 0
+
+
+@dataclass
 class DryRunReport:
     total_sheet_rows: int = 0
     aggregate_rows_filtered: int = 0
@@ -416,6 +430,7 @@ class DryRunReport:
         default_factory=dict
     )
     db_email_collisions: list[str] = field(default_factory=list)
+    archival_plan: ArchivalPlan = field(default_factory=ArchivalPlan)
 
 
 def build_report(
@@ -572,6 +587,29 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
     lines.append("")
 
     lines.append("-" * 72)
+    lines.append("PROPOSED ARCHIVALS — DB rows not in the new Active++ set")
+    lines.append("-" * 72)
+    plan = report.archival_plan
+    if not plan.clients_to_archive:
+        lines.append("(none)")
+    else:
+        lines.append(f"  {len(plan.clients_to_archive)} clients will be soft-archived (archived_at = now)")
+        lines.append(f"  {plan.expected_channel_archivals} slack_channels will be marked is_archived = true")
+        lines.append(f"  {plan.expected_assignment_unassignments} client_team_assignments will be unassigned (unassigned_at = now)")
+        lines.append("")
+        arch_status_totals = Counter(row.get("status") or "(null)" for row in plan.clients_to_archive)
+        lines.append("  clients to archive, by status:")
+        for status, count in arch_status_totals.most_common():
+            lines.append(f"    {count:>3}  {status}")
+        lines.append("")
+        shown = plan.clients_to_archive[:10]
+        if shown:
+            lines.append(f"  sample (first {len(shown)} of {len(plan.clients_to_archive)}):")
+            for row in shown:
+                lines.append(f"    {row['status']:<8}  {row['full_name']}  <{row['email']}>")
+    lines.append("")
+
+    lines.append("-" * 72)
     lines.append(f"SAMPLE — {sample_size} random clients + guaranteed AUS sample")
     lines.append("-" * 72)
 
@@ -717,6 +755,85 @@ def apply_assignments(
     return count
 
 
+def compute_archival_plan(client, proposed_emails: set[str]) -> ArchivalPlan:
+    """Find currently-active clients not in the new proposed set.
+
+    These are the casualties of the filter revision: rows that were
+    valid under an earlier rule but aren't in the sheet's current
+    Active++ view. On --apply they get soft-archived with the cascade.
+    """
+    resp = (
+        client.table("clients")
+        .select("id,email,full_name,status")
+        .is_("archived_at", "null")
+        .execute()
+    )
+    existing = resp.data or []
+    to_archive = [row for row in existing if row["email"] not in proposed_emails]
+
+    plan = ArchivalPlan(clients_to_archive=to_archive)
+    if not to_archive:
+        return plan
+
+    ids = [row["id"] for row in to_archive]
+    ch_resp = (
+        client.table("slack_channels")
+        .select("id")
+        .in_("client_id", ids)
+        .eq("is_archived", False)
+        .execute()
+    )
+    plan.expected_channel_archivals = len(ch_resp.data or [])
+
+    a_resp = (
+        client.table("client_team_assignments")
+        .select("id")
+        .in_("client_id", ids)
+        .is_("unassigned_at", "null")
+        .execute()
+    )
+    plan.expected_assignment_unassignments = len(a_resp.data or [])
+
+    return plan
+
+
+def apply_archival(client, plan: ArchivalPlan) -> tuple[int, int, int]:
+    """Execute the archival plan. Returns (clients, channels, assignments)."""
+    if not plan.clients_to_archive:
+        return 0, 0, 0
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ids = [row["id"] for row in plan.clients_to_archive]
+
+    clients_resp = (
+        client.table("clients")
+        .update({"archived_at": now_iso})
+        .in_("id", ids)
+        .execute()
+    )
+    clients_count = len(clients_resp.data or [])
+
+    ch_resp = (
+        client.table("slack_channels")
+        .update({"is_archived": True})
+        .in_("client_id", ids)
+        .eq("is_archived", False)
+        .execute()
+    )
+    channels_count = len(ch_resp.data or [])
+
+    a_resp = (
+        client.table("client_team_assignments")
+        .update({"unassigned_at": now_iso})
+        .in_("client_id", ids)
+        .is_("unassigned_at", "null")
+        .execute()
+    )
+    assignments_count = len(a_resp.data or [])
+
+    return clients_count, channels_count, assignments_count
+
+
 def apply_log_breakdowns(client) -> str:
     """Render status / journey_stage / tag breakdowns over all active clients.
 
@@ -798,6 +915,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     report = build_report(rows, existing_emails_db, aggregate_rows_filtered=aggregate_filtered)
+    report.archival_plan = compute_archival_plan(
+        db, proposed_emails={p["email"] for p in report.proposed_clients}
+    )
     report_text = render_report(report)
     print(report_text)
 
@@ -816,21 +936,61 @@ def main(argv: list[str] | None = None) -> int:
         db, report.proposed_assignments, email_to_client_id, team_email_to_id
     )
 
+    arch_clients, arch_channels, arch_assignments = apply_archival(db, report.archival_plan)
+
     apply_text = (
         "APPLY SUMMARY\n"
-        f"  clients inserts:               {c_inserts}\n"
-        f"  clients updates:               {c_updates}\n"
-        f"  slack_channels upserts:        {ch_count}\n"
-        f"  client_team_assignments:       {as_count}\n"
+        f"  clients inserts:                    {c_inserts}\n"
+        f"  clients updates:                    {c_updates}\n"
+        f"  slack_channels upserts:             {ch_count}\n"
+        f"  client_team_assignments upserts:    {as_count}\n"
+        f"  clients archived (soft):            {arch_clients}\n"
+        f"  slack_channels archived (cascade):  {arch_channels}\n"
+        f"  assignments ended (cascade):        {arch_assignments}\n"
     )
     print("\n" + apply_text)
+
+    discrepancies = _render_discrepancies(report, arch_clients, arch_channels, arch_assignments)
+    print(discrepancies)
 
     breakdowns = apply_log_breakdowns(db)
     print("\n" + breakdowns)
 
-    log_path = write_log(report_text, apply_text + "\n\n" + breakdowns)
+    log_body = apply_text + "\n" + discrepancies + "\n\n" + breakdowns
+    log_path = write_log(report_text, log_body)
     print(f"\nLog: {log_path}")
     return 0
+
+
+def _render_discrepancies(
+    report: DryRunReport,
+    actual_archived_clients: int,
+    actual_archived_channels: int,
+    actual_archived_assignments: int,
+) -> str:
+    """Compare dry-run-predicted counts to what --apply actually wrote."""
+    lines: list[str] = []
+    lines.append("DISCREPANCY CHECKS")
+    lines.append("-" * 72)
+
+    expected_archived = len(report.archival_plan.clients_to_archive)
+    expected_channel_archivals = report.archival_plan.expected_channel_archivals
+    expected_assignment_unassignments = report.archival_plan.expected_assignment_unassignments
+
+    checks = [
+        ("clients archived",               expected_archived, actual_archived_clients),
+        ("slack_channels archived",        expected_channel_archivals, actual_archived_channels),
+        ("assignments ended",              expected_assignment_unassignments, actual_archived_assignments),
+    ]
+    any_flag = False
+    for label, expected, actual in checks:
+        mark = "OK " if expected == actual else "!! "
+        if expected != actual:
+            any_flag = True
+        lines.append(f"  {mark}  {label:<30}  expected {expected:>4}  actual {actual:>4}")
+    if not any_flag:
+        lines.append("  (all dry-run predictions matched the applied counts)")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
