@@ -32,6 +32,13 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella V1 beta shows a clear pattern of retrieval misses that keyword match would have caught — review after the first ~50 production queries and the first 10 `agent_feedback` corrections.
 - **Logged:** 2026-04-20.
 
+## Automated cloud seed application
+
+- **What:** a small wrapper (likely `scripts/apply_seeds_to_cloud.py`) that reads every file in `supabase/seed/*.sql` and pushes it against a linked cloud Postgres via the standard connection string — so seeding cloud stops meaning "paste into Studio SQL editor." `supabase db push` covers migrations only; this gap is a Supabase CLI limitation, not ours.
+- **Why deferred:** cloud applies are rare (~one per major seed change), the seed file set is small today (`team_members.sql`, soon `clients.sql`), and Supabase may fix the CLI gap upstream. Writing a wrapper now risks throwaway work.
+- **Revisit trigger:** ≥5 seed files, OR seeding cloud becomes more than a once-a-month task, OR Supabase CLI still doesn't support seed-to-cloud by the time we spin up a second B2B deployment.
+- **Logged:** 2026-04-21.
+
 ## Topic-based chunking for call transcripts
 
 - **What:** chunk transcripts on semantic topic boundaries (detected via a small LLM call per transcript) instead of fixed word windows. More expensive per ingest, potentially better retrieval relevance because chunks align to "what the call was about at this moment" rather than to arbitrary word counts.
