@@ -1,0 +1,391 @@
+"""Classify a parsed Fathom call into a `call_category`, `call_type`,
+confidence, and (for client calls) `primary_client_id`.
+
+Implements the 6-step cascade pinned in
+`docs/ingestion/metadata-conventions.md` §5. Short-circuits short
+files at the top because `excluded` is terminal regardless of what
+later steps would have said.
+
+The classifier doesn't touch the DB directly — callers pass a
+`ClientResolver` they built from a single pre-fetch. That keeps batch
+classification of the 389-call backlog to two SELECTs total instead
+of ~800.
+
+Auto-create-client semantics: when the "30mins with Scott" pattern
+matches with an unresolved participant, the classifier emits an
+`AutoCreateRequest` rather than inserting. The pipeline does the
+lookup-by-email-then-insert dance (per conventions §5 step 4) so the
+classifier stays a pure function.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Iterable
+
+from ingestion.fathom.parser import FathomCallRecord, Participant
+
+TEAM_EMAIL_DOMAIN = "@theaipartner.io"
+AMAN_EMAIL = "aman@theaipartner.io"
+CSM_EMAILS = frozenset({"lou@theaipartner.io", "nico@theaipartner.io"})
+
+CONFIDENCE_HIGH = 0.9
+CONFIDENCE_MEDIUM = 0.6
+CONFIDENCE_LOW = 0.3
+
+MIN_DURATION_SECONDS = 90
+MIN_FILE_SIZE_BYTES = 3 * 1024
+
+# Titles matching any of these force `internal`. Match is case-insensitive
+# and treats spaces and underscores equivalently, so both `CSM Sync` and
+# `CSM_Sync_Weekly` match the same rule. Substring-level.
+INTERNAL_TITLE_PATTERNS: tuple[str, ...] = (
+    "csm sync",
+    "backend team",
+    "fulf sales sync",
+    "ncf",
+)
+
+# The 30mins-with-Scott 1:1 pattern. Normalized form; matcher below
+# handles spaces/underscores/case.
+SCOTT_1ON1_PATTERN = "30mins with scott"
+
+
+# ---------------------------------------------------------------------------
+# Public surface
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AutoCreateRequest:
+    """Payload the pipeline uses to reify a minimal clients row.
+
+    Only surfaced when the 30mins-with-Scott pattern hits with an
+    unresolved participant — per conventions §5 step 4, that's always
+    a client 1:1 even when the email isn't in the clients table yet.
+    The pipeline must lookup-by-email first (case-insensitive) before
+    inserting, to avoid duplicating an auto-created row across
+    multiple calls with the same unmatched participant.
+    """
+
+    email: str
+    display_name: str
+    reason: str = "30mins_with_Scott pattern with unresolved participant"
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    call_category: str
+    call_type: str | None
+    classification_confidence: float
+    classification_method: str
+    primary_client_id: str | None
+    should_auto_create_client: AutoCreateRequest | None = None
+    reasoning: str = ""
+
+    @property
+    def should_be_retrievable(self) -> bool:
+        """Apply the conventions §5 step 6 retrievability floor.
+
+        `is_retrievable_by_client_agents = true` only when all three
+        hold: category is `client`, confidence is high, and a
+        primary_client_id is set. Callers wire this to `calls.
+        is_retrievable_by_client_agents` on insert; the asymmetric
+        re-classification rule (never auto-promote on re-run) lives
+        in pipeline.py.
+        """
+        return (
+            self.call_category == "client"
+            and self.classification_confidence >= CONFIDENCE_HIGH
+            and self.primary_client_id is not None
+        )
+
+
+class ClientResolver:
+    """Resolve participant emails to `clients.id`.
+
+    Constructed once per batch from a single SELECT in the pipeline.
+    All lookups are lower-cased.
+    """
+
+    def __init__(self, client_id_by_email: dict[str, str]):
+        self._map: dict[str, str] = {
+            email.lower(): cid for email, cid in client_id_by_email.items()
+        }
+
+    def lookup(self, email: str) -> str | None:
+        if not email:
+            return None
+        return self._map.get(email.lower())
+
+    def __contains__(self, email: str) -> bool:
+        return email.lower() in self._map
+
+
+def classify(
+    record: FathomCallRecord,
+    resolver: ClientResolver,
+    *,
+    file_size_bytes: int | None = None,
+) -> ClassificationResult:
+    """Run the cascade and return a ClassificationResult."""
+    # Step 5 pulled forward — short files are excluded terminally.
+    if _is_short_file(record, file_size_bytes):
+        return ClassificationResult(
+            call_category="excluded",
+            call_type=None,
+            classification_confidence=CONFIDENCE_HIGH,
+            classification_method="short_file_heuristic",
+            primary_client_id=None,
+            reasoning=(
+                f"duration={record.duration_seconds}s, "
+                f"file_size={file_size_bytes}B — below minimums"
+            ),
+        )
+
+    participant_emails = [pt.email for pt in record.participants]
+    team_emails = [e for e in participant_emails if _is_team_email(e)]
+    external_emails = [e for e in participant_emails if not _is_team_email(e)]
+    title_norm = _normalize_for_title_match(record.title)
+
+    # Step 3 runs before Step 2 here because title overrides always
+    # win. The conventions doc orders them 2 then 3-as-override; same
+    # result, cleaner control flow.
+    title_hit = _matched_internal_pattern(title_norm)
+    if title_hit is not None:
+        return ClassificationResult(
+            call_category="internal",
+            call_type=_internal_call_type(title_norm),
+            classification_confidence=CONFIDENCE_HIGH,
+            classification_method="title_pattern",
+            primary_client_id=None,
+            reasoning=f"title matched internal pattern {title_hit!r}",
+        )
+
+    # Step 4 — 30mins-with-Scott 1:1.
+    if _matches_scott_1on1(title_norm):
+        return _classify_scott_1on1(record, resolver, external_emails)
+
+    # Step 2 — participant match.
+    step2 = _classify_by_participants(record, resolver, team_emails, external_emails)
+
+    # Step 2.5 — Aman + no CSM → call_type='sales' bump.
+    return _apply_aman_sales_override(step2, team_emails)
+
+
+# ---------------------------------------------------------------------------
+# Step helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_team_email(email: str) -> bool:
+    return email.lower().endswith(TEAM_EMAIL_DOMAIN)
+
+
+def _is_short_file(record: FathomCallRecord, file_size_bytes: int | None) -> bool:
+    if record.duration_seconds is not None and record.duration_seconds < MIN_DURATION_SECONDS:
+        return True
+    if file_size_bytes is not None and file_size_bytes < MIN_FILE_SIZE_BYTES:
+        return True
+    return False
+
+
+def _normalize_for_title_match(title: str) -> str:
+    """Lower-case and treat spaces/underscores equivalently.
+
+    "CSM_Sync_Weekly" and "CSM Sync - April 21" both collapse to a
+    form where `"csm sync"` is a substring.
+    """
+    return " ".join(title.lower().replace("_", " ").split())
+
+
+def _matched_internal_pattern(title_norm: str) -> str | None:
+    for pattern in INTERNAL_TITLE_PATTERNS:
+        if pattern in title_norm:
+            return pattern
+    return None
+
+
+def _internal_call_type(title_norm: str) -> str:
+    """Pick a call_type for internal calls based on title keywords."""
+    if "leadership" in title_norm:
+        return "leadership"
+    if "strategy" in title_norm:
+        return "strategy"
+    return "team_sync"
+
+
+def _matches_scott_1on1(title_norm: str) -> bool:
+    return title_norm.startswith(SCOTT_1ON1_PATTERN)
+
+
+def _classify_scott_1on1(
+    record: FathomCallRecord,
+    resolver: ClientResolver,
+    external_emails: list[str],
+) -> ClassificationResult:
+    """Step 4 — Scott's 30mins 1:1 pattern.
+
+    Exactly one non-team participant → client call. If that email
+    matches a known client, confidence is high and primary_client_id
+    is set. If not, confidence is medium and the pipeline is asked
+    to auto-create (lookup-first-insert-second per conventions §5).
+    """
+    if len(external_emails) != 1:
+        # Pattern match but unexpected participant shape — treat as
+        # client medium and fall back to manual review via the
+        # "unclassified" category? Keep the observed common case
+        # simple: if it's Scott-1:1 with 0 or 2+ externals, the title
+        # is still a strong signal; mark client with medium confidence,
+        # no primary_client_id, no auto-create.
+        return ClassificationResult(
+            call_category="client",
+            call_type="coaching",
+            classification_confidence=CONFIDENCE_MEDIUM,
+            classification_method="title_pattern",
+            primary_client_id=None,
+            reasoning=(
+                f"30mins_with_Scott pattern but {len(external_emails)} externals — "
+                "no primary client identified"
+            ),
+        )
+
+    participant_email = external_emails[0]
+    client_id = resolver.lookup(participant_email)
+    if client_id is not None:
+        return ClassificationResult(
+            call_category="client",
+            call_type="coaching",
+            classification_confidence=CONFIDENCE_HIGH,
+            classification_method="title_pattern",
+            primary_client_id=client_id,
+            reasoning=f"30mins_with_Scott + {participant_email} matched existing client",
+        )
+
+    # Unmatched participant — pipeline reifies a minimal clients row.
+    display = _find_display_name(record.participants, participant_email)
+    return ClassificationResult(
+        call_category="client",
+        call_type="coaching",
+        classification_confidence=CONFIDENCE_MEDIUM,
+        classification_method="title_pattern",
+        primary_client_id=None,
+        should_auto_create_client=AutoCreateRequest(
+            email=participant_email,
+            display_name=display,
+        ),
+        reasoning=(
+            f"30mins_with_Scott + {participant_email} — no clients match, "
+            "auto-create requested"
+        ),
+    )
+
+
+def _classify_by_participants(
+    record: FathomCallRecord,
+    resolver: ClientResolver,
+    team_emails: list[str],
+    external_emails: list[str],
+) -> ClassificationResult:
+    """Step 2 — participant match."""
+    # 2+ team + no external → internal, high
+    if len(team_emails) >= 2 and not external_emails:
+        return ClassificationResult(
+            call_category="internal",
+            call_type="team_sync",
+            classification_confidence=CONFIDENCE_HIGH,
+            classification_method="participant_match",
+            primary_client_id=None,
+            reasoning=f"{len(team_emails)} team + 0 external",
+        )
+
+    # Any external matches a client → client, high
+    matched_client_id: str | None = None
+    matched_email: str | None = None
+    for email in external_emails:
+        cid = resolver.lookup(email)
+        if cid is not None:
+            matched_client_id = cid
+            matched_email = email
+            break
+
+    if matched_client_id is not None:
+        return ClassificationResult(
+            call_category="client",
+            call_type=_client_call_type(record.title),
+            classification_confidence=CONFIDENCE_HIGH,
+            classification_method="participant_match",
+            primary_client_id=matched_client_id,
+            reasoning=f"{matched_email} matched existing client",
+        )
+
+    # External but no match → external, medium
+    if external_emails:
+        return ClassificationResult(
+            call_category="external",
+            call_type=None,
+            classification_confidence=CONFIDENCE_MEDIUM,
+            classification_method="participant_match",
+            primary_client_id=None,
+            reasoning=(
+                f"{len(external_emails)} external email(s), none matching clients"
+            ),
+        )
+
+    # No external, <2 team — weird shape (1 team, possibly unresolved)
+    return ClassificationResult(
+        call_category="unclassified",
+        call_type=None,
+        classification_confidence=CONFIDENCE_LOW,
+        classification_method="participant_match",
+        primary_client_id=None,
+        reasoning=f"{len(team_emails)} team, 0 external — cannot classify",
+    )
+
+
+def _client_call_type(title: str) -> str | None:
+    """Derive call_type for client calls from the title."""
+    t = _normalize_for_title_match(title)
+    if "onboarding" in t:
+        return "onboarding"
+    if "dfy" in t:
+        return "coaching"
+    return None
+
+
+def _apply_aman_sales_override(
+    result: ClassificationResult, team_emails: list[str]
+) -> ClassificationResult:
+    """Step 2.5 — Aman leading an external call without a CSM.
+
+    Aman is sales, not a client handler. Keep the category as-is
+    (external) but set call_type='sales' and bump confidence to high.
+    Only fires when the prior step produced `external`.
+    """
+    if result.call_category != "external":
+        return result
+    team_set = {e.lower() for e in team_emails}
+    if AMAN_EMAIL not in team_set:
+        return result
+    if team_set & CSM_EMAILS:
+        return result
+    return ClassificationResult(
+        call_category="external",
+        call_type="sales",
+        classification_confidence=CONFIDENCE_HIGH,
+        classification_method="participant_match",
+        primary_client_id=None,
+        reasoning=result.reasoning + "; Aman present and no CSM — sales call",
+    )
+
+
+def _find_display_name(
+    participants: Iterable[Participant], email: str
+) -> str:
+    email_l = email.lower()
+    for pt in participants:
+        if pt.email.lower() == email_l:
+            return pt.display_name
+    # Fall back to the local-part of the email so we never insert an
+    # empty full_name on auto-create.
+    return email_l.split("@", 1)[0]

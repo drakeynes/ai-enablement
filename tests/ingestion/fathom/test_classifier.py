@@ -1,0 +1,330 @@
+"""Unit tests for ingestion.fathom.classifier.
+
+Every cascade step has at least one passing and one non-passing case.
+Auto-create-client email-exists vs email-new branches are both covered.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+
+from ingestion.fathom import classifier as c
+from ingestion.fathom.parser import FathomCallRecord, Participant
+
+
+def _record(
+    *,
+    title: str = "Test call",
+    duration_seconds: int | None = 600,
+    participants: list[Participant] | None = None,
+) -> FathomCallRecord:
+    return FathomCallRecord(
+        external_id="test-1",
+        title=title,
+        started_at=datetime(2026, 3, 15, tzinfo=timezone.utc),
+        scheduled_start=None,
+        scheduled_end=None,
+        recording_start=None,
+        recording_end=None,
+        duration_seconds=duration_seconds,
+        language="en",
+        recording_url=None,
+        share_link=None,
+        participants=participants or [],
+        recorded_by=None,
+        utterances=[],
+        transcript="",
+        raw_text="",
+    )
+
+
+def _pt(email: str, name: str | None = None) -> Participant:
+    return Participant(display_name=name or email.split("@")[0], email=email)
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — short-file heuristic (runs first in the implementation)
+# ---------------------------------------------------------------------------
+
+
+def test_short_duration_excludes():
+    record = _record(duration_seconds=45, participants=[_pt("lou@theaipartner.io")])
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "excluded"
+    assert result.classification_method == "short_file_heuristic"
+
+
+def test_small_file_excludes():
+    record = _record(
+        duration_seconds=600,
+        participants=[_pt("lou@theaipartner.io"), _pt("scott@theaipartner.io")],
+    )
+    result = c.classify(record, c.ClientResolver({}), file_size_bytes=1024)
+    assert result.call_category == "excluded"
+
+
+def test_long_call_not_excluded():
+    record = _record(
+        duration_seconds=600,
+        participants=[_pt("lou@theaipartner.io"), _pt("scott@theaipartner.io")],
+    )
+    result = c.classify(record, c.ClientResolver({}), file_size_bytes=50_000)
+    assert result.call_category == "internal"  # 2 team + 0 external
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — title pattern override (runs before participant match in impl)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["CSM Sync", "csm_sync_weekly", "Backend Team Weekly Planning",
+     "Backend_Team_Daily", "Fulf Sales Sync", "NCF Backend Sync"],
+)
+def test_title_patterns_force_internal(title):
+    record = _record(
+        title=title,
+        participants=[
+            _pt("nabeel@theaipartner.io"), _pt("scott@theaipartner.io"),
+            _pt("external@example.com"),  # should NOT flip to client
+        ],
+    )
+    result = c.classify(record, c.ClientResolver({"external@example.com": "c1"}))
+    assert result.call_category == "internal"
+    assert result.classification_method == "title_pattern"
+
+
+def test_title_leadership_picks_leadership_call_type():
+    record = _record(
+        title="AUS Leadership Sync",
+        participants=[
+            _pt("nabeel@theaipartner.io"),
+            _pt("scott@theaipartner.io"),
+        ],
+    )
+    # Not in the internal override set, so falls to step 2 (2 team + 0 external → internal)
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "internal"
+
+
+def test_title_without_pattern_falls_through():
+    record = _record(
+        title="Allison / Scott",
+        participants=[_pt("scott@theaipartner.io"), _pt("allison@example.com")],
+    )
+    result = c.classify(record, c.ClientResolver({"allison@example.com": "c-allison"}))
+    # Falls into step 2 → client (matched) high
+    assert result.call_category == "client"
+    assert result.primary_client_id == "c-allison"
+
+
+# ---------------------------------------------------------------------------
+# Step 4 — 30mins_with_Scott pattern
+# ---------------------------------------------------------------------------
+
+
+def test_scott_1on1_matched_client_high_confidence():
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Abel Asfaw)",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("abel.f.asfaw@gmail.com", "Abel Asfaw"),
+        ],
+    )
+    resolver = c.ClientResolver({"abel.f.asfaw@gmail.com": "c-abel"})
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+    assert result.classification_method == "title_pattern"
+    assert result.primary_client_id == "c-abel"
+    assert result.should_auto_create_client is None
+    assert result.should_be_retrievable is True
+
+
+def test_scott_1on1_unmatched_requests_auto_create():
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Random Prospect)",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("prospect@example.com", "Random Prospect"),
+        ],
+    )
+    resolver = c.ClientResolver({})   # email not in clients
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_MEDIUM
+    assert result.primary_client_id is None
+    assert result.should_auto_create_client is not None
+    assert result.should_auto_create_client.email == "prospect@example.com"
+    assert result.should_auto_create_client.display_name == "Random Prospect"
+    # Medium confidence never passes the retrievability floor.
+    assert result.should_be_retrievable is False
+
+
+def test_scott_1on1_underscored_title_also_matches():
+    record = _record(
+        title="30mins_with_Scott_The_AI_Partner_Abel_Asfaw",
+        participants=[_pt("scott@theaipartner.io"), _pt("abel@example.com")],
+    )
+    result = c.classify(record, c.ClientResolver({"abel@example.com": "c-abel"}))
+    assert result.call_category == "client"
+    assert result.classification_method == "title_pattern"
+
+
+# ---------------------------------------------------------------------------
+# Step 2 — participant match (when no title override fires)
+# ---------------------------------------------------------------------------
+
+
+def test_two_team_no_external_internal():
+    record = _record(
+        title="Drake / Scott",
+        participants=[_pt("drake@theaipartner.io"), _pt("scott@theaipartner.io")],
+    )
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "internal"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+
+
+def test_external_matches_client_row_sets_primary_client():
+    record = _record(
+        title="Jenny / Scott",
+        participants=[_pt("scott@theaipartner.io"), _pt("jenny@example.com")],
+    )
+    result = c.classify(record, c.ClientResolver({"jenny@example.com": "c-jenny"}))
+    assert result.call_category == "client"
+    assert result.primary_client_id == "c-jenny"
+    assert result.should_be_retrievable is True
+
+
+def test_external_no_match_medium_external():
+    record = _record(
+        title="Prop Logic",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("john@proplogic.com"),
+        ],
+    )
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "external"
+    assert result.classification_confidence == c.CONFIDENCE_MEDIUM
+
+
+# ---------------------------------------------------------------------------
+# Step 2.5 — Aman sales override
+# ---------------------------------------------------------------------------
+
+
+def test_aman_no_csm_external_becomes_sales():
+    record = _record(
+        title="Setter 1st Interview",
+        participants=[
+            _pt("aman@theaipartner.io"),
+            _pt("prospect@example.com"),
+        ],
+    )
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "external"
+    assert result.call_type == "sales"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+
+
+def test_aman_with_csm_does_not_override():
+    """If a CSM is on the call, it's not a pure sales call. Keep the
+    medium-external classification."""
+    record = _record(
+        title="Prop Logic",
+        participants=[
+            _pt("aman@theaipartner.io"),
+            _pt("lou@theaipartner.io"),   # CSM present
+            _pt("prospect@example.com"),
+        ],
+    )
+    result = c.classify(record, c.ClientResolver({}))
+    assert result.call_category == "external"
+    assert result.call_type is None
+    assert result.classification_confidence == c.CONFIDENCE_MEDIUM
+
+
+def test_aman_on_client_call_does_not_override():
+    """When the external matches a known client, participant_match
+    already says `client`. Aman's presence shouldn't downgrade it."""
+    record = _record(
+        title="Allison check-in",
+        participants=[
+            _pt("aman@theaipartner.io"),
+            _pt("allison@example.com"),
+        ],
+    )
+    result = c.classify(record, c.ClientResolver({"allison@example.com": "c-allison"}))
+    assert result.call_category == "client"
+    assert result.primary_client_id == "c-allison"
+
+
+# ---------------------------------------------------------------------------
+# Step 6 — retrievability floor
+# ---------------------------------------------------------------------------
+
+
+def test_retrievability_requires_high_confidence_client_with_primary():
+    # client + high + primary → True
+    high = c.ClassificationResult(
+        call_category="client",
+        call_type="coaching",
+        classification_confidence=c.CONFIDENCE_HIGH,
+        classification_method="title_pattern",
+        primary_client_id="c-1",
+    )
+    assert high.should_be_retrievable is True
+
+    # client + medium + primary → False
+    medium = c.ClassificationResult(
+        call_category="client",
+        call_type="coaching",
+        classification_confidence=c.CONFIDENCE_MEDIUM,
+        classification_method="title_pattern",
+        primary_client_id="c-1",
+    )
+    assert medium.should_be_retrievable is False
+
+    # client + high + no primary → False
+    no_primary = c.ClassificationResult(
+        call_category="client",
+        call_type="coaching",
+        classification_confidence=c.CONFIDENCE_HIGH,
+        classification_method="title_pattern",
+        primary_client_id=None,
+    )
+    assert no_primary.should_be_retrievable is False
+
+    # internal + high + whatever → False (not client)
+    internal = c.ClassificationResult(
+        call_category="internal",
+        call_type="team_sync",
+        classification_confidence=c.CONFIDENCE_HIGH,
+        classification_method="title_pattern",
+        primary_client_id=None,
+    )
+    assert internal.should_be_retrievable is False
+
+
+# ---------------------------------------------------------------------------
+# ClientResolver lookup semantics
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_is_case_insensitive():
+    resolver = c.ClientResolver({"Mixed@Example.com": "c-1"})
+    assert resolver.lookup("mixed@example.com") == "c-1"
+    assert resolver.lookup("MIXED@EXAMPLE.COM") == "c-1"
+
+
+def test_resolver_returns_none_for_missing():
+    resolver = c.ClientResolver({})
+    assert resolver.lookup("missing@example.com") is None
+    assert resolver.lookup("") is None
