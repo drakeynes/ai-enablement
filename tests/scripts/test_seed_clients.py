@@ -99,28 +99,6 @@ def test_derive_tags_does_not_set_at_risk_from_absent_nps():
 
 
 # ---------------------------------------------------------------------------
-# is_in_active_plus_plus_view
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "status,country,expected",
-    [
-        ("active", "USA", True),
-        ("ghost", "USA", True),
-        ("paused", "USA", True),
-        ("churned", "USA", False),
-        ("active", "AUS", True),
-        ("paused", "AUS", True),
-        ("ghost", "AUS", False),     # AUS excludes ghost
-        ("churned", "AUS", False),
-    ],
-)
-def test_is_in_active_plus_plus_view(status, country, expected):
-    assert sc.is_in_active_plus_plus_view(status, country) is expected
-
-
-# ---------------------------------------------------------------------------
 # parse_owner
 # ---------------------------------------------------------------------------
 
@@ -171,29 +149,34 @@ def test_parse_owner_blankish_returns_none_clean(raw):
 
 
 # ---------------------------------------------------------------------------
-# is_aggregate_row
+# load_sheet_rows
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "raw,expected",
-    [
-        ("TOTALS", True),
-        ("  totals  ", True),
-        ("UF Collection Rate", True),
-        ("Total Active Clients", True),
-        ("Retention", True),
-        ("Referrals", True),
-        ("Jane Doe", False),
-        (None, False),
-        ("", False),
-    ],
-)
-def test_is_aggregate_row(raw, expected):
-    assert sc.is_aggregate_row(raw) is expected
+def test_load_sheet_rows_reads_lowercase_tabs(tmp_path):
+    import openpyxl as _openpyxl
+    xlsx = tmp_path / "sheet.xlsx"
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "usa"
+    ws.append(["Customer Name", "Client Emails", "Status", "Owner"])
+    ws.append(["Real Client", "rc@example.com", "Active", "Lou"])
+    ws.append(["Client No Email", None, "Active", "Lou"])
+    aus = wb.create_sheet("aus")
+    aus.append(["Customer Name", "Client Emails", "Status", "Owner"])
+    aus.append(["Aussie", "au@example.com", "Active", "Lou"])
+    wb.save(xlsx)
+
+    rows, sheets_used = sc.load_sheet_rows(xlsx)
+
+    assert "usa" in sheets_used and "aus" in sheets_used
+    # Both USA rows survive row-filtering (blank-name only is skipped);
+    # the missing-email one reaches build_client_payload and surfaces there.
+    assert len(rows) == 3
+    assert {r.country for r in rows} == {"USA", "AUS"}
 
 
-def test_load_sheet_rows_filters_aggregates(tmp_path):
+def test_load_sheet_rows_still_reads_legacy_tab_names(tmp_path):
     import openpyxl as _openpyxl
     xlsx = tmp_path / "sheet.xlsx"
     wb = _openpyxl.Workbook()
@@ -201,21 +184,14 @@ def test_load_sheet_rows_filters_aggregates(tmp_path):
     ws.title = "USA TOTALS"
     ws.append(["Customer Name", "Client Emails", "Status", "Owner "])
     ws.append(["Real Client", "rc@example.com", "Active", "Lou"])
-    ws.append(["Client No Email", None, "Active", "Lou"])  # skipped for missing email, not aggregate
-    ws.append(["TOTALS", None, None, None])                 # aggregate
-    ws.append(["UF Collection Rate", None, None, None])     # aggregate
     aus = wb.create_sheet("AUS TOTALS")
     aus.append(["Customer Name", "Client Emails", "Status", "Owner "])
     wb.save(xlsx)
 
-    rows, aggregate_count = sc.load_sheet_rows(xlsx)
+    rows, sheets_used = sc.load_sheet_rows(xlsx)
 
-    assert aggregate_count == 2
-    # Two rows survive the filter: Real Client and Client No Email.
-    # The missing-email one still gets to the next stage so it shows up in the
-    # skipped-missing-email report.
-    assert len(rows) == 2
-    assert {r.values["customer name"] for r in rows} == {"Real Client", "Client No Email"}
+    assert "USA TOTALS" in sheets_used
+    assert len(rows) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +222,8 @@ def test_build_client_payload_happy_path():
     assert payload["email"] == "jane@example.com"
     assert payload["full_name"] == "Jane Doe"
     assert payload["status"] == "active"
+    assert payload["program_type"] == sc.PROGRAM_TYPE == "9k_consumer"
+    assert payload["timezone"] == sc.DEFAULT_TIMEZONE == "America/New_York"
     assert payload["metadata"]["country"] == "USA"
     assert payload["metadata"]["seeded_at"] == "2026-04-21"
     assert set(payload["metadata"].keys()) == {
@@ -281,6 +259,73 @@ def test_build_client_payload_aus_tag_without_revenue():
     assert payload is not None
     assert payload["metadata"]["country"] == "AUS"
     assert "aus" in payload["tags"]
+
+
+# ---------------------------------------------------------------------------
+# apply_clients — update / insert / reactivate
+# ---------------------------------------------------------------------------
+
+
+def _fake_proposed(email="jane@example.com"):
+    return {
+        "email": email,
+        "full_name": "Jane",
+        "phone": None,
+        "slack_user_id": None,
+        "start_date": "2026-04-01",
+        "status": "active",
+        "program_type": "9k_consumer",
+        "timezone": "America/New_York",
+        "tags": ["promoter"],
+        "metadata": {"seed_source": "test", "country": "USA"},
+    }
+
+
+def test_apply_clients_reactivates_archived_row(mocker):
+    """When an existing row is archived and the email appears again in
+    the proposed set, apply_clients updates in place AND clears
+    archived_at. The reactivations counter reflects it."""
+    archived_row = {
+        "id": "c1",
+        "email": "jane@example.com",
+        "metadata": {"prior_key": "prior_val"},
+        "archived_at": "2026-04-20T00:00:00+00:00",
+    }
+    mocker.patch(
+        "scripts.seed_clients.fetch_existing_client_emails",
+        return_value={"jane@example.com": archived_row},
+    )
+    fake_db = mocker.MagicMock()
+
+    _, inserts, updates, reactivations = sc.apply_clients(
+        fake_db, [_fake_proposed()]
+    )
+
+    assert inserts == 0
+    assert updates == 1
+    assert reactivations == 1
+    update_payload = fake_db.table.return_value.update.call_args[0][0]
+    assert update_payload["archived_at"] is None
+    # metadata merge: prior key preserved, new key overrides on collision
+    assert update_payload["metadata"]["prior_key"] == "prior_val"
+    assert update_payload["metadata"]["country"] == "USA"
+
+
+def test_apply_clients_inserts_when_no_existing_row(mocker):
+    mocker.patch("scripts.seed_clients.fetch_existing_client_emails", return_value={})
+    fake_db = mocker.MagicMock()
+    fake_db.table.return_value.insert.return_value.execute.return_value.data = [
+        {"id": "new-1"}
+    ]
+
+    email_to_id, inserts, updates, reactivations = sc.apply_clients(
+        fake_db, [_fake_proposed()]
+    )
+
+    assert inserts == 1
+    assert updates == 0
+    assert reactivations == 0
+    assert email_to_id["jane@example.com"] == "new-1"
 
 
 # ---------------------------------------------------------------------------
@@ -382,22 +427,42 @@ def test_apply_archival_executes_all_three_writes(mocker):
 # ---------------------------------------------------------------------------
 
 
-def test_apply_log_breakdowns_counts_status_journey_and_tags(mocker):
-    fake_rows = [
+def test_apply_log_breakdowns_counts_status_journey_tags_and_owners(mocker):
+    client_rows = [
         {"status": "active",  "journey_stage": "onboarding", "tags": ["promoter"]},
         {"status": "active",  "journey_stage": None,         "tags": ["promoter", "aus"]},
-        {"status": "churned", "journey_stage": None,         "tags": ["churned"]},
         {"status": "paused",  "journey_stage": None,         "tags": []},
     ]
+    assignment_rows = [
+        {"team_member_id": "tm-lou"},
+        {"team_member_id": "tm-lou"},
+        {"team_member_id": "tm-scott"},
+    ]
+    team_rows = [
+        {"id": "tm-lou",   "full_name": "Lou Perez"},
+        {"id": "tm-scott", "full_name": "Scott Wilson"},
+    ]
+
     fake_db = mocker.MagicMock()
-    fake_db.table.return_value.select.return_value.is_.return_value.execute.return_value.data = fake_rows
+
+    def table(name):
+        chain = mocker.MagicMock()
+        if name == "clients":
+            chain.select.return_value.is_.return_value.execute.return_value.data = client_rows
+        if name == "client_team_assignments":
+            chain.select.return_value.is_.return_value.execute.return_value.data = assignment_rows
+        if name == "team_members":
+            chain.select.return_value.in_.return_value.execute.return_value.data = team_rows
+        return chain
+
+    fake_db.table.side_effect = table
 
     out = sc.apply_log_breakdowns(fake_db)
 
-    assert "Breakdowns across 4 active clients" in out
-    assert "active" in out and "churned" in out and "paused" in out
+    assert "Breakdowns across 3 active clients" in out
     assert "promoter" in out and "aus" in out
-    assert "(null)" in out  # journey_stage is mostly null
+    assert "Lou Perez" in out and "Scott Wilson" in out
+    assert "primary_csm assignments" in out
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +522,8 @@ def test_main_apply_calls_apply_paths(mocker, tmp_path):
         ),
     )
     apply_clients_spy = mocker.patch(
-        "scripts.seed_clients.apply_clients", return_value=({"tc@example.com": "id-1"}, 1, 0)
+        "scripts.seed_clients.apply_clients",
+        return_value=({"tc@example.com": "id-1"}, 1, 0, 0),
     )
     mocker.patch(
         "scripts.seed_clients.resolve_team_member_ids",

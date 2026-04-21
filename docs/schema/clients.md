@@ -28,9 +28,9 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 
 `journey_stage` vs `status`: `journey_stage` is lifecycle bucket, `status` is present engagement. A client can be `journey_stage = 'active'` and `status = 'paused'` simultaneously.
 
-## Bulk imports: working-view filter
+## Bulk imports: trust the source's working view
 
-Bulk imports from source systems use the source's **working view** as the canonical definition of "active client." For the Financial Master Sheet this is the Active++ filter (USA: `active`, `ghost`, `paused`; AUS: `active`, `paused`). Rows outside the view are not imported on initial seed and are soft-archived on re-import if previously imported. See `docs/runbooks/seed_clients.md`.
+Bulk imports (`scripts/seed_clients.py` today) trust the source system's working view as the definition of "active client." The owner pre-filters their saved view (`Active++`, `Aus Active++`) before export; the importer takes every row that's in the file. Any non-archived DB client whose email isn't in the export gets soft-archived via the cascade. See `docs/runbooks/seed_clients.md` and `docs/data-hygiene.md`.
 
 ## Metadata keys written by ingestion
 

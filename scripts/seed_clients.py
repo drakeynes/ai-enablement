@@ -37,10 +37,22 @@ if str(_REPO_ROOT) not in sys.path:
 
 from shared.db import get_client  # noqa: E402
 
-USA_TAB = "USA TOTALS"
-AUS_TAB = "AUS TOTALS"
+# Tab names in the current "active ++" export format. The importer expects
+# the owner to have pre-applied the Active++ working view filter before
+# export — see docs/runbooks/seed_clients.md. If the tab-name convention
+# changes, add entries here rather than reshaping the input.
+USA_TAB_NAMES: tuple[str, ...] = ("usa", "USA TOTALS")
+AUS_TAB_NAMES: tuple[str, ...] = ("aus", "AUS TOTALS")
+
 DEFAULT_INPUT_DIR = _REPO_ROOT / "data" / "client_seed"
+DEFAULT_INPUT_FILENAME = "active ++ (1).xlsx"
 IMPORT_LOG_DIR = _REPO_ROOT / "data" / "client_seed"
+
+# V1 program constants — every imported client is on the 9K consumer program
+# in Eastern Time. When multi-program support lands, drive these from source
+# data instead of constants.
+PROGRAM_TYPE = "9k_consumer"
+DEFAULT_TIMEZONE = "America/New_York"
 
 OWNER_FIRST_NAMES: dict[str, str] = {
     "lou": "lou@theaipartner.io",
@@ -60,48 +72,6 @@ STATUS_MAP: dict[str, str] = {
     "n/a": "active",
     "": "active",
 }
-
-# The Active++ working-view filter. Rows with a mapped status outside these
-# sets are not imported. USA uses Scott's "Active++" saved view; AUS mirrors
-# it minus ghost (AUS data has no ghosts today; the rule is future-proofing).
-# See docs/runbooks/seed_clients.md for the canonical definition.
-ACTIVE_PLUS_PLUS_BY_COUNTRY: dict[str, frozenset[str]] = {
-    "USA": frozenset({"active", "ghost", "paused"}),
-    "AUS": frozenset({"active", "paused"}),
-}
-
-
-def is_in_active_plus_plus_view(status: str, country: str) -> bool:
-    """True when the mapped status is allowed for the row's source tab."""
-    return status in ACTIVE_PLUS_PLUS_BY_COUNTRY.get(country, frozenset())
-
-# Customer Name values that are sheet-aggregate rows, not real clients.
-# Filtered before the missing-email check so they don't pollute the skipped
-# report. Match is case-insensitive on the trimmed string.
-AGGREGATE_ROW_LABELS: frozenset[str] = frozenset(
-    label.lower()
-    for label in (
-        "TOTALS",
-        "UF Collection Rate",
-        "BE Collection Opportunity",
-        "BE Collections Rate",
-        "BE Owining Rate",
-        "Upsell Rate",
-        "Referral Rate",
-        "Refund Rate",
-        "Total Active Clients",
-        "Referrals",
-        "Upsells",
-        "Retention",
-    )
-)
-
-
-def is_aggregate_row(customer_name: Any) -> bool:
-    """True when Customer Name is a known sheet-aggregate label."""
-    if customer_name is None:
-        return False
-    return str(customer_name).strip().lower() in AGGREGATE_ROW_LABELS
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +240,8 @@ def build_client_payload(
         "slack_user_id": slack_user_id,
         "start_date": start_date.isoformat() if start_date else None,
         "status": status,
+        "program_type": PROGRAM_TYPE,
+        "timezone": DEFAULT_TIMEZONE,
         "tags": tags,
         "metadata": metadata,
     }
@@ -341,21 +313,29 @@ class SheetRow:
     row_number: int
 
 
-def load_sheet_rows(xlsx_path: Path) -> tuple[list[SheetRow], int]:
-    """Return (rows, aggregate_rows_filtered).
+def _find_tab(wb, candidates: tuple[str, ...]) -> str | None:
+    for name in candidates:
+        if name in wb.sheetnames:
+            return name
+    return None
 
-    Aggregate / summary rows at the bottom of each tab (`TOTALS`,
-    `UF Collection Rate`, etc.) are filtered here so they don't pollute
-    the skipped-missing-email report. The filter is a known-label set
-    (see AGGREGATE_ROW_LABELS); real people with blank Customer Name
-    cells don't exist and real people with email-missing are preserved.
+
+def load_sheet_rows(xlsx_path: Path) -> tuple[list[SheetRow], list[str]]:
+    """Return (rows, sheet_names_used).
+
+    The importer expects the owner to have pre-applied their Active++
+    working view before export — no status filtering happens here.
+    Rows with a blank Customer Name are skipped silently; rows with
+    blank email surface later via the build_client_payload None return.
     """
     wb = openpyxl.load_workbook(xlsx_path, data_only=True, read_only=True)
     rows: list[SheetRow] = []
-    aggregate_filtered = 0
-    for tab, country in ((USA_TAB, "USA"), (AUS_TAB, "AUS")):
-        if tab not in wb.sheetnames:
+    sheets_used: list[str] = []
+    for candidates, country in ((USA_TAB_NAMES, "USA"), (AUS_TAB_NAMES, "AUS")):
+        tab = _find_tab(wb, candidates)
+        if tab is None:
             continue
+        sheets_used.append(tab)
         ws = wb[tab]
         raw_rows = list(ws.iter_rows(values_only=True))
         if not raw_rows:
@@ -364,36 +344,36 @@ def load_sheet_rows(xlsx_path: Path) -> tuple[list[SheetRow], int]:
         for row_number, raw in enumerate(raw_rows[1:], start=2):
             values = {key: raw[idx] for key, idx in headers.items() if idx < len(raw)}
             customer_name = values.get("customer name")
-            if not customer_name:
-                continue
-            if is_aggregate_row(customer_name):
-                aggregate_filtered += 1
+            if not customer_name or not str(customer_name).strip():
                 continue
             rows.append(
                 SheetRow(values=values, country=country, tab=tab, row_number=row_number)
             )
-    return rows, aggregate_filtered
+    return rows, sheets_used
 
 
 def locate_xlsx(explicit: str | None) -> Path:
+    """Resolve the input XLSX path.
+
+    Prefers an explicit --input value. Falls back to the canonical
+    DEFAULT_INPUT_FILENAME inside DEFAULT_INPUT_DIR. Errors clearly
+    when the file doesn't exist — the importer intentionally does
+    not auto-discover arbitrary .xlsx files because multiple exports
+    may coexist during a transition and picking the wrong one is a
+    live-data hazard.
+    """
     if explicit:
         p = Path(explicit)
         if not p.exists():
             sys.exit(f"ERROR: {p} does not exist.")
         return p
-    DEFAULT_INPUT_DIR.mkdir(parents=True, exist_ok=True)
-    candidates = sorted(DEFAULT_INPUT_DIR.glob("*.xlsx"))
-    if not candidates:
+    p = DEFAULT_INPUT_DIR / DEFAULT_INPUT_FILENAME
+    if not p.exists():
         sys.exit(
-            f"ERROR: no .xlsx files in {DEFAULT_INPUT_DIR}. "
-            "Drop the Financial Master Sheet there or pass --input."
+            f"ERROR: {p} not found. Either drop the current export there "
+            f"as '{DEFAULT_INPUT_FILENAME}' or pass --input <path>."
         )
-    if len(candidates) > 1:
-        sys.exit(
-            f"ERROR: multiple .xlsx files in {DEFAULT_INPUT_DIR}: "
-            f"{[c.name for c in candidates]}. Pass --input to pick one."
-        )
-    return candidates[0]
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -418,12 +398,11 @@ class ArchivalPlan:
 @dataclass
 class DryRunReport:
     total_sheet_rows: int = 0
-    aggregate_rows_filtered: int = 0
+    rows_per_tab: dict[str, int] = field(default_factory=dict)
     proposed_clients: list[dict[str, Any]] = field(default_factory=list)
     proposed_channels: list[dict[str, Any]] = field(default_factory=list)
     proposed_assignments: list[dict[str, Any]] = field(default_factory=list)
     skipped_missing_email: list[tuple[str, str, int]] = field(default_factory=list)
-    excluded_by_view: list[tuple[str, str, str, int, str]] = field(default_factory=list)
     unmapped_owner_values: dict[str, int] = field(default_factory=dict)
     messy_owner_mappings: dict[str, tuple[str, int]] = field(default_factory=dict)
     sheet_email_duplicates: dict[str, list[tuple[str, str, int]]] = field(
@@ -436,13 +415,14 @@ class DryRunReport:
 def build_report(
     rows: list[SheetRow],
     existing_emails_in_db: set[str],
-    *,
-    aggregate_rows_filtered: int = 0,
 ) -> DryRunReport:
     now_iso = datetime.now(timezone.utc).date().isoformat()
+    rows_per_tab: dict[str, int] = {}
+    for row in rows:
+        rows_per_tab[row.tab] = rows_per_tab.get(row.tab, 0) + 1
     report = DryRunReport(
-        total_sheet_rows=len(rows) + aggregate_rows_filtered,
-        aggregate_rows_filtered=aggregate_rows_filtered,
+        total_sheet_rows=len(rows),
+        rows_per_tab=rows_per_tab,
     )
     seen_emails: dict[str, list[tuple[str, str, int]]] = {}
 
@@ -454,19 +434,6 @@ def build_report(
             report.skipped_missing_email.append(
                 (str(row.values.get("customer name") or "").strip(), row.tab, row.row_number)
             )
-            continue
-
-        # Active++ working-view filter — canonical V1 "what counts as a
-        # client" rule. Excluded rows surface in the report but do not
-        # become proposed inserts, channels, or assignments.
-        if not is_in_active_plus_plus_view(payload["status"], row.country):
-            report.excluded_by_view.append((
-                payload["email"],
-                payload["full_name"],
-                row.tab,
-                row.row_number,
-                payload["status"],
-            ))
             continue
 
         email = payload["email"]
@@ -513,9 +480,9 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
     lines.append("=" * 72)
     lines.append("")
     lines.append(f"Total sheet rows with Customer Name:   {report.total_sheet_rows}")
-    lines.append(f"Aggregate rows filtered (sheet totals):{report.aggregate_rows_filtered}")
+    for tab, count in sorted(report.rows_per_tab.items()):
+        lines.append(f"  {tab:<12}                          {count}")
     lines.append(f"Rows skipped (missing email):          {len(report.skipped_missing_email)}")
-    lines.append(f"Rows excluded (Active++ filter):       {len(report.excluded_by_view)}")
     lines.append(f"Proposed clients inserts/updates:      {len(report.proposed_clients)}")
     lines.append(f"Proposed slack_channels inserts:       {len(report.proposed_channels)}")
     lines.append(f"Proposed client_team_assignments:      {len(report.proposed_assignments)}")
@@ -528,22 +495,6 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
         lines.append("(none)")
     for name, tab, row_number in report.skipped_missing_email:
         lines.append(f"  {tab}  row {row_number:>3}  {name}")
-    lines.append("")
-
-    lines.append("-" * 72)
-    lines.append("EXCLUDED BY ACTIVE++ FILTER — not imported")
-    lines.append("-" * 72)
-    if not report.excluded_by_view:
-        lines.append("(none)")
-    else:
-        status_totals: Counter[str] = Counter(st for _, _, _, _, st in report.excluded_by_view)
-        lines.append("  by status:")
-        for status, count in status_totals.most_common():
-            lines.append(f"    {count:>3}  {status}")
-        lines.append("")
-        lines.append(f"  (showing first 15 of {len(report.excluded_by_view)})")
-        for email, name, tab, row_number, status in report.excluded_by_view[:15]:
-            lines.append(f"    {tab}  row {row_number:>3}  {status:<8}  {name}  <{email}>")
     lines.append("")
 
     lines.append("-" * 72)
@@ -650,45 +601,67 @@ def resolve_team_member_ids(client) -> dict[str, str]:
 
 
 def fetch_existing_client_emails(client, emails: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Return {email: {id, metadata}} for rows with archived_at is null."""
+    """Return {email: row} for any matching client row — archived or not.
+
+    Archived rows are included so reactivation works: a client who was
+    soft-archived in a prior run and reappears in a new Active++ export
+    gets updated in place with archived_at cleared, rather than a
+    duplicate row inserted.
+
+    If both an active and an archived row share an email (shouldn't
+    happen under the partial unique index, but defensive) the active
+    row wins.
+    """
     email_list = list({e for e in emails if e})
     if not email_list:
         return {}
     resp = (
         client.table("clients")
-        .select("id,email,metadata")
-        .is_("archived_at", "null")
+        .select("id,email,metadata,archived_at")
         .in_("email", email_list)
         .execute()
     )
-    return {row["email"]: row for row in resp.data}
+    by_email: dict[str, dict[str, Any]] = {}
+    for row in resp.data or []:
+        existing = by_email.get(row["email"])
+        if existing is None:
+            by_email[row["email"]] = row
+        elif existing.get("archived_at") is not None and row.get("archived_at") is None:
+            by_email[row["email"]] = row
+    return by_email
 
 
 def apply_clients(
     client, proposed: list[dict[str, Any]]
-) -> tuple[dict[str, str], int, int]:
-    """Insert or update clients. Returns (email->id, inserts, updates)."""
+) -> tuple[dict[str, str], int, int, int]:
+    """Insert, update, or reactivate clients.
+
+    Returns (email->id, inserts, updates, reactivations).
+
+    Update path clears archived_at unconditionally. If the existing row
+    was archived, that reactivates it; if it was already active, it's
+    a harmless no-op.
+    """
     existing = fetch_existing_client_emails(client, (p["email"] for p in proposed))
     email_to_id: dict[str, str] = {}
     inserts = 0
     updates = 0
+    reactivations = 0
+
+    column_fields = (
+        "email", "full_name", "phone", "slack_user_id", "start_date",
+        "status", "program_type", "timezone", "tags",
+    )
 
     for p in proposed:
-        row_insert = {
-            "email": p["email"],
-            "full_name": p["full_name"],
-            "phone": p["phone"],
-            "slack_user_id": p["slack_user_id"],
-            "start_date": p["start_date"],
-            "status": p["status"],
-            "tags": p["tags"],
-        }
+        base = {k: p[k] for k in column_fields}
         if p["email"] in existing:
             existing_row = existing[p["email"]]
             merged_metadata = (existing_row.get("metadata") or {}) | p["metadata"]
-            update_payload = dict(row_insert)
+            update_payload = dict(base)
             update_payload["metadata"] = merged_metadata
-            resp = (
+            update_payload["archived_at"] = None
+            (
                 client.table("clients")
                 .update(update_payload)
                 .eq("id", existing_row["id"])
@@ -696,13 +669,16 @@ def apply_clients(
             )
             email_to_id[p["email"]] = existing_row["id"]
             updates += 1
+            if existing_row.get("archived_at") is not None:
+                reactivations += 1
         else:
-            row_insert["metadata"] = p["metadata"]
-            resp = client.table("clients").insert(row_insert).execute()
+            insert_payload = dict(base)
+            insert_payload["metadata"] = p["metadata"]
+            resp = client.table("clients").insert(insert_payload).execute()
             email_to_id[p["email"]] = resp.data[0]["id"]
             inserts += 1
 
-    return email_to_id, inserts, updates
+    return email_to_id, inserts, updates, reactivations
 
 
 def apply_channels(
@@ -835,12 +811,11 @@ def apply_archival(client, plan: ArchivalPlan) -> tuple[int, int, int]:
 
 
 def apply_log_breakdowns(client) -> str:
-    """Render status / journey_stage / tag breakdowns over all active clients.
+    """Render status / journey_stage / tag / owner breakdowns over all
+    active clients.
 
-    Called after --apply so the log captures what actually landed. Fetches
-    status, journey_stage, and tags columns in a single SELECT and tallies
-    in Python — faster than three GROUP BY roundtrips via PostgREST for
-    the V1-scale row count.
+    Called after --apply so the log captures what actually landed.
+    Tallies in Python rather than GROUP BY roundtrips via PostgREST.
     """
     resp = (
         client.table("clients")
@@ -860,6 +835,26 @@ def apply_log_breakdowns(client) -> str:
         for t in r.get("tags") or []:
             tag_counts[t] += 1
 
+    # Owner assignment distribution — active assignments joined to team
+    # members via a second SELECT, tallied in Python.
+    assignments_resp = (
+        client.table("client_team_assignments")
+        .select("team_member_id")
+        .is_("unassigned_at", "null")
+        .execute()
+    )
+    tm_ids = [row["team_member_id"] for row in assignments_resp.data or []]
+    owner_counts: Counter[str] = Counter()
+    if tm_ids:
+        tm_resp = (
+            client.table("team_members")
+            .select("id,full_name")
+            .in_("id", list(set(tm_ids)))
+            .execute()
+        )
+        id_to_name = {row["id"]: row["full_name"] for row in tm_resp.data or []}
+        owner_counts = Counter(id_to_name.get(tmid, "(unknown)") for tmid in tm_ids)
+
     def _format_counter(title: str, counter: Counter[str]) -> list[str]:
         lines = [title, "-" * len(title)]
         if not counter:
@@ -878,6 +873,8 @@ def apply_log_breakdowns(client) -> str:
     sections.extend(_format_counter("journey_stage", journey_counts))
     sections.append("")
     sections.extend(_format_counter("tags (clients counted once per tag)", tag_counts))
+    sections.append("")
+    sections.extend(_format_counter("primary_csm assignments", owner_counts))
     return "\n".join(sections)
 
 
@@ -904,7 +901,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     xlsx = locate_xlsx(args.input)
-    rows, aggregate_filtered = load_sheet_rows(xlsx)
+    rows, sheets_used = load_sheet_rows(xlsx)
+
+    print("=" * 72)
+    print("CLIENTS IMPORTER")
+    print("=" * 72)
+    print(f"Input file:  {xlsx}")
+    print(f"Sheets read: {', '.join(sheets_used) if sheets_used else '(none)'}")
+    print()
 
     db = get_client()
     existing_emails_db = set(
@@ -914,7 +918,7 @@ def main(argv: list[str] | None = None) -> int:
         )).keys()
     )
 
-    report = build_report(rows, existing_emails_db, aggregate_rows_filtered=aggregate_filtered)
+    report = build_report(rows, existing_emails_db)
     report.archival_plan = compute_archival_plan(
         db, proposed_emails={p["email"] for p in report.proposed_clients}
     )
@@ -930,7 +934,9 @@ def main(argv: list[str] | None = None) -> int:
     print("-" * 72)
     team_email_to_id = resolve_team_member_ids(db)
 
-    email_to_client_id, c_inserts, c_updates = apply_clients(db, report.proposed_clients)
+    email_to_client_id, c_inserts, c_updates, c_reactivations = apply_clients(
+        db, report.proposed_clients
+    )
     ch_count = apply_channels(db, report.proposed_channels, email_to_client_id)
     as_count = apply_assignments(
         db, report.proposed_assignments, email_to_client_id, team_email_to_id
@@ -941,7 +947,8 @@ def main(argv: list[str] | None = None) -> int:
     apply_text = (
         "APPLY SUMMARY\n"
         f"  clients inserts:                    {c_inserts}\n"
-        f"  clients updates:                    {c_updates}\n"
+        f"  clients updates (in place):         {c_updates}\n"
+        f"  clients reactivated (was archived): {c_reactivations}\n"
         f"  slack_channels upserts:             {ch_count}\n"
         f"  client_team_assignments upserts:    {as_count}\n"
         f"  clients archived (soft):            {arch_clients}\n"
