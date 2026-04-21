@@ -156,3 +156,5 @@ Two principles the pipeline must never violate:
 - **Chunks are derived artifacts.** Anything that lands in `documents` / `document_chunks` from a Fathom call is derived — summaries, transcript chunks, filtered content. Re-running ingestion with different chunking or filtering rules is always possible because the source is intact.
 
 If a convention change invalidates existing chunks, the recovery is: update the rules, delete and re-produce the `documents` / `document_chunks` rows for affected calls, re-embed. The `calls` row itself doesn't need touching.
+
+**Retrieval-side safety invariant.** `match_document_chunks` (see `docs/schema/document_chunks.md`) excludes every client-scoped type from global-mode results — currently `call_summary` and `call_transcript_chunk`. This gate lives in the Postgres function so caller discipline isn't the last line of defense. When a new client-scoped type is introduced, update the function (via migration) and this sentence in the same commit.

@@ -44,7 +44,7 @@ Dimension `1536` matches OpenAI `text-embedding-3-small`. Model choice is an ADR
 
 ## Search Function
 
-`match_document_chunks` is the Postgres function that powers all retrieval. `shared/kb_query.py` wraps it via Supabase RPC; no agent should bypass this wrapper. Defined in migration `0008_kb_search.sql`.
+`match_document_chunks` is the Postgres function that powers all retrieval. `shared/kb_query.py` wraps it via Supabase RPC; no agent should bypass this wrapper. Originally defined in migration `0008_kb_search.sql`; global-mode exclusion extended in `0010_kb_search_exclude_transcript_chunks.sql` to cover transcript chunks.
 
 ### Signature
 
@@ -73,17 +73,19 @@ returns table (
 
 ### Behavior
 
+**Safety invariant (enforced in the function, not by caller discipline).** "Client-scoped" document types — `call_summary` and `call_transcript_chunk` — carry `metadata.client_id` and are about a specific client's calls. No client-scoped content ever appears in global results. Current client-scoped set: `{call_summary, call_transcript_chunk}`. New client-scoped types get added here via a new migration.
+
 **Global mode** (when `client_id is null`):
 - Returns chunks from `is_active = true` documents.
-- **Always excludes `document_type = 'call_summary'`**, even if the caller passes `call_summary` in `document_types`. This is the hard safety gate: no call summary ever leaks into a global query.
+- **Always excludes every client-scoped type**, even if the caller passes one of them in `document_types`. The hard gate lives inside the function — a buggy caller can't work around it.
 
 **Client mode** (when `client_id is not null`):
-- Always includes `call_summary` chunks where `documents.metadata->>'client_id'` matches the passed `client_id`.
-- If `include_global = true` (default), also returns chunks from non-`call_summary` active documents in the same ranked list, single `match_count` cap.
-- If `include_global = false`, returns only that client's call summaries.
+- Always includes client-scoped chunks (`call_summary`, `call_transcript_chunk`) where `documents.metadata->>'client_id'` matches the passed `client_id`.
+- If `include_global = true` (default), also returns chunks from non-client-scoped active documents in the same ranked list, single `match_count` cap.
+- If `include_global = false`, returns only that client's call content.
 
 **Filters applied in all modes:**
-- `document_types` (optional) — narrow to given types. Subject to the global `call_summary` exclusion in global mode.
+- `document_types` (optional) — narrow to given types. Subject to the global client-scoped exclusion in global mode.
 - `tags` (optional) — match documents with any overlapping tag.
 - `min_similarity` (default 0.0) — drop rows below this cosine similarity.
 - `match_count` (default 8) — LIMIT on the final ranked list.
