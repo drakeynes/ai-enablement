@@ -34,6 +34,19 @@ Prints the full report to stdout. Writes nothing to the DB or to disk. The repor
 - **DB email collisions** — emails in the sheet that already exist as non-archived rows in `clients`. Non-zero means this is an update, not a fresh seed.
 - **Random sample of 5 proposed clients** (plus a guaranteed AUS row if the random pick doesn't include one) showing the full payload: status, tags, metadata JSON. Use this to eyeball the transforms.
 
+### Metadata keys written to `clients.metadata`
+
+The importer writes exactly these six keys and nothing else:
+
+- `seed_source` — constant `"financial_master_jan26"`
+- `seeded_at` — ISO date the import ran
+- `country` — `"USA"` or `"AUS"`
+- `standing` — raw Standing cell, trimmed
+- `nps_standing` — raw NPS Standing cell, trimmed
+- `owner_raw` — raw Owner cell, for audit
+
+Revenue fields (`Contracted Rev`, `Contracted Rev AUD`, `Month N PP`) are intentionally excluded — see `docs/data-hygiene.md`.
+
 ### Apply
 
 After reviewing the dry run:

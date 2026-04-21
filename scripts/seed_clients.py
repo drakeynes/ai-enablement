@@ -196,20 +196,6 @@ def _cell_to_date(raw: Any) -> date | None:
         return None
 
 
-def _cell_to_number(raw: Any) -> float | int | None:
-    if raw is None:
-        return None
-    if isinstance(raw, (int, float)):
-        return raw
-    text = str(raw).strip().replace(",", "").replace("$", "")
-    if not text or text.lower() in {"n/a", "-"}:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
-
-
 def build_client_payload(
     sheet_row: dict[str, Any],
     *,
@@ -243,19 +229,19 @@ def build_client_payload(
 
     tags = derive_tags(status, standing, nps_standing, is_aus=(country == "AUS"))
 
-    rev_key = "contracted rev aud" if country == "AUS" else "contracted rev"
-    contracted_rev = _cell_to_number(sheet_row.get(rev_key))
-
     owner_raw = sheet_row.get("owner")
     owner_raw_str = str(owner_raw).strip() if owner_raw not in (None, "") else None
 
+    # Revenue fields (Contracted Rev, Contracted Rev AUD, monthly PP columns)
+    # are intentionally excluded — sheet data is stale per Scott. See
+    # docs/data-hygiene.md for the broader rule. The owing_money tag stays
+    # because it's derived from the Standing text column, not from financials.
     metadata = {
         "seed_source": "financial_master_jan26",
         "seeded_at": seeded_at_iso,
         "country": country,
         "standing": standing,
         "nps_standing": nps_standing,
-        "contracted_revenue_usd": contracted_rev,
         "owner_raw": owner_raw_str,
     }
 

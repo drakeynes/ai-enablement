@@ -28,6 +28,25 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 
 `journey_stage` vs `status`: `journey_stage` is lifecycle bucket, `status` is present engagement. A client can be `journey_stage = 'active'` and `status = 'paused'` simultaneously.
 
+## Metadata keys written by ingestion
+
+The `metadata` jsonb is open-ended, but current ingestion sources are pinned:
+
+**`scripts/seed_clients.py` (Financial Master Sheet import)** writes exactly these keys:
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `seed_source` | `text` | Always `"financial_master_jan26"` for this importer |
+| `seeded_at` | `text` | ISO date the import ran |
+| `country` | `text` | `"USA"` or `"AUS"` — which tab the row came from |
+| `standing` | `text` or null | Raw trimmed Standing cell (e.g. `"Happy"`, `"At risk, Owing Money"`) |
+| `nps_standing` | `text` or null | Raw trimmed NPS Standing cell (e.g. `"Promoter"`, `"Detractor / At Risk"`) |
+| `owner_raw` | `text` or null | Raw Owner cell, preserved for audit |
+
+**Revenue fields are intentionally not imported.** The sheet's `Contracted Rev`, `Contracted Rev AUD`, and monthly `PP` columns are stale (source-of-truth is Scott's head). See `docs/data-hygiene.md` for the broader rule.
+
+Extension is cheap: add keys to future rows freely. Renaming or reshaping existing keys is expensive — per the `docs/ingestion/metadata-conventions.md` principle.
+
 ## Uniqueness
 
 `email` and `slack_user_id` are unique only among non-archived rows (see migration `0007_partial_unique_archival.sql`). A former client coming back into a program can be re-added without colliding with their archived record.

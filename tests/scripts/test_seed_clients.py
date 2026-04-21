@@ -221,8 +221,22 @@ def test_build_client_payload_happy_path():
     assert payload["full_name"] == "Jane Doe"
     assert payload["status"] == "active"
     assert payload["metadata"]["country"] == "USA"
-    assert payload["metadata"]["contracted_revenue_usd"] == 9000
     assert payload["metadata"]["seeded_at"] == "2026-04-21"
+    assert set(payload["metadata"].keys()) == {
+        "seed_source", "seeded_at", "country", "standing", "nps_standing", "owner_raw"
+    }
+
+
+def test_build_client_payload_omits_revenue_fields():
+    """Revenue fields in the sheet are stale (per Scott) and must not leak
+    into clients.metadata. The schema of the metadata blob is fixed to the
+    six keys above; no contracted_revenue* keys ever."""
+    row = _row(**{"contracted rev": 9000, "contracted rev aud": 12000})
+    payload = sc.build_client_payload(row, country="USA", seeded_at_iso="2026-04-21")
+    assert payload is not None
+    assert "contracted_revenue_usd" not in payload["metadata"]
+    assert "contracted_revenue" not in payload["metadata"]
+    assert "contracted_revenue_currency" not in payload["metadata"]
 
 
 def test_build_client_payload_skips_missing_email():
@@ -234,12 +248,11 @@ def test_build_client_payload_skips_missing_email():
     ) is None
 
 
-def test_build_client_payload_aus_uses_aud_revenue_field():
-    row = _row(**{"contracted rev": None, "contracted rev aud": 12000})
+def test_build_client_payload_aus_tag_without_revenue():
+    row = _row()
     payload = sc.build_client_payload(row, country="AUS", seeded_at_iso="2026-04-21")
     assert payload is not None
     assert payload["metadata"]["country"] == "AUS"
-    assert payload["metadata"]["contracted_revenue_usd"] == 12000
     assert "aus" in payload["tags"]
 
 
