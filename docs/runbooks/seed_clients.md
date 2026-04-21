@@ -55,7 +55,7 @@ After reviewing the dry run:
 python scripts/seed_clients.py --apply
 ```
 
-Writes to the DB and drops an `import_<timestamp>.log` under `data/client_seed/` with the full dry-run report plus the apply summary. That log file is gitignored along with the rest of `data/`.
+Writes to the DB and drops an `import_<timestamp>.log` under `data/client_seed/` with the full dry-run report plus the apply summary plus post-apply breakdowns — status counts, journey_stage counts, and tag counts across all active clients. The breakdowns make it easy to spot a mapping drift at a glance (e.g. "status='active' dropped by 20 vs the prior run"). That log file is gitignored along with the rest of `data/`.
 
 ### Optional flags
 

@@ -22,6 +22,7 @@ import argparse
 import json
 import random
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -668,6 +669,53 @@ def apply_assignments(
     return count
 
 
+def apply_log_breakdowns(client) -> str:
+    """Render status / journey_stage / tag breakdowns over all active clients.
+
+    Called after --apply so the log captures what actually landed. Fetches
+    status, journey_stage, and tags columns in a single SELECT and tallies
+    in Python — faster than three GROUP BY roundtrips via PostgREST for
+    the V1-scale row count.
+    """
+    resp = (
+        client.table("clients")
+        .select("status,journey_stage,tags")
+        .is_("archived_at", "null")
+        .execute()
+    )
+    rows = resp.data or []
+    total = len(rows)
+
+    status_counts: Counter[str] = Counter(r.get("status") or "(null)" for r in rows)
+    journey_counts: Counter[str] = Counter(
+        r.get("journey_stage") or "(null)" for r in rows
+    )
+    tag_counts: Counter[str] = Counter()
+    for r in rows:
+        for t in r.get("tags") or []:
+            tag_counts[t] += 1
+
+    def _format_counter(title: str, counter: Counter[str]) -> list[str]:
+        lines = [title, "-" * len(title)]
+        if not counter:
+            lines.append("(none)")
+            return lines
+        width = max(len(str(k)) for k in counter)
+        for key, count in counter.most_common():
+            lines.append(f"  {str(key).ljust(width)}  {count}")
+        return lines
+
+    sections: list[str] = []
+    sections.append(f"Breakdowns across {total} active clients:")
+    sections.append("")
+    sections.extend(_format_counter("status", status_counts))
+    sections.append("")
+    sections.extend(_format_counter("journey_stage", journey_counts))
+    sections.append("")
+    sections.extend(_format_counter("tags (clients counted once per tag)", tag_counts))
+    return "\n".join(sections)
+
+
 def write_log(report_text: str, apply_text: str | None = None) -> Path:
     IMPORT_LOG_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -729,8 +777,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     print("\n" + apply_text)
 
-    log_path = write_log(report_text, apply_text)
-    print(f"Log: {log_path}")
+    breakdowns = apply_log_breakdowns(db)
+    print("\n" + breakdowns)
+
+    log_path = write_log(report_text, apply_text + "\n\n" + breakdowns)
+    print(f"\nLog: {log_path}")
     return 0
 
 

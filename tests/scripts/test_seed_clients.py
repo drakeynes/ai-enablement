@@ -257,6 +257,29 @@ def test_build_client_payload_aus_tag_without_revenue():
 
 
 # ---------------------------------------------------------------------------
+# apply_log_breakdowns
+# ---------------------------------------------------------------------------
+
+
+def test_apply_log_breakdowns_counts_status_journey_and_tags(mocker):
+    fake_rows = [
+        {"status": "active",  "journey_stage": "onboarding", "tags": ["promoter"]},
+        {"status": "active",  "journey_stage": None,         "tags": ["promoter", "aus"]},
+        {"status": "churned", "journey_stage": None,         "tags": ["churned"]},
+        {"status": "paused",  "journey_stage": None,         "tags": []},
+    ]
+    fake_db = mocker.MagicMock()
+    fake_db.table.return_value.select.return_value.is_.return_value.execute.return_value.data = fake_rows
+
+    out = sc.apply_log_breakdowns(fake_db)
+
+    assert "Breakdowns across 4 active clients" in out
+    assert "active" in out and "churned" in out and "paused" in out
+    assert "promoter" in out and "aus" in out
+    assert "(null)" in out  # journey_stage is mostly null
+
+
+# ---------------------------------------------------------------------------
 # Dry-run vs apply separation — the main() script short-circuits on no --apply
 # ---------------------------------------------------------------------------
 
@@ -309,6 +332,7 @@ def test_main_apply_calls_apply_paths(mocker, tmp_path):
     )
     mocker.patch("scripts.seed_clients.apply_channels", return_value=0)
     mocker.patch("scripts.seed_clients.apply_assignments", return_value=1)
+    mocker.patch("scripts.seed_clients.apply_log_breakdowns", return_value="(breakdown)")
     mocker.patch("scripts.seed_clients.write_log")
 
     rc = sc.main(["--input", str(xlsx), "--apply"])
