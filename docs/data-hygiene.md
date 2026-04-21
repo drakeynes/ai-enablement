@@ -10,15 +10,20 @@ Before a pipeline writes a column or metadata key from an external source, confi
 
 The same reasoning later removed the `Standing` column and its derived tags (`owing_money`, the Standing-half of `at_risk`). Standing reliability is unclear; the tags carried that uncertainty into agent behavior.
 
-## Spreadsheet imports — three questions before you write a line of code
+## Spreadsheet imports — trust the source's working view
 
-When the source is a spreadsheet, ask the owner — not yourself — these questions before designing the importer:
+When ingesting from a spreadsheet, let the source system's saved views define "what counts." Do not re-derive the business logic of "who is a client, who is active, who matters this quarter" inside the importer. That logic already exists — somebody is maintaining it every day inside the sheet.
 
-1. **Which views do you use day-to-day?** Saved filters like `Active++` or `Aus Active++` are the working definition of "who counts." Rows outside those views are likely noise, historical residue, or ad-hoc notes. Use the working view as the filter rule; don't try to encode "what the full sheet implies" yourself.
-2. **Which rows are hidden or filtered out?** Hidden rows, grouped rows, and "archive" tabs usually encode human judgment we can't reconstruct ("this client left, don't look at them"). Import what the owner sees, not everything in the file.
-3. **Which columns are stale?** Revenue numbers, NPS snapshots, anything manually transcribed from another system — ask directly. The owner knows which columns they update and which they stopped caring about five quarters ago.
+The rule, in order:
 
-**Worked example — the Active++ miss.** The initial `seed_clients.py` imported every row with a non-blank Customer Name and mapped `Churn` status to `archived=false, status=churned`. That pulled ~49 historical churned clients into the DB. On review, Scott confirmed the churn history predates the current team's ownership, the data quality is unclear, and the team has no use for it — it was noise, not history. The importer now follows the sheet's `Active++` and `Aus Active++` saved views as the canonical rule: USA keeps `active/ghost/paused`, AUS keeps `active/paused`. Everything else isn't imported; previously-imported churned rows are soft-archived on re-run via the cascade in `scripts/seed_clients.py`.
+1. **Ask the owner which view they use day-to-day.** Saved filters like `Active++`, `Aus Active++`, or whatever tab they actually open when they start work encode the real answer. That's the filter.
+2. **Ingest from that view, not the raw sheet.** Have the owner pre-filter (via a saved view in Google Sheets) and export only the rows that view shows. Drop that file into your ingestion directory.
+3. **Don't try to replicate the view in code.** The moment you start translating "include rows where status is in {active, ghost, paused} except if the note column says X" into Python, you've just built a second source of truth that will drift from the first.
+4. **Ask which columns are stale.** The owner knows which columns they update and which they stopped caring about. Skip the stale ones.
+
+**Worked example — the Active++ journey.** The first version of `scripts/seed_clients.py` imported every row with a non-blank Customer Name, status-mapped `Churn` to `status='churned'`, and pulled 168 rows into the DB. A chunk of those were historical churns nobody on the current team owned. Second revision tried to encode the Active++ rule as a Python filter inside the importer (`USA: active/ghost/paused; AUS: active/paused`). That also worked, but it duplicated logic the owner already maintained in the sheet. Third revision — the current one — dropped the Python filter entirely and expects the owner to export their Active++ view directly. The importer is 50 lines simpler, and when the owner decides to widen or narrow the view, the only place that has to change is the sheet.
+
+The same approach applies to any future spreadsheet source: sales pipeline exports, NPS surveys, anything. Don't rebuild the filter in code.
 
 ## Historical data without ownership is noise, not history
 
