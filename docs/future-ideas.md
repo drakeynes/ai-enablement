@@ -46,6 +46,13 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** backlog ingest has been stable for 1+ week AND Ella V1 has been in beta with acceptable retrieval quality for at least several days.
 - **Logged:** 2026-04-21.
 
+## scripts/churn_client.py atomic churn helper
+
+- **What:** a small CLI — `python scripts/churn_client.py --email ... --reason ...` — that atomically sets `status = 'churned'` AND `archived_at = now()` on a `clients` row, cascades `slack_channels.is_archived = true` and `client_team_assignments.unassigned_at = now()`, and writes the supplied `reason` into `clients.metadata.churn_reason` along with `churned_at` and `churned_by`. The canonical "archive a client" action when the churn doesn't flow through a sheet re-export (mid-cycle, one-off).
+- **Why deferred:** the Active++ re-export workflow handles bulk churn correctly today — the owner removes a client from their working view, the next `seed_clients.py --apply` detects the absence and archives them via the cascade. A dedicated CLI becomes worth building when a human needs to archive a client between exports and wants a single atomic action instead of editing the sheet or composing Studio SQL by hand (easy to forget one of the two fields and leave the DB in an inconsistent state).
+- **Revisit trigger:** first time someone wants to churn a client without touching the sheet, OR a single inconsistent-state bug lands because someone forgot to update `archived_at` when updating `status`.
+- **Logged:** 2026-04-21.
+
 ## scripts/add_client.py one-off client CLI
 
 - **What:** a small CLI — `python scripts/add_client.py --email ... --name ... --start-date ... [--owner ... --slack-channel-id ...]` — for adding a single client between Financial Master Sheet re-exports. Upserts a `clients` row and optionally the matching `slack_channels` + `client_team_assignments` rows, using the same transforms `seed_clients.py` uses so behavior stays consistent.
