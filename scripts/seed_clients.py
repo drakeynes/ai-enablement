@@ -61,6 +61,20 @@ STATUS_MAP: dict[str, str] = {
     "": "active",
 }
 
+# The Active++ working-view filter. Rows with a mapped status outside these
+# sets are not imported. USA uses Scott's "Active++" saved view; AUS mirrors
+# it minus ghost (AUS data has no ghosts today; the rule is future-proofing).
+# See docs/runbooks/seed_clients.md for the canonical definition.
+ACTIVE_PLUS_PLUS_BY_COUNTRY: dict[str, frozenset[str]] = {
+    "USA": frozenset({"active", "ghost", "paused"}),
+    "AUS": frozenset({"active", "paused"}),
+}
+
+
+def is_in_active_plus_plus_view(status: str, country: str) -> bool:
+    """True when the mapped status is allowed for the row's source tab."""
+    return status in ACTIVE_PLUS_PLUS_BY_COUNTRY.get(country, frozenset())
+
 # Customer Name values that are sheet-aggregate rows, not real clients.
 # Filtered before the missing-email check so they don't pollute the skipped
 # report. Match is case-insensitive on the trimmed string.
@@ -115,23 +129,28 @@ def derive_status(raw: Any) -> str:
 
 def derive_tags(
     status: str,
-    standing: str | None,
     nps_standing: str | None,
     is_aus: bool,
 ) -> list[str]:
-    """Derive the `clients.tags` array from sheet-side signals."""
-    standing_l = (standing or "").strip().lower()
+    """Derive the `clients.tags` array from sheet-side signals.
+
+    Only NPS-derived signals and stable attributes (country, status)
+    are used. The Standing column was previously a source but its
+    reliability is unclear — see docs/data-hygiene.md. The `owing_money`
+    tag is gone for the same reason.
+
+    Note: under the Active++ filter, churned rows are not imported at
+    all, so the `churned` tag effectively cannot fire. Kept in the
+    logic defensively in case the filter ever widens.
+    """
     nps_l = (nps_standing or "").strip().lower()
     tags: list[str] = []
 
-    if nps_l == "detractor / at risk" or "at risk" in standing_l:
+    if nps_l == "detractor / at risk":
         tags.append("at_risk")
-    if "owing money" in standing_l:
-        tags.append("owing_money")
+        tags.append("detractor")
     if nps_l == "promoter":
         tags.append("promoter")
-    if nps_l == "detractor / at risk":
-        tags.append("detractor")
     if status == "churned":
         tags.append("churned")
     if is_aus:
@@ -223,25 +242,23 @@ def build_client_payload(
     start_date = _cell_to_date(sheet_row.get("date"))
     status = derive_status(sheet_row.get("status"))
 
-    standing_raw = sheet_row.get("standing")
-    standing = str(standing_raw).strip() if standing_raw not in (None, "") else None
     nps_raw = sheet_row.get("nps standing")
     nps_standing = str(nps_raw).strip() if nps_raw not in (None, "") else None
 
-    tags = derive_tags(status, standing, nps_standing, is_aus=(country == "AUS"))
+    tags = derive_tags(status, nps_standing, is_aus=(country == "AUS"))
 
     owner_raw = sheet_row.get("owner")
     owner_raw_str = str(owner_raw).strip() if owner_raw not in (None, "") else None
 
-    # Revenue fields (Contracted Rev, Contracted Rev AUD, monthly PP columns)
-    # are intentionally excluded — sheet data is stale per Scott. See
-    # docs/data-hygiene.md for the broader rule. The owing_money tag stays
-    # because it's derived from the Standing text column, not from financials.
+    # Revenue fields and Standing are both excluded. Revenue because the
+    # sheet values are stale; Standing because its reliability is unclear
+    # and its downstream tag effects (owing_money, at_risk) would have
+    # carried that uncertainty into agent behavior.
+    # See docs/data-hygiene.md.
     metadata = {
         "seed_source": "financial_master_jan26",
         "seeded_at": seeded_at_iso,
         "country": country,
-        "standing": standing,
         "nps_standing": nps_standing,
         "owner_raw": owner_raw_str,
     }
@@ -392,6 +409,7 @@ class DryRunReport:
     proposed_channels: list[dict[str, Any]] = field(default_factory=list)
     proposed_assignments: list[dict[str, Any]] = field(default_factory=list)
     skipped_missing_email: list[tuple[str, str, int]] = field(default_factory=list)
+    excluded_by_view: list[tuple[str, str, str, int, str]] = field(default_factory=list)
     unmapped_owner_values: dict[str, int] = field(default_factory=dict)
     messy_owner_mappings: dict[str, tuple[str, int]] = field(default_factory=dict)
     sheet_email_duplicates: dict[str, list[tuple[str, str, int]]] = field(
@@ -421,6 +439,19 @@ def build_report(
             report.skipped_missing_email.append(
                 (str(row.values.get("customer name") or "").strip(), row.tab, row.row_number)
             )
+            continue
+
+        # Active++ working-view filter — canonical V1 "what counts as a
+        # client" rule. Excluded rows surface in the report but do not
+        # become proposed inserts, channels, or assignments.
+        if not is_in_active_plus_plus_view(payload["status"], row.country):
+            report.excluded_by_view.append((
+                payload["email"],
+                payload["full_name"],
+                row.tab,
+                row.row_number,
+                payload["status"],
+            ))
             continue
 
         email = payload["email"]
@@ -468,10 +499,11 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
     lines.append("")
     lines.append(f"Total sheet rows with Customer Name:   {report.total_sheet_rows}")
     lines.append(f"Aggregate rows filtered (sheet totals):{report.aggregate_rows_filtered}")
+    lines.append(f"Rows skipped (missing email):          {len(report.skipped_missing_email)}")
+    lines.append(f"Rows excluded (Active++ filter):       {len(report.excluded_by_view)}")
     lines.append(f"Proposed clients inserts/updates:      {len(report.proposed_clients)}")
     lines.append(f"Proposed slack_channels inserts:       {len(report.proposed_channels)}")
     lines.append(f"Proposed client_team_assignments:      {len(report.proposed_assignments)}")
-    lines.append(f"Rows skipped (missing email):          {len(report.skipped_missing_email)}")
     lines.append("")
 
     lines.append("-" * 72)
@@ -481,6 +513,22 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
         lines.append("(none)")
     for name, tab, row_number in report.skipped_missing_email:
         lines.append(f"  {tab}  row {row_number:>3}  {name}")
+    lines.append("")
+
+    lines.append("-" * 72)
+    lines.append("EXCLUDED BY ACTIVE++ FILTER — not imported")
+    lines.append("-" * 72)
+    if not report.excluded_by_view:
+        lines.append("(none)")
+    else:
+        status_totals: Counter[str] = Counter(st for _, _, _, _, st in report.excluded_by_view)
+        lines.append("  by status:")
+        for status, count in status_totals.most_common():
+            lines.append(f"    {count:>3}  {status}")
+        lines.append("")
+        lines.append(f"  (showing first 15 of {len(report.excluded_by_view)})")
+        for email, name, tab, row_number, status in report.excluded_by_view[:15]:
+            lines.append(f"    {tab}  row {row_number:>3}  {status:<8}  {name}  <{email}>")
     lines.append("")
 
     lines.append("-" * 72)

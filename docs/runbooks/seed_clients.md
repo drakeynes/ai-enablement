@@ -2,6 +2,17 @@
 
 How to populate `clients`, `slack_channels`, and `client_team_assignments` from the Financial Master Sheet. Also covers the re-import loop when the sheet gets a new export.
 
+## What counts as a client (V1 import rule)
+
+The importer follows the sheet's **Active++ working view** as the canonical definition of "who is a client for V1":
+
+- **USA TOTALS tab:** `Status ∈ {Active, Ghost, Paused, Paused (Leave)}`
+- **AUS TOTALS tab:** `Status ∈ {Active, Paused}`
+
+Anything else — `Churn`, `Churn (Aus)`, `N/A`, blank — **is not imported**. Excluded rows appear under "EXCLUDED BY ACTIVE++ FILTER" in the dry-run report so nothing silently disappears.
+
+Why this filter: historical churn in the sheet predates the current team's ownership, the data quality is uncertain, and a confidently-wrong agent response about an ex-client is worse than no knowledge. Going forward, churn events will happen under current ownership with proper context and will be handled as a status update on an already-imported row (see "Churn after import" below).
+
 ## When to run
 
 - First-time seed of a fresh Supabase project (local or cloud).
@@ -36,16 +47,25 @@ Prints the full report to stdout. Writes nothing to the DB or to disk. The repor
 
 ### Metadata keys written to `clients.metadata`
 
-The importer writes exactly these six keys and nothing else:
+The importer writes exactly these five keys and nothing else:
 
 - `seed_source` — constant `"financial_master_jan26"`
 - `seeded_at` — ISO date the import ran
 - `country` — `"USA"` or `"AUS"`
-- `standing` — raw Standing cell, trimmed
 - `nps_standing` — raw NPS Standing cell, trimmed
 - `owner_raw` — raw Owner cell, for audit
 
-Revenue fields (`Contracted Rev`, `Contracted Rev AUD`, `Month N PP`) are intentionally excluded — see `docs/data-hygiene.md`.
+**Excluded by design:** revenue fields (`Contracted Rev`, `Contracted Rev AUD`, `Month N PP`) and the `Standing` column. Revenue data is stale; Standing reliability is unclear. See `docs/data-hygiene.md` for the rule.
+
+### Tag derivation
+
+- `promoter` — `NPS Standing` trimmed-lower equals `promoter`.
+- `at_risk` — `NPS Standing` trimmed-lower equals `detractor / at risk`.
+- `detractor` — same as `at_risk`.
+- `aus` — source tab is AUS TOTALS.
+- `churned` — defensive; does not fire under the Active++ filter.
+
+`owing_money` and the Standing-derived half of `at_risk` were removed when Standing was marked unreliable.
 
 ### Apply
 
@@ -83,6 +103,15 @@ Two paths, in order of preference:
 3. Move the export into `data/client_seed/`. **Remove any prior `.xlsx`** from that folder — the importer refuses to run if multiple `.xlsx` files are present (ambiguity), and the old file's data would no longer match the new source of truth.
 4. Run the dry run. Compare counts to the prior run's log in `data/client_seed/import_<ts>.log` to sanity-check the delta.
 5. Apply.
+
+## Churn after import
+
+Once a client has been imported, a subsequent churn event is handled **differently** from the initial filter:
+
+- Update the `Status` in the sheet to `Churn` (or `Churn (Aus)`).
+- Re-run `--apply`. The importer will detect that the client is no longer in the Active++ view and soft-archive the row: set `clients.archived_at = now()`, cascade `slack_channels.is_archived = true`, and end active `client_team_assignments` with `unassigned_at = now()`.
+- The row stays in the DB; history is preserved. Agents stop retrieving it (partial unique on email is `WHERE archived_at IS NULL`, and channels filter on `is_archived = false`).
+- Do not delete. Never delete.
 
 ## Common Fixes
 

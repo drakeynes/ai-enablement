@@ -59,29 +59,20 @@ def test_derive_status(raw, expected):
 
 
 def test_derive_tags_promoter_usa():
-    tags = sc.derive_tags("active", standing="Happy", nps_standing="Promoter", is_aus=False)
+    tags = sc.derive_tags("active", nps_standing="Promoter", is_aus=False)
     assert "promoter" in tags
     assert "at_risk" not in tags
     assert "aus" not in tags
 
 
-def test_derive_tags_detractor_becomes_at_risk_and_detractor():
-    tags = sc.derive_tags(
-        "active", standing="Owing Money", nps_standing="Detractor / At Risk", is_aus=False
-    )
+def test_derive_tags_detractor_sets_at_risk_and_detractor():
+    tags = sc.derive_tags("active", nps_standing="Detractor / At Risk", is_aus=False)
     assert "at_risk" in tags
     assert "detractor" in tags
-    assert "owing_money" in tags
-
-
-def test_derive_tags_standing_contains_at_risk_sets_tag():
-    tags = sc.derive_tags("active", standing="At risk, Owing Money", nps_standing=None, is_aus=False)
-    assert "at_risk" in tags
-    assert "owing_money" in tags
 
 
 def test_derive_tags_churned_and_aus():
-    tags = sc.derive_tags("churned", standing="N/A (Churn)", nps_standing=None, is_aus=True)
+    tags = sc.derive_tags("churned", nps_standing=None, is_aus=True)
     assert "churned" in tags
     assert "aus" in tags
 
@@ -89,9 +80,44 @@ def test_derive_tags_churned_and_aus():
 def test_derive_tags_nps_trailing_whitespace_still_matches():
     # NPS Standing values in the real sheet carry trailing spaces; the
     # transform trims before comparison.
-    tags = sc.derive_tags("active", standing=None, nps_standing="Detractor / At Risk ", is_aus=False)
+    tags = sc.derive_tags("active", nps_standing="Detractor / At Risk ", is_aus=False)
     assert "detractor" in tags
     assert "at_risk" in tags
+
+
+def test_derive_tags_never_produces_owing_money():
+    """Tag dropped — sheet Standing column is unreliable per data-hygiene doc."""
+    tags = sc.derive_tags("active", nps_standing=None, is_aus=False)
+    assert "owing_money" not in tags
+
+
+def test_derive_tags_does_not_set_at_risk_from_absent_nps():
+    """at_risk used to also fire on Standing containing 'At risk'.
+    That half was dropped; only NPS Detractor signals at_risk now."""
+    tags = sc.derive_tags("active", nps_standing=None, is_aus=False)
+    assert "at_risk" not in tags
+
+
+# ---------------------------------------------------------------------------
+# is_in_active_plus_plus_view
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status,country,expected",
+    [
+        ("active", "USA", True),
+        ("ghost", "USA", True),
+        ("paused", "USA", True),
+        ("churned", "USA", False),
+        ("active", "AUS", True),
+        ("paused", "AUS", True),
+        ("ghost", "AUS", False),     # AUS excludes ghost
+        ("churned", "AUS", False),
+    ],
+)
+def test_is_in_active_plus_plus_view(status, country, expected):
+    assert sc.is_in_active_plus_plus_view(status, country) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +249,9 @@ def test_build_client_payload_happy_path():
     assert payload["metadata"]["country"] == "USA"
     assert payload["metadata"]["seeded_at"] == "2026-04-21"
     assert set(payload["metadata"].keys()) == {
-        "seed_source", "seeded_at", "country", "standing", "nps_standing", "owner_raw"
+        "seed_source", "seeded_at", "country", "nps_standing", "owner_raw"
     }
+    assert "standing" not in payload["metadata"]
 
 
 def test_build_client_payload_omits_revenue_fields():
