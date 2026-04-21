@@ -2,7 +2,7 @@
 
 First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co-Pilot V1 need, with room to grow into CRM, marketing, and team-scoring data later without restructuring.
 
-**Status:** Implemented by migrations 0001–0008.
+**Status:** Implemented by migrations 0001–0009.
 
 ## Design Principles
 
@@ -500,3 +500,4 @@ Post-review constraint tweaks applied after the initial implementation, before m
 - **Non-null `call_action_items.owner_type`.** Added `not null default 'unknown'` so every action item has an owner classification, even when extraction cannot resolve one. Captured in migration `0003_calls.sql`.
 - **Partial unique indexes on `team_members` and `clients`.** Replaced the full-table unique constraints on `email` / `slack_user_id` with partial unique indexes filtered on `archived_at is null`, so soft-archived records do not block re-enrollment / re-hire. Captured in migration `0007_partial_unique_archival.sql`. `slack_channels` left unchanged (uses `is_archived` boolean, not `archived_at`, and Slack channel id reuse is not a real scenario).
 - **`match_document_chunks` Postgres function.** Retrieval primitive wrapping filtered vector search, with the hard safety property that `call_summary` documents are excluded in global mode and scoped to a single client in client mode. Captured in migration `0008_kb_search.sql`; full contract documented in `document_chunks.md`.
+- **`client_team_assignments.metadata` column.** Added to preserve provenance when assignment rows come from heuristic parsing — primarily the clients importer's `raw_owner` string for messy Owner values. `not null default '{}'::jsonb`; no new index. Captured in migration `0009_add_assignments_metadata.sql`; documented in `client_team_assignments.md`.

@@ -16,8 +16,16 @@ A client may have a primary CSM and a secondary coach at the same time, and assi
 | `role` | `text` | Not null. `primary_csm`, `secondary_csm`, `coach` |
 | `assigned_at` | `timestamptz` | Default `now()` |
 | `unassigned_at` | `timestamptz` | Null = currently active |
+| `metadata` | `jsonb` | Not null, default `'{}'`. Assignment-level provenance (see below) |
 
 `UNIQUE (client_id, team_member_id, role)` prevents duplicate active + historical rows for the same triple. If a person is reassigned in the same role after being removed, update `unassigned_at` rather than insert a duplicate, or use a new row only if history semantics require it (revisit if this constraint bites).
+
+## Metadata
+
+`metadata` captures assignment-level provenance without growing the column set. Conventions:
+
+- `raw_owner` (string) — set by the clients importer when the source sheet's Owner column required heuristic parsing (e.g. `"Lou (Scott Chasing)"`, `"Lou > Nico?"`). The assignment row ends up linked to the first named team member; the raw string lives here so a human can audit the choice. Clean matches (`"Lou"`) do not set this key.
+- Other keys may be added over time (e.g. `assigned_by`, `source`). Extension is cheap; rename/reshape is not, so prefer adding keys to renaming existing ones.
 
 ## Relationships
 
