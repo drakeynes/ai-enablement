@@ -145,6 +145,54 @@ def test_parse_owner_blankish_returns_none_clean(raw):
 
 
 # ---------------------------------------------------------------------------
+# is_aggregate_row
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("TOTALS", True),
+        ("  totals  ", True),
+        ("UF Collection Rate", True),
+        ("Total Active Clients", True),
+        ("Retention", True),
+        ("Referrals", True),
+        ("Jane Doe", False),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_is_aggregate_row(raw, expected):
+    assert sc.is_aggregate_row(raw) is expected
+
+
+def test_load_sheet_rows_filters_aggregates(tmp_path):
+    import openpyxl as _openpyxl
+    xlsx = tmp_path / "sheet.xlsx"
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "USA TOTALS"
+    ws.append(["Customer Name", "Client Emails", "Status", "Owner "])
+    ws.append(["Real Client", "rc@example.com", "Active", "Lou"])
+    ws.append(["Client No Email", None, "Active", "Lou"])  # skipped for missing email, not aggregate
+    ws.append(["TOTALS", None, None, None])                 # aggregate
+    ws.append(["UF Collection Rate", None, None, None])     # aggregate
+    aus = wb.create_sheet("AUS TOTALS")
+    aus.append(["Customer Name", "Client Emails", "Status", "Owner "])
+    wb.save(xlsx)
+
+    rows, aggregate_count = sc.load_sheet_rows(xlsx)
+
+    assert aggregate_count == 2
+    # Two rows survive the filter: Real Client and Client No Email.
+    # The missing-email one still gets to the next stage so it shows up in the
+    # skipped-missing-email report.
+    assert len(rows) == 2
+    assert {r.values["customer name"] for r in rows} == {"Real Client", "Client No Email"}
+
+
+# ---------------------------------------------------------------------------
 # build_client_payload — skip-missing-email rule
 # ---------------------------------------------------------------------------
 

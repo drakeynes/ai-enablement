@@ -60,6 +60,34 @@ STATUS_MAP: dict[str, str] = {
     "": "active",
 }
 
+# Customer Name values that are sheet-aggregate rows, not real clients.
+# Filtered before the missing-email check so they don't pollute the skipped
+# report. Match is case-insensitive on the trimmed string.
+AGGREGATE_ROW_LABELS: frozenset[str] = frozenset(
+    label.lower()
+    for label in (
+        "TOTALS",
+        "UF Collection Rate",
+        "BE Collection Opportunity",
+        "BE Collections Rate",
+        "BE Owining Rate",
+        "Upsell Rate",
+        "Referral Rate",
+        "Refund Rate",
+        "Total Active Clients",
+        "Referrals",
+        "Upsells",
+        "Retention",
+    )
+)
+
+
+def is_aggregate_row(customer_name: Any) -> bool:
+    """True when Customer Name is a known sheet-aggregate label."""
+    if customer_name is None:
+        return False
+    return str(customer_name).strip().lower() in AGGREGATE_ROW_LABELS
+
 
 # ---------------------------------------------------------------------------
 # Pure transforms — no IO, trivially testable.
@@ -309,9 +337,18 @@ class SheetRow:
     row_number: int
 
 
-def load_sheet_rows(xlsx_path: Path) -> list[SheetRow]:
+def load_sheet_rows(xlsx_path: Path) -> tuple[list[SheetRow], int]:
+    """Return (rows, aggregate_rows_filtered).
+
+    Aggregate / summary rows at the bottom of each tab (`TOTALS`,
+    `UF Collection Rate`, etc.) are filtered here so they don't pollute
+    the skipped-missing-email report. The filter is a known-label set
+    (see AGGREGATE_ROW_LABELS); real people with blank Customer Name
+    cells don't exist and real people with email-missing are preserved.
+    """
     wb = openpyxl.load_workbook(xlsx_path, data_only=True, read_only=True)
     rows: list[SheetRow] = []
+    aggregate_filtered = 0
     for tab, country in ((USA_TAB, "USA"), (AUS_TAB, "AUS")):
         if tab not in wb.sheetnames:
             continue
@@ -322,12 +359,16 @@ def load_sheet_rows(xlsx_path: Path) -> list[SheetRow]:
         headers = _headers_to_index(raw_rows[0])
         for row_number, raw in enumerate(raw_rows[1:], start=2):
             values = {key: raw[idx] for key, idx in headers.items() if idx < len(raw)}
-            if not values.get("customer name"):
+            customer_name = values.get("customer name")
+            if not customer_name:
+                continue
+            if is_aggregate_row(customer_name):
+                aggregate_filtered += 1
                 continue
             rows.append(
                 SheetRow(values=values, country=country, tab=tab, row_number=row_number)
             )
-    return rows
+    return rows, aggregate_filtered
 
 
 def locate_xlsx(explicit: str | None) -> Path:
@@ -359,6 +400,7 @@ def locate_xlsx(explicit: str | None) -> Path:
 @dataclass
 class DryRunReport:
     total_sheet_rows: int = 0
+    aggregate_rows_filtered: int = 0
     proposed_clients: list[dict[str, Any]] = field(default_factory=list)
     proposed_channels: list[dict[str, Any]] = field(default_factory=list)
     proposed_assignments: list[dict[str, Any]] = field(default_factory=list)
@@ -372,10 +414,16 @@ class DryRunReport:
 
 
 def build_report(
-    rows: list[SheetRow], existing_emails_in_db: set[str]
+    rows: list[SheetRow],
+    existing_emails_in_db: set[str],
+    *,
+    aggregate_rows_filtered: int = 0,
 ) -> DryRunReport:
     now_iso = datetime.now(timezone.utc).date().isoformat()
-    report = DryRunReport(total_sheet_rows=len(rows))
+    report = DryRunReport(
+        total_sheet_rows=len(rows) + aggregate_rows_filtered,
+        aggregate_rows_filtered=aggregate_rows_filtered,
+    )
     seen_emails: dict[str, list[tuple[str, str, int]]] = {}
 
     for row in rows:
@@ -432,6 +480,7 @@ def render_report(report: DryRunReport, *, sample_size: int = 5) -> str:
     lines.append("=" * 72)
     lines.append("")
     lines.append(f"Total sheet rows with Customer Name:   {report.total_sheet_rows}")
+    lines.append(f"Aggregate rows filtered (sheet totals):{report.aggregate_rows_filtered}")
     lines.append(f"Proposed clients inserts/updates:      {len(report.proposed_clients)}")
     lines.append(f"Proposed slack_channels inserts:       {len(report.proposed_channels)}")
     lines.append(f"Proposed client_team_assignments:      {len(report.proposed_assignments)}")
@@ -656,7 +705,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     xlsx = locate_xlsx(args.input)
-    rows = load_sheet_rows(xlsx)
+    rows, aggregate_filtered = load_sheet_rows(xlsx)
 
     db = get_client()
     existing_emails_db = set(
@@ -666,7 +715,7 @@ def main(argv: list[str] | None = None) -> int:
         )).keys()
     )
 
-    report = build_report(rows, existing_emails_db)
+    report = build_report(rows, existing_emails_db, aggregate_rows_filtered=aggregate_filtered)
     report_text = render_report(report)
     print(report_text)
 
