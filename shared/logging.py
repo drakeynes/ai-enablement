@@ -36,11 +36,18 @@ Example:
 
 from __future__ import annotations
 
+import logging as _stdlib_logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from shared.db import get_client
+
+# Canonical project logger. Other shared modules import this rather than
+# creating their own so log output routes through a single namespace.
+# Apps (Slack bot entry points, CLIs, etc.) configure handlers on
+# "ai_enablement" at startup.
+logger = _stdlib_logging.getLogger("ai_enablement")
 
 RUNNING_STATUS = "running"
 TERMINAL_STATUSES = {"success", "escalated", "error", "skipped"}

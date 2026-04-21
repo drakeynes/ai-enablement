@@ -10,6 +10,22 @@ The governing principle: **extending metadata later is cheap, changing existing 
 
 Corollary: when in doubt, store it. `raw_payload` preserves the full upstream API response for every source that has one, so we can extract new fields later without re-fetching from the source system.
 
+### Validator
+
+`shared.ingestion.validate` is the canonical check. Two public functions:
+
+- `validate_document_metadata(metadata, source, document_type)` — validates `documents.metadata`.
+- `validate_chunk_metadata(metadata, source, document_type)` — validates `document_chunks.metadata`.
+
+Behavior:
+
+- **Missing required key →** raises `ValueError` listing every missing key.
+- **Unknown key (not required, not optional) →** logs a warning on `shared.logging.logger`, does not raise. Extensibility is the point of jsonb metadata; we just want visibility when new keys appear.
+- **Drive source →** raises `NotImplementedError` pointing at this doc's §2 Drive TBD subsection. When Drive ingestion lands, extend the validator with the pinned shape.
+- **Source with no spec →** passes but logs a warning. Add the spec to the validator and this doc at the same time.
+
+**Every ingestion pipeline must call both validators before inserting into `documents` or `document_chunks`.** Adding a new source or document_type means updating three places in the same commit: this doc (§2), the validator's specs, and the pipeline that writes the rows.
+
 ## 2. Per-Source Conventions
 
 ### Fathom call summaries
