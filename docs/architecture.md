@@ -117,6 +117,7 @@ The architecture above guarantees:
 | Agent docs | `docs/agents/<agent_name>.md` |
 | Ingestion code | `ingestion/<source>/` |
 | Ingestion runbooks | `docs/runbooks/ingest_<source>.md` |
+| Ingestion metadata conventions | `docs/ingestion/metadata-conventions.md` |
 | Shared utilities | `shared/` |
 | n8n workflows | `orchestration/` (JSON exports) |
 | Frontend | `frontend/` |
