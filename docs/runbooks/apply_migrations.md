@@ -36,6 +36,25 @@ supabase migration up
 
 `supabase status` prints everything. Shortcut: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. Studio UI at `http://127.0.0.1:54323`.
 
+## Seed Data
+
+Seed files live in `supabase/seed/*.sql` and are picked up by the CLI via `[db.seed].sql_paths = ["./seed/*.sql"]` in `supabase/config.toml`. Every seed file must be idempotent — use `ON CONFLICT DO NOTHING` (or a targeted update) so re-runs don't duplicate rows or overwrite manual edits.
+
+**When seeds apply automatically.** `supabase db reset` runs migrations from scratch and then applies every matched seed file in order. This is destructive — it drops the local DB first.
+
+**Applying seeds without a reset (local).** Pipe the seed file directly into the container:
+
+```bash
+docker exec -i supabase_db_ai-enablement psql -U postgres -d postgres \
+  < supabase/seed/team_members.sql
+```
+
+Idempotent seeds can safely be re-piped any time. Use this when you've added new rows to a seed file and don't want to wipe the DB.
+
+**Applying seeds to cloud.** `supabase db push` doesn't run seed files — it applies only migrations. For cloud, copy-paste the seed SQL into **Studio → SQL Editor** and run it there. Same idempotency guarantee means pasting the same file twice is safe. This is a temporary workflow until we either (a) move seed content into an ordinary migration or (b) build a tiny `scripts/apply_seeds_to_cloud.py` that reads `supabase/seed/*.sql` and pushes via the Postgres connection.
+
+**Note on partial unique indexes.** Tables with partial unique indexes (e.g. `team_members.email` filtered on `archived_at is null`, from migration `0007_partial_unique_archival.sql`) require the predicate in the `ON CONFLICT` target: `ON CONFLICT (email) WHERE archived_at IS NULL DO NOTHING`. Without the predicate, Postgres can't match the index.
+
 ## Apply to Cloud
 
 Prerequisites: Supabase cloud project created, project ref captured from the dashboard URL (`https://supabase.com/dashboard/project/<ref>`).
