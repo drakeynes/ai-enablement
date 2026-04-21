@@ -118,6 +118,7 @@ The architecture above guarantees:
 | Ingestion code | `ingestion/<source>/` |
 | Ingestion runbooks | `docs/runbooks/ingest_<source>.md` |
 | Ingestion metadata conventions | `docs/ingestion/metadata-conventions.md` |
+| Data hygiene rules | `docs/data-hygiene.md` |
 | Shared utilities | `shared/` |
 | n8n workflows | `orchestration/` (JSON exports) |
 | Frontend | `frontend/` |
