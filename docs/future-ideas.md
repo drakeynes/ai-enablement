@@ -42,9 +42,24 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 ## Fathom webhook integration (real-time call ingestion)
 
 - **What:** HTTP endpoint that receives Fathom webhooks when a call finishes processing, parses the JSON payload into a `FathomCallRecord`, and runs the existing ingestion pipeline. Replaces manual zip-export backlog re-imports for ongoing calls. Reuses `classifier.py`, `chunker.py`, and `pipeline.py` verbatim — only adds the endpoint, Fathom signature verification, and a thin JSON adapter at `ingestion/fathom/webhook.py`.
+- **Does double duty for both deferrals.** The webhook payload carries the call summary and the action items alongside the transcript, so the same path that adds real-time ingestion will also populate `call_action_items` and `documents` rows with `document_type='call_summary'` — the two omissions the TXT backlog pipeline leaves empty today. See `docs/ingestion/metadata-conventions.md` §5 Deferrals.
 - **Why deferred:** backlog pipeline must prove correct on 389 real calls first. Debugging pipeline logic on a static corpus is dramatically easier than on a live stream — same classifier, same chunker, same DB writes, but with a known input set and time to inspect every output.
 - **Revisit trigger:** backlog ingest has been stable for 1+ week AND Ella V1 has been in beta with acceptable retrieval quality for at least several days.
 - **Logged:** 2026-04-21.
+
+## LLM-based call summary generation (fallback to Fathom webhook)
+
+- **What:** a Claude call per stored transcript that produces a clean summary, written into `documents` with `document_type='call_summary'` and metadata per conventions §2. Back-fills summaries for the backlog calls the TXT pipeline couldn't populate.
+- **Why deferred:** costs ~$5–10 one-time across the backlog, runs in a few minutes, but requires an eval harness for summary quality — and that harness doesn't exist yet. The preferred path is the Fathom webhook above, which gets summaries "free" from Fathom's own post-processing. LLM generation is the fallback if the webhook path stalls.
+- **Revisit trigger:** Ella V1 in beta with reviewer bandwidth available to validate summaries, OR Fathom webhook integration stalls for 2+ weeks.
+- **Logged:** 2026-04-22.
+
+## LLM-based action item extraction (fallback to Fathom webhook)
+
+- **What:** Claude pass over stored transcripts that extracts action items into `call_action_items`, one row per item with `owner_type`, description, due_date inferred when present. Back-fills the table the TXT pipeline couldn't populate.
+- **Why deferred:** Similar cost profile to LLM summaries (~$8–20 to backfill 389 calls) and requires an extraction-quality eval that we don't have. Cross-reference: see the LLM-summary entry above for the same pattern. Preferred path is the Fathom webhook, which delivers action items alongside summaries. LLM extraction is the fallback.
+- **Revisit trigger:** Ella V1 in beta + reviewer bandwidth available to validate extractions, OR Fathom webhook integration stalls.
+- **Logged:** 2026-04-22.
 
 ## scripts/churn_client.py atomic churn helper
 

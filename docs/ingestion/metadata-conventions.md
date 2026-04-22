@@ -140,6 +140,18 @@ Ingestion runs this cascade to set `calls.call_category`, `calls.call_type`, `ca
 
 Medium-confidence `client` calls stay `is_retrievable_by_client_agents = false` until a human reviewer promotes them. Same for any `unclassified` holdover.
 
+### Deferrals — Fathom `.txt` backlog ingestion
+
+The V1 backlog pipeline (`ingestion/fathom/pipeline.py`) intentionally leaves two tables / document types empty:
+
+- **`call_action_items`.** The TXT exports don't carry action items.
+- **`documents` rows with `document_type='call_summary'`.** The TXT exports don't carry summaries either. Chunks still cover retrievability; the summary doc adds a higher-signal overview but isn't on the critical path for V1.
+
+Both omissions are resolved by the same future paths, in preference order:
+
+1. **Fathom webhook integration** — the real-time ingest will receive both the summary JSON and action items in the webhook payload. Single source, minimal fuss. Documented in `docs/future-ideas.md` ("Fathom webhook integration (real-time call ingestion)"). That entry notes it does double-duty for both summaries and action items.
+2. **LLM extraction over stored transcripts** — fallback if the webhook path stalls. Two separate entries in `docs/future-ideas.md` ("LLM-based summary generation" and "LLM-based action item extraction") cross-reference each other and the webhook entry.
+
 ## 6. Re-Classification Policy
 
 Running classification is **idempotent**. Re-running it updates `call_category`, `classification_confidence`, `classification_method`, and `call_type` on existing `calls` rows — but does not re-embed, re-chunk, or re-create `documents` / `document_chunks` entries that already exist for the call.

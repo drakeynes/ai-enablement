@@ -1,0 +1,540 @@
+"""Unit tests for ingestion.fathom.pipeline.
+
+Mocked — no DB, no OpenAI. The tests exercise each branch of the
+orchestrator:
+
+  - dry-run emits an IngestOutcome with action='dry-run' and no writes
+  - first ingest of a client call: insert calls, participants, document,
+    chunks; retrievable wired to the classifier's floor
+  - re-ingest client → client with existing chunks: skip chunking, sync
+    denormalized metadata, no retrievability change
+  - re-ingest client → internal: demote retrievability, soft-archive
+    existing document, no new chunks
+  - re-ingest internal → client: no auto-promote even though classifier
+    would pass the floor
+  - auto-create client: email-new path inserts, email-exists path reuses
+  - validator failure on document: logs, skips document write, no chunks
+  - validator failure on chunk: logs, skips that chunk, others continue
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from ingestion.fathom import pipeline
+from ingestion.fathom.classifier import (
+    AutoCreateRequest,
+    ClassificationResult,
+    ClientResolver,
+    CONFIDENCE_HIGH,
+    CONFIDENCE_MEDIUM,
+)
+from ingestion.fathom.parser import FathomCallRecord, Participant, Utterance
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+def _record(
+    *,
+    external_id: str = "rec-001",
+    title: str = "30mins with Scott (The AI Partner) (Test Client)",
+    participants: list[Participant] | None = None,
+    utterances: list[Utterance] | None = None,
+    duration_seconds: int = 600,
+) -> FathomCallRecord:
+    if participants is None:
+        participants = [
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Test Client", email="client@example.com"),
+        ]
+    if utterances is None:
+        utterances = [
+            Utterance(
+                timestamp="00:00:00",
+                speaker=pt.display_name,
+                text=f"Something substantive that {pt.display_name} said about building the site.",
+            )
+            for pt in participants
+        ] * 30  # plenty of words to produce at least one chunk
+    return FathomCallRecord(
+        external_id=external_id,
+        title=title,
+        started_at=datetime(2026, 3, 15, tzinfo=timezone.utc),
+        scheduled_start=None,
+        scheduled_end=None,
+        recording_start=None,
+        recording_end=None,
+        duration_seconds=duration_seconds,
+        language="en",
+        recording_url="https://fathom.video/calls/123",
+        share_link=None,
+        participants=participants,
+        recorded_by=Participant(
+            display_name="Scott Wilson", email="scott@theaipartner.io"
+        ),
+        utterances=utterances,
+        transcript="transcript text",
+        raw_text="raw text",
+    )
+
+
+class _FakeDB:
+    """Captures supabase-py calls as a list of (op, table, payload) tuples
+    and returns canned responses from a scripted dict.
+
+    Responses are keyed by (op, table) — e.g. ("select", "calls") — and
+    consumed in order. Tests set scripts per case.
+    """
+
+    def __init__(self):
+        self.ops: list[tuple[str, str, dict]] = []
+        self.responses: dict[tuple[str, str], list] = {}
+        self.insert_returns: dict[str, list] = {}
+
+    def respond(self, op: str, table: str, data):
+        self.responses.setdefault((op, table), []).append(data)
+
+    def insert_returning(self, table: str, id_sequence: list[str]):
+        self.insert_returns[table] = list(id_sequence)
+
+    def table(self, name: str):
+        return _FakeTable(self, name)
+
+
+class _FakeTable:
+    def __init__(self, db: _FakeDB, name: str):
+        self.db = db
+        self.name = name
+        self._current_op: str | None = None
+        self._filters: list[tuple] = []
+        self._payload = None
+
+    def select(self, _cols, *, count=None):
+        self._current_op = "select"
+        return self
+
+    def insert(self, payload):
+        self._current_op = "insert"
+        self._payload = payload
+        return self
+
+    def update(self, payload):
+        self._current_op = "update"
+        self._payload = payload
+        return self
+
+    def upsert(self, payload, *, on_conflict=None, ignore_duplicates=False):
+        self._current_op = "upsert"
+        self._payload = payload
+        return self
+
+    def eq(self, col, val):
+        self._filters.append(("eq", col, val))
+        return self
+
+    def is_(self, col, val):
+        self._filters.append(("is_", col, val))
+        return self
+
+    def in_(self, col, vals):
+        self._filters.append(("in_", col, vals))
+        return self
+
+    def execute(self):
+        op = self._current_op
+        self.db.ops.append((op, self.name, {
+            "payload": self._payload,
+            "filters": list(self._filters),
+        }))
+        if op == "insert" and self.name in self.db.insert_returns:
+            ids = self.db.insert_returns[self.name]
+            payloads = (
+                self._payload if isinstance(self._payload, list) else [self._payload]
+            )
+            return_rows = [{"id": ids.pop(0), **p} for p in payloads]
+            if not isinstance(self._payload, list):
+                return_rows = return_rows[:1]
+            return SimpleNamespace(data=return_rows)
+
+        scripted = self.db.responses.get((op, self.name))
+        if scripted:
+            return SimpleNamespace(data=scripted.pop(0))
+        return SimpleNamespace(data=[])
+
+
+def _fake_embed(text: str) -> list[float]:
+    return [0.0] * 1536
+
+
+# ---------------------------------------------------------------------------
+# Dry-run path
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_does_not_touch_db():
+    db = _FakeDB()
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({"scott@theaipartner.io": "tm-scott"})
+
+    outcome = pipeline.ingest_call(
+        _record(),
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        dry_run=True,
+    )
+
+    assert db.ops == []
+    assert outcome.action == "dry-run"
+    assert outcome.category == "client"
+    assert outcome.primary_client_id == "c-1"
+    assert outcome.participants_linked_to_clients == 1
+
+
+# ---------------------------------------------------------------------------
+# First ingest — client call, inserts everywhere
+# ---------------------------------------------------------------------------
+
+
+def test_first_ingest_client_call_inserts_rows_and_chunks():
+    db = _FakeDB()
+    # calls: existing lookup returns empty (first ingest)
+    db.respond("select", "calls", [])
+    # documents: no existing transcript doc
+    db.respond("select", "documents", [])
+    # document_chunks count after insert: empty initially
+    db.respond("select", "document_chunks", [])
+    # inserts return synthetic ids
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({"scott@theaipartner.io": "tm-scott"})
+
+    outcome = pipeline.ingest_call(
+        _record(),
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    # Outcome shape
+    assert outcome.action == "inserted"
+    assert outcome.call_id == "call-1"
+    assert outcome.document_id == "doc-1"
+    assert outcome.chunks_written >= 1
+    assert outcome.chunks_reused == 0
+    assert outcome.retrievable is True       # high confidence + primary
+    assert outcome.retrievable_before is None
+
+    # Wrote to calls, call_participants, documents, document_chunks
+    tables_written = {table for op, table, _ in db.ops if op in ("insert", "upsert")}
+    assert tables_written >= {"calls", "call_participants", "documents", "document_chunks"}
+
+
+# ---------------------------------------------------------------------------
+# Re-ingest client → client — chunks reused, no re-embedding
+# ---------------------------------------------------------------------------
+
+
+def test_reingest_same_category_reuses_chunks():
+    db = _FakeDB()
+    # calls: existing row found
+    db.respond("select", "calls", [{
+        "id": "call-1",
+        "is_retrievable_by_client_agents": True,
+    }])
+    # documents: existing transcript doc (call_id in metadata is the
+    # calls.id UUID per conventions §2)
+    db.respond("select", "documents", [{
+        "id": "doc-1",
+        "is_active": True,
+        "metadata": {"call_id": "call-1", "call_category": "client"},
+    }])
+    # document_chunks count: has 5 chunks already
+    db.respond("select", "document_chunks", [{"id": f"ch-{i}"} for i in range(5)])
+
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({})
+
+    outcome = pipeline.ingest_call(
+        _record(),
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.action == "updated"
+    assert outcome.call_id == "call-1"
+    assert outcome.document_id == "doc-1"
+    assert outcome.chunks_written == 0
+    assert outcome.chunks_reused == 5
+    # No inserts into document_chunks
+    chunk_inserts = [
+        op for op in db.ops if op[0] == "insert" and op[1] == "document_chunks"
+    ]
+    assert chunk_inserts == []
+
+
+# ---------------------------------------------------------------------------
+# Re-ingest client → internal — retrievability demotes, doc soft-archives
+# ---------------------------------------------------------------------------
+
+
+def test_reingest_demote_to_internal_archives_document():
+    db = _FakeDB()
+    db.respond("select", "calls", [{
+        "id": "call-1",
+        "is_retrievable_by_client_agents": True,
+    }])
+    # First find-transcript-doc (for the "indexable_categories" branch;
+    # in this test the new classification is internal so we hit
+    # _soft_archive_transcript_document_if_exists instead). call_id in
+    # metadata is the calls.id UUID.
+    db.respond("select", "documents", [{
+        "id": "doc-1",
+        "is_active": True,
+        "metadata": {"call_id": "call-1"},
+    }])
+
+    # Build a record whose title forces internal (CSM Sync)
+    internal_record = _record(
+        title="CSM Sync",
+        participants=[
+            Participant(display_name="Lou Perez", email="lou@theaipartner.io"),
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            # extra so there's no external match
+        ],
+    )
+
+    resolver = ClientResolver({})
+    team_resolver = pipeline.TeamMemberResolver({
+        "lou@theaipartner.io": "tm-lou",
+        "scott@theaipartner.io": "tm-scott",
+    })
+
+    outcome = pipeline.ingest_call(
+        internal_record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.category == "internal"
+    assert outcome.retrievable is False
+    assert outcome.retrievable_before is True
+
+    doc_updates = [
+        op for op in db.ops
+        if op[0] == "update" and op[1] == "documents"
+    ]
+    # The one update on documents is the soft-archive flip is_active=false
+    assert any(
+        op[2]["payload"] == {"is_active": False} for op in doc_updates
+    ), "expected document to be soft-archived to is_active=false"
+
+
+# ---------------------------------------------------------------------------
+# Re-ingest internal → client — retrievability does NOT auto-promote
+# ---------------------------------------------------------------------------
+
+
+def test_reingest_promote_does_not_auto_promote_retrievability():
+    db = _FakeDB()
+    db.respond("select", "calls", [{
+        "id": "call-1",
+        "is_retrievable_by_client_agents": False,
+    }])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("documents", ["doc-new"])
+
+    # Record that classifies as client high
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({})
+    outcome = pipeline.ingest_call(
+        _record(),  # client, high, primary_client_id=c-1
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.category == "client"
+    # classifier.should_be_retrievable would be True (high + primary)
+    # but because prior was False, final stays False (no auto-promote).
+    assert outcome.retrievable is False
+    assert outcome.retrievable_before is False
+
+
+# ---------------------------------------------------------------------------
+# Auto-create client — email new vs email exists
+# ---------------------------------------------------------------------------
+
+
+def test_auto_create_client_inserts_when_email_new():
+    db = _FakeDB()
+    # lookup_or_create: email not found
+    db.respond("select", "clients", [])
+    db.insert_returning("clients", ["c-new"])
+    # calls: first ingest
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Random Prospect)",
+        participants=[
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Random Prospect", email="prospect@example.com"),
+        ],
+    )
+    resolver = ClientResolver({})   # prospect@example.com NOT in resolver
+    team_resolver = pipeline.TeamMemberResolver({"scott@theaipartner.io": "tm-s"})
+
+    outcome = pipeline.ingest_call(
+        record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.auto_created_client_id == "c-new"
+    assert outcome.auto_created_client_email == "prospect@example.com"
+    assert outcome.primary_client_id == "c-new"
+    # Resolver was updated so future calls reuse the id
+    assert resolver.lookup("prospect@example.com") == "c-new"
+
+
+def test_auto_create_client_reuses_when_email_exists():
+    db = _FakeDB()
+    # email lookup finds an existing active row
+    db.respond("select", "clients", [
+        {"id": "c-prior", "archived_at": None},
+    ])
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Random Prospect)",
+        participants=[
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Random Prospect", email="prospect@example.com"),
+        ],
+    )
+    resolver = ClientResolver({})
+    team_resolver = pipeline.TeamMemberResolver({})
+
+    outcome = pipeline.ingest_call(
+        record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.auto_created_client_id == "c-prior"
+    # No new clients insert happened
+    client_inserts = [
+        op for op in db.ops if op[0] == "insert" and op[1] == "clients"
+    ]
+    assert client_inserts == []
+
+
+# ---------------------------------------------------------------------------
+# Validator failures — document vs chunk
+# ---------------------------------------------------------------------------
+
+
+def test_document_validation_failure_skips_doc_and_chunks(mocker):
+    mocker.patch(
+        "ingestion.fathom.pipeline.validate_document_metadata",
+        side_effect=ValueError("fake missing required"),
+    )
+    db = _FakeDB()
+    db.respond("select", "calls", [])
+    db.insert_returning("calls", ["call-1"])
+
+    outcome = pipeline.ingest_call(
+        _record(), db,
+        client_resolver=ClientResolver({"client@example.com": "c-1"}),
+        team_resolver=pipeline.TeamMemberResolver({}),
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.validation_failures
+    assert "fake missing required" in outcome.validation_failures[0]
+    # No document write happened
+    doc_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "documents"]
+    assert doc_inserts == []
+
+
+def test_chunk_validation_failure_skips_that_chunk_others_continue(mocker):
+    # Let document validation pass, fail on every OTHER chunk.
+    call_count = {"n": 0}
+    def flaky_chunk_validator(metadata, source, document_type):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise ValueError("fake chunk #2 bad")
+    mocker.patch(
+        "ingestion.fathom.pipeline.validate_chunk_metadata",
+        side_effect=flaky_chunk_validator,
+    )
+
+    db = _FakeDB()
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    # Record long enough to produce multiple chunks
+    utterances = [
+        Utterance(timestamp=f"00:00:{i:02d}", speaker="A" if i % 2 else "B",
+                  text=" ".join(["word"] * 40))
+        for i in range(60)
+    ]
+    record = _record(utterances=utterances)
+
+    outcome = pipeline.ingest_call(
+        record, db,
+        client_resolver=ClientResolver({"client@example.com": "c-1"}),
+        team_resolver=pipeline.TeamMemberResolver({}),
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert any("chunk #2 bad" in vf for vf in outcome.validation_failures)
+    # Other chunks still wrote
+    chunk_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "document_chunks"]
+    assert len(chunk_inserts) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Cost estimate helper
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_embedding_cost_is_small_and_nonzero():
+    cost = pipeline.estimate_embedding_cost_usd(100)
+    assert cost > 0
+    assert cost < 1.0  # 100 chunks should be pennies
