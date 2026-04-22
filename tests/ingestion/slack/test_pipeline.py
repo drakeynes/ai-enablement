@@ -343,6 +343,50 @@ def test_run_ingest_follows_thread_parents_and_collapses_reply():
     assert outcome.threads_followed == 1
 
 
+def test_run_ingest_dedupes_messages_across_history_and_replies():
+    """Regression guard: the same message can surface in both
+    conversations.history and conversations.replies for channels
+    with active threads. Without dedupe, the upsert hits Postgres's
+    'ON CONFLICT DO UPDATE cannot affect row a second time'."""
+    db = _FakeDB()
+    db.respond("select", "clients", [])
+    db.respond("select", "team_members", [])
+    db.respond("select", "clients", [{"id": "c-1", "full_name": "Client"}])
+    db.respond("select", "slack_channels", [{
+        "id": "sc-1", "slack_channel_id": "C1",
+        "name": "Client", "client_id": "c-1",
+    }])
+
+    slack = _FakeSlackClient()
+    slack.set_members("C1", ["UBOT"])
+    parent_ts = "1745500000.0001"
+    reply_ts = "1745500050.0001"
+    # The reply shows up in BOTH history and replies — unusual but
+    # observed on real data.
+    slack.set_history("C1", [
+        {"type": "message", "user": "UX", "text": "parent", "ts": parent_ts,
+         "thread_ts": parent_ts, "reply_count": 1},
+        {"type": "message", "user": "UY", "text": "reply (in history too)",
+         "ts": reply_ts, "thread_ts": parent_ts},
+    ])
+    slack.set_replies("C1", parent_ts, [
+        {"type": "message", "user": "UX", "text": "parent", "ts": parent_ts,
+         "thread_ts": parent_ts},  # dup of parent (normal)
+        {"type": "message", "user": "UY", "text": "reply (in replies too)",
+         "ts": reply_ts, "thread_ts": parent_ts},
+    ])
+
+    report = pipeline.run_ingest(
+        db, slack,
+        client_full_names=["Client"],
+        extra_channel_names=[],
+        dry_run=True,
+    )
+    outcome = report.outcomes[0]
+    # 2 unique ts values survive (parent + reply); no duplicate rows
+    assert outcome.messages_in_window == 2
+
+
 def test_run_ingest_upsert_count_split_inserts_vs_updates():
     db = _FakeDB()
     db.respond("select", "clients", [])

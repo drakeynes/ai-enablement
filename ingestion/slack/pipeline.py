@@ -350,7 +350,16 @@ def _collect_messages(
             continue
         threads_followed += 1
 
-    return records, threads_followed
+    # Dedupe by slack_ts. conversations.history can sometimes surface
+    # thread replies as standalone messages in the 90-day window; then
+    # conversations.replies surfaces the same reply. The upsert would
+    # otherwise hit Postgres's "ON CONFLICT DO UPDATE cannot affect row
+    # a second time" within a single batch. Last-occurrence wins so
+    # reply-side metadata (which is more complete) beats history-side.
+    deduped: dict[str, SlackMessageRecord] = {}
+    for r in records:
+        deduped[r.slack_ts] = r
+    return list(deduped.values()), threads_followed
 
 
 # ---------------------------------------------------------------------------
