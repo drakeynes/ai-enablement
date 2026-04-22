@@ -232,6 +232,75 @@ where d.is_active = false;
 
 ---
 
+## Slack backfill — sanity queries
+
+Run after `ingestion.slack.cli --apply` to verify what landed.
+
+### 9. Message counts per channel (last 90 days)
+
+```sql
+-- Good: numbers roughly match the dry-run's per-channel reported
+--       `messages_in_window`. Small drift is OK (bot may have joined
+--       mid-window; 90-day boundary can straddle a message).
+-- Bad:  any client channel in the target list with 0 messages (bot
+--       membership dropped, or the channel got archived mid-run).
+select
+  sc.name as channel,
+  c.full_name as client,
+  count(m.*) as messages_90d
+from slack_channels sc
+left join clients c on c.id = sc.client_id
+left join slack_messages m
+  on m.slack_channel_id = sc.slack_channel_id
+  and m.sent_at > now() - interval '90 days'
+where sc.name in ('Fernando G', 'Javi Pena', 'Musa Elmaghrabi',
+                  'Jenny Burnett', 'Dhamen Hothi', 'Trevor Heck',
+                  'Art Nuno', 'ella-test')
+group by sc.name, c.full_name
+order by messages_90d desc;
+```
+
+### 10. author_type distribution across ingested Slack messages
+
+```sql
+-- Good: majority is client + team_member; `bot` proportional to how
+--       chatty the Slack Workflows / integrations are; `workflow`
+--       non-zero only if accountability/NPS flows are in use.
+-- Bad:  `unknown` > ~5% of total in any client channel suggests we
+--       missed a user in the slack_user_id resolver — either a
+--       client who isn't in the clients table, or a team member
+--       whose slack_user_id hasn't been backfilled yet.
+select
+  sc.name as channel,
+  m.author_type,
+  count(*) as n
+from slack_messages m
+join slack_channels sc on sc.slack_channel_id = m.slack_channel_id
+group by sc.name, m.author_type
+order by sc.name, n desc;
+```
+
+### 11. Unresolved author ids (audit what's missing from resolvers)
+
+```sql
+-- Good: small or empty. Any ids here are candidates to backfill into
+--       `team_members.slack_user_id` via `users.info`, or flag as
+--       clients we don't have rows for (rare, but possible for
+--       ex-clients archived before slack ingest ran).
+-- Bad:  many distinct ids with high counts — same as above but more
+--       urgent. Consider a backfill pass.
+select
+  m.slack_user_id,
+  count(*) as message_count,
+  min(m.sent_at) as first_seen,
+  max(m.sent_at) as last_seen
+from slack_messages m
+where m.author_type = 'unknown'
+group by m.slack_user_id
+order by message_count desc
+limit 30;
+```
+
 ## Recommended run cadence
 
 - **After every `--apply` of the Fathom pipeline.** Queries 1, 2, 6, 8 are the fast smoke check.

@@ -159,6 +159,27 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella's retrieval feels like it's surfacing "the same content twice" across adjacent chunks in sampled results, OR storage cost becomes a real line item (not at V1 scale, maybe at 100K+ chunks).
 - **Logged:** 2026-04-22.
 
+## Slack real-time ingestion via Events API
+
+- **What:** HTTP endpoint receiving Slack Events API subscriptions (`message` events). Parses the event, runs it through `ingestion.slack.parser`, upserts to `slack_messages`. Reuses parser + author-resolution logic verbatim; adds the endpoint, signing-secret verification, and event deduplication via `event_id`. Complements the REST-based backfill (which stays the right tool for historical imports).
+- **Why deferred:** today's backfill covers the 90-day window for 8 pilot channels. Real-time only becomes necessary once Ella is responding in client channels and needs to see mentions as they happen.
+- **Revisit trigger:** Ella V1 beta deployment begins, OR a second backfill run is needed inside a 24-hour window (suggests polling is doing work a subscription should handle).
+- **Logged:** 2026-04-22.
+
+## Backfill team_members.slack_user_id from ingested messages
+
+- **What:** a sweep that takes every `slack_user_id` in `slack_messages` with `author_type = 'unknown'`, calls Slack's `users.info`, and when the email ends in `@theaipartner.io`, updates the matching `team_members` row with the resolved `slack_user_id`. Makes subsequent ingest runs classify those same authors as `team_member` rather than `unknown`. Also helps future Slack-bot features (@mentioning a team member).
+- **Why deferred:** today's seed left `team_members.slack_user_id` null. Resolution lazily via messages costs a `users.info` call per unknown author; we'd rather batch that and run it once after the first backfill surfaces the unknown set.
+- **Revisit trigger:** query #11 in `docs/runbooks/inspect_ingestion.md` shows more than ~20 distinct unresolved authors OR the first time a team @mention in a Slack channel needs to resolve to a `team_members.id`.
+- **Logged:** 2026-04-22.
+
+## Slack messages as a retrieval surface (V1.1)
+
+- **What:** chunk + embed `slack_messages` text into `document_chunks` under a new `document_type = 'slack_message_chunk'` (or similar), metadata-gated per client like transcript chunks. Lets Ella retrieve prior conversation history ("has this client asked this before") alongside call summaries.
+- **Why deferred:** V1 ingest gets messages into `slack_messages`; that table is queryable without embeddings for the CSM Co-Pilot signals (accountability submissions, NPS, activity cadence). Embedding the long tail of Slack chatter adds noise to retrieval that isn't worth paying for until Ella V1 beta reveals concrete need.
+- **Revisit trigger:** Ella V1 beta user asks a question that past-Slack-conversation context would have answered, OR CSM QA feedback specifically asks for conversational memory.
+- **Logged:** 2026-04-22.
+
 ## LLM post-processing for Fathom speaker misattribution
 
 - **What:** a Claude pass per transcript to fix obvious speaker misattributions from Fathom's diarization. Observed in the backlog: quotes attributed to the wrong speaker based on conversational flow (e.g., `"you have a tendency to over-engineer"` attributed to the person being described rather than the person doing the describing). This is a Fathom quality ceiling, not a pipeline bug — the TXT export faithfully records what Fathom produced.
