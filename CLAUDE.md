@@ -71,8 +71,10 @@ ai-enablement/
 │   ├── claude_client.py        # Anthropic API wrapper
 │   ├── kb_query.py             # Knowledge base retrieval
 │   ├── hitl.py                 # Human-in-the-loop escalation
-│   ├── logging.py              # Structured logging
-│   └── db.py                   # Supabase client setup
+│   ├── logging.py              # Structured logging (incl. canonical `logger`)
+│   ├── db.py                   # Supabase client setup
+│   └── ingestion/              # Shared utilities for ingestion pipelines
+│       └── validate.py         # documents / document_chunks metadata validator
 ├── evals/                      # Golden datasets + eval runner
 └── scripts/                    # One-off scripts, data imports, admin tasks
 ```
@@ -147,9 +149,27 @@ Documentation is not optional and not written "later." It ships alongside the co
 
 ## Current Focus
 
-**Now:** Phase 0 foundation — Supabase schema, Fathom and Slack ingestion pipelines, eval harness scaffolding, shared utilities.
+**Phase 0 foundation**, heading into the Slack Bot V1 / CSM Co-Pilot V1 builds. End-of-April shipping target is tight but intact.
 
-**End of April target:** Slack Bot V1 and CSM Co-Pilot V1 shipped and running on real data.
+### Current schema state
+
+- Migrations `0001`–`0010` applied locally. Remote cloud project not linked yet — local dev only.
+- Populated: `team_members` (9 seeded), `clients` (100 active + 68 archived), `slack_channels` (100 active + 21 archived), `client_team_assignments` (100 active + 24 ended).
+- Empty: `calls`, `call_participants`, `call_action_items`, `documents`, `document_chunks`, `agent_runs`, `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
+
+### Active work
+
+- **Fathom backlog ingestion** — Part 4 of 4 in the ingestion build. Parser / classifier / chunker landed. Pipeline orchestrator + CLI + inspection runbook in progress; dry-run against the 389-call backlog still pending.
+- After Fathom ingest: Slack Bot V1 (Ella) and CSM Co-Pilot V1 scaffolding.
+
+### Deferrals worth knowing about
+
+These are documented in `docs/future-ideas.md` with explicit revisit triggers:
+
+- LLM-based summary and action-item generation for backlog calls (Fathom `.txt` exports carry neither; backlog ingest creates only `call_transcript_chunk` documents and leaves `call_action_items` empty).
+- Fathom webhook integration (will later populate summaries + action items for live calls).
+- Browser-direct RLS policies (V1 is service-role only).
+- Atomic per-call ingest via Postgres RPC (V1 pipeline is non-atomic + idempotent on re-run).
 
 ## Working With Claude Code — Prompting Tips
 
