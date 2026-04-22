@@ -42,6 +42,22 @@ from shared.logging import logger
 _SOURCE = "manual"
 _DOCUMENT_TYPE = "course_lesson"
 
+# Content authors mark retired lessons by prefixing the filename with
+# "NOT IN USE" (observed across SALES PROCESS MODULE/ and MARKET
+# SELECTION MODULE/). We respect the marker — ingest the rows so the
+# content is preserved in the DB, but:
+#   - append the `not_in_use` tag
+#   - set `is_active=false` so they're invisible to match_document_chunks
+#
+# If the content ever comes out of retirement, flip is_active=true and
+# drop the tag manually (or rename the file + re-ingest).
+_NOT_IN_USE_TAG = "not_in_use"
+
+
+def _is_not_in_use(source_path: Path) -> bool:
+    """Filename (stem) starts with `not in use` — case-insensitive."""
+    return source_path.stem.lower().startswith("not in use")
+
 # Cost-estimate constants — mirror the Fathom pipeline's accounting.
 # text-embedding-3-small at $0.02 per 1M tokens, ~500 tokens per chunk.
 _EMBEDDING_COST_USD_PER_MILLION_TOKENS = 0.02
@@ -92,6 +108,15 @@ def ingest_file(
     tags = tags_for_path(relative_path)
     content_hash = _content_hash(source_path)
 
+    # Retired-content flag. When a filename starts with "NOT IN USE",
+    # tag the row and mark it inactive — chunks still get written so
+    # the content is queryable after manual promotion, but
+    # match_document_chunks won't surface them in live retrieval.
+    retired = _is_not_in_use(source_path)
+    if retired:
+        tags = tags + [_NOT_IN_USE_TAG]
+    is_active = not retired
+
     chunks = chunk_text(record.text)
 
     if dry_run:
@@ -112,7 +137,9 @@ def ingest_file(
 
     existing = _find_existing(db, str(relative_path))
     if existing is None:
-        document_id = _insert_document(db, record, relative_path, tags, doc_metadata)
+        document_id = _insert_document(
+            db, record, relative_path, tags, doc_metadata, is_active=is_active
+        )
         chunks_written = _insert_chunks(db, document_id, chunks, embed_fn)
         return ContentIngestOutcome(
             source_path=source_path,
@@ -152,7 +179,7 @@ def ingest_file(
         )
 
     # Content changed — update document, replace chunks.
-    _update_document(db, document_id, record, tags, doc_metadata)
+    _update_document(db, document_id, record, tags, doc_metadata, is_active=is_active)
     _delete_chunks(db, document_id)
     chunks_written = _insert_chunks(db, document_id, chunks, embed_fn)
     return ContentIngestOutcome(
@@ -214,6 +241,8 @@ def _insert_document(
     relative_path: Path,
     tags: list[str],
     metadata: dict[str, Any],
+    *,
+    is_active: bool,
 ) -> str:
     payload = {
         "source": _SOURCE,
@@ -223,7 +252,7 @@ def _insert_document(
         "document_type": _DOCUMENT_TYPE,
         "tags": tags,
         "metadata": metadata,
-        "is_active": True,
+        "is_active": is_active,
     }
     resp = db.table("documents").insert(payload).execute()
     return resp.data[0]["id"]
@@ -235,13 +264,15 @@ def _update_document(
     record: ContentRecord,
     tags: list[str],
     metadata: dict[str, Any],
+    *,
+    is_active: bool,
 ) -> None:
     payload = {
         "title": record.title,
         "content": record.text,
         "tags": tags,
         "metadata": metadata,
-        "is_active": True,
+        "is_active": is_active,
     }
     db.table("documents").update(payload).eq("id", document_id).execute()
 

@@ -249,6 +249,63 @@ def test_nested_file_produces_section_tag(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# NOT IN USE flag — is_active=false + not_in_use tag
+# ---------------------------------------------------------------------------
+
+
+def test_not_in_use_file_inserts_with_is_active_false_and_tag(tmp_path):
+    root = _make_tree(tmp_path)
+    retired = root / "SALES PROCESS MODULE"
+    retired.mkdir(exist_ok=True)
+    path = retired / "NOT IN USE - 39 - Retired Lesson.html"
+    path.write_text(
+        "<html><body><h1>Retired Lesson</h1><p>Old content.</p></body></html>",
+        encoding="utf-8",
+    )
+
+    db = _FakeDB()
+    db.respond("select", "documents", [])
+    db.insert_returning("documents", ["doc-retired"])
+
+    outcome = pipeline.ingest_file(
+        path, content_root=root, db=db, embed_fn=_embed, dry_run=False,
+    )
+
+    assert outcome.action == "inserted"
+    assert "not_in_use" in outcome.tags
+    # The document row insert carries is_active=false
+    inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "documents"]
+    assert len(inserts) == 1
+    assert inserts[0][2]["payload"]["is_active"] is False
+
+
+def test_active_file_unchanged_by_not_in_use_logic(tmp_path):
+    root = _make_tree(tmp_path)
+    db = _FakeDB()
+    db.respond("select", "documents", [])
+    db.insert_returning("documents", ["doc-active"])
+
+    outcome = pipeline.ingest_file(
+        root / "FOUNDATION MODULE" / "lesson_a.html",
+        content_root=root, db=db, embed_fn=_embed, dry_run=False,
+    )
+    assert outcome.action == "inserted"
+    assert "not_in_use" not in outcome.tags
+    inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "documents"]
+    assert inserts[0][2]["payload"]["is_active"] is True
+
+
+def test_is_not_in_use_detection_cases(tmp_path):
+    from pathlib import Path as P
+    assert pipeline._is_not_in_use(P("/x/NOT IN USE 5.html")) is True
+    assert pipeline._is_not_in_use(P("/x/NOT IN USE - 39 - blah.html")) is True
+    assert pipeline._is_not_in_use(P("/x/not in use 10.html")) is True
+    assert pipeline._is_not_in_use(P("/x/Not In Use Today.html")) is True  # prefix still matches
+    assert pipeline._is_not_in_use(P("/x/Lesson About Not Using X.html")) is False
+    assert pipeline._is_not_in_use(P("/x/lesson.html")) is False
+
+
+# ---------------------------------------------------------------------------
 # Cost estimate
 # ---------------------------------------------------------------------------
 

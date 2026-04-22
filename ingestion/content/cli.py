@@ -153,15 +153,27 @@ def _print_summary(
 
     total_chunks = sum(o.chunk_count for o in outcomes)
     estimated_cost = pipeline.estimate_embedding_cost_usd(total_chunks)
+    not_in_use = [o for o in outcomes if "not_in_use" in o.tags]
     print("-" * 72)
     print("TOTALS")
     print("-" * 72)
     print(f"  files processed:           {len(outcomes)}")
     print(f"  total chunks (if fresh):   {total_chunks}")
     print(f"  estimated embedding cost:  ${estimated_cost:.4f}")
+    print(f"  NOT IN USE (is_active=false): {len(not_in_use)}")
     if parse_failures:
         print(f"  parse failures:            {len(parse_failures)}")
     print()
+
+    if not_in_use:
+        print("-" * 72)
+        print("NOT IN USE — flagged with tag 'not_in_use', is_active=false")
+        print("-" * 72)
+        for o in not_in_use[:25]:
+            print(f"  {o.external_id}")
+        if len(not_in_use) > 25:
+            print(f"  ... and {len(not_in_use) - 25} more")
+        print()
 
     print("-" * 72)
     print("PARSE FAILURES")
