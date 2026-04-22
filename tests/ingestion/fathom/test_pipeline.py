@@ -117,6 +117,7 @@ class _FakeTable:
 
     def select(self, _cols, *, count=None):
         self._current_op = "select"
+        self._count_mode = count
         return self
 
     def insert(self, payload):
@@ -132,6 +133,8 @@ class _FakeTable:
     def upsert(self, payload, *, on_conflict=None, ignore_duplicates=False):
         self._current_op = "upsert"
         self._payload = payload
+        self._upsert_on_conflict = on_conflict
+        self._upsert_ignore_duplicates = ignore_duplicates
         return self
 
     def eq(self, col, val):
@@ -151,6 +154,8 @@ class _FakeTable:
         self.db.ops.append((op, self.name, {
             "payload": self._payload,
             "filters": list(self._filters),
+            "on_conflict": getattr(self, "_upsert_on_conflict", None),
+            "ignore_duplicates": getattr(self, "_upsert_ignore_duplicates", None),
         }))
         if op == "insert" and self.name in self.db.insert_returns:
             ids = self.db.insert_returns[self.name]
@@ -160,12 +165,14 @@ class _FakeTable:
             return_rows = [{"id": ids.pop(0), **p} for p in payloads]
             if not isinstance(self._payload, list):
                 return_rows = return_rows[:1]
-            return SimpleNamespace(data=return_rows)
+            return SimpleNamespace(data=return_rows, count=None)
 
         scripted = self.db.responses.get((op, self.name))
         if scripted:
-            return SimpleNamespace(data=scripted.pop(0))
-        return SimpleNamespace(data=[])
+            data = scripted.pop(0)
+            count = len(data) if isinstance(data, list) else None
+            return SimpleNamespace(data=data, count=count)
+        return SimpleNamespace(data=[], count=0)
 
 
 def _fake_embed(text: str) -> list[float]:
@@ -665,6 +672,42 @@ def test_auto_create_reactivate_archived_row_also_carries_breadcrumb():
 
 
 # ---------------------------------------------------------------------------
+# Idempotent chunk inserts — partial-failure recovery
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_inserts_use_ignore_duplicates_upsert():
+    """Regression guard for the partial-failure recovery path.
+
+    If a prior run crashed mid-chunk-insert, a re-run must not blow
+    up on the `(document_id, chunk_index)` unique index. Chunks are
+    written via upsert with `ignore_duplicates=True` so duplicates
+    silently no-op.
+    """
+    db = _FakeDB()
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    pipeline.ingest_call(
+        _record(),
+        db,
+        client_resolver=ClientResolver({"client@example.com": "c-1"}),
+        team_resolver=pipeline.TeamMemberResolver({}),
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    chunk_ops = [op for op in db.ops if op[1] == "document_chunks" and op[0] == "upsert"]
+    assert chunk_ops, "expected at least one document_chunks upsert"
+    for op in chunk_ops:
+        assert op[2]["on_conflict"] == "document_id,chunk_index"
+        assert op[2]["ignore_duplicates"] is True
+
+
+# ---------------------------------------------------------------------------
 # Validator failures — document vs chunk
 # ---------------------------------------------------------------------------
 
@@ -729,9 +772,10 @@ def test_chunk_validation_failure_skips_that_chunk_others_continue(mocker):
     )
 
     assert any("chunk #2 bad" in vf for vf in outcome.validation_failures)
-    # Other chunks still wrote
-    chunk_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "document_chunks"]
-    assert len(chunk_inserts) >= 1
+    # Other chunks still wrote. Chunks go through upsert (not insert)
+    # so the partial-failure recovery path stays idempotent.
+    chunk_writes = [op for op in db.ops if op[1] == "document_chunks" and op[0] == "upsert"]
+    assert len(chunk_writes) >= 1
 
 
 # ---------------------------------------------------------------------------

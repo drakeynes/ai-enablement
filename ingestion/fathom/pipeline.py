@@ -646,10 +646,21 @@ def _sync_document_metadata(
 
 
 def _count_chunks(db, document_id: str) -> int:
+    """Count chunks under a given document via PostgREST's `count=exact`.
+
+    Using the count header rather than `len(resp.data)` — the row-data
+    path can come back empty even when rows exist (observed on a
+    partial-failure recovery run against a populated table) which
+    would erroneously push the pipeline into a re-chunk + re-insert
+    path and crash on the `(document_id, chunk_index)` unique index.
+    """
     resp = (
-        db.table("document_chunks").select("id").eq("document_id", document_id).execute()
+        db.table("document_chunks")
+        .select("id", count="exact")
+        .eq("document_id", document_id)
+        .execute()
     )
-    return len(resp.data or [])
+    return resp.count or 0
 
 
 def _insert_chunks(
@@ -692,13 +703,21 @@ def _insert_chunks(
             )
             continue
 
-        db.table("document_chunks").insert({
-            "document_id": document_id,
-            "chunk_index": chunk.chunk_index,
-            "content": chunk.content,
-            "embedding": embedding,
-            "metadata": chunk.metadata,
-        }).execute()
+        # Idempotent insert: on conflict (document_id, chunk_index) do
+        # nothing. Protects the pipeline from re-run after a partial
+        # failure where some chunks landed and _count_chunks might
+        # not have caught it before we got here.
+        db.table("document_chunks").upsert(
+            {
+                "document_id": document_id,
+                "chunk_index": chunk.chunk_index,
+                "content": chunk.content,
+                "embedding": embedding,
+                "metadata": chunk.metadata,
+            },
+            on_conflict="document_id,chunk_index",
+            ignore_duplicates=True,
+        ).execute()
         written += 1
     return written
 
