@@ -57,10 +57,10 @@ ai-enablement/
 │   ├── migrations/             # Numbered SQL migration files
 │   └── seed/                   # Seed data for local testing
 ├── ingestion/                  # Data ingestion pipelines
-│   ├── fathom/
-│   ├── slack/
-│   ├── drive/
-│   └── crm/
+│   ├── fathom/                 # Call transcripts (backlog `.txt` path shipped)
+│   ├── slack/                  # Channel history backfill (REST, no events yet)
+│   ├── content/                # Filesystem-sourced HTML lessons (Drive comes later)
+│   └── crm/                    # (planned)
 ├── agents/                     # Agent implementations
 │   ├── slack_bot/
 │   ├── csm_copilot/
@@ -149,25 +149,36 @@ Documentation is not optional and not written "later." It ships alongside the co
 
 ## Current Focus
 
-**Phase 0 foundation**, heading into the Slack Bot V1 / CSM Co-Pilot V1 builds. End-of-April shipping target is tight but intact.
+**Phase 0 complete.** All foundation pieces landed: schema, shared utilities, validator, three ingestion pipelines (Fathom calls, Active++ clients, Slack backfill, filesystem content). Moving into **Ella V1 build** next.
 
 ### Current schema state
 
 - Migrations `0001`–`0010` applied locally. Remote cloud project not linked yet — local dev only.
-- Populated: `team_members` (9 seeded), `clients` (100 active + 68 archived), `slack_channels` (100 active + 21 archived), `client_team_assignments` (100 active + 24 ended).
-- Empty: `calls`, `call_participants`, `call_action_items`, `documents`, `document_chunks`, `agent_runs`, `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
+- **Populated:**
+  - `team_members` — 9 (7 with Slack IDs, 2 not in workspace)
+  - `clients` — 146 active (100 from Master Sheet Active++ view + 46 auto-created awaiting review) + 68 archived
+  - `slack_channels` — 101 active (100 client channels + ella-test) + 21 archived
+  - `client_team_assignments` — 100 active + 24 ended
+  - `calls` — 389 (Fathom backlog Feb–Apr 2026)
+  - `call_participants` — 978
+  - `documents` — 616 (319 `call_transcript_chunk` + 297 `course_lesson`)
+  - `document_chunks` — 4,179 (~3,528 Fathom transcript + ~651 course content), all embedded via `text-embedding-3-small`
+  - `slack_messages` — 2,914 across 8 pilot channels, 90-day window
+- **Still empty:** `call_action_items`, `agent_runs`, `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`. All populated by agent code that doesn't exist yet.
 
 ### Active work
 
-- **Fathom backlog ingestion** — Part 4 of 4 in the ingestion build. Parser / classifier / chunker landed. Pipeline orchestrator + CLI + inspection runbook in progress; dry-run against the 389-call backlog still pending.
-- After Fathom ingest: Slack Bot V1 (Ella) and CSM Co-Pilot V1 scaffolding.
+- **Ella V1 build starts next.** Scaffolding the Slack bot agent per `docs/agents/ella.md`, wiring retrieval via `shared/kb_query.py`, building the golden eval dataset, deploying to the `#ella-test` channel for internal testing first.
+- **CSM Co-Pilot V1 follows** — same shared utilities, different retrieval + prompt shape.
 
 ### Deferrals worth knowing about
 
 These are documented in `docs/future-ideas.md` with explicit revisit triggers:
 
-- LLM-based summary and action-item generation for backlog calls (Fathom `.txt` exports carry neither; backlog ingest creates only `call_transcript_chunk` documents and leaves `call_action_items` empty).
+- LLM-based summary and action-item generation for backlog calls (Fathom `.txt` exports carry neither; backlog ingest creates `call_transcript_chunk` documents and leaves `call_action_items` empty).
 - Fathom webhook integration (will later populate summaries + action items for live calls).
+- Drive-sourced content ingestion (today's pipeline reads from `data/course_content/`; Drive API + version-awareness comes later).
+- `team_members.slack_user_id` backfill sweep for unresolved Slack authors (~94 out of 2,914 messages are `unknown`; backfill via `users.info` reclassifies them).
 - Browser-direct RLS policies (V1 is service-role only).
 - Atomic per-call ingest via Postgres RPC (V1 pipeline is non-atomic + idempotent on re-run).
 

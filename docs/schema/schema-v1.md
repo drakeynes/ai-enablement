@@ -2,7 +2,28 @@
 
 First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co-Pilot V1 need, with room to grow into CRM, marketing, and team-scoring data later without restructuring.
 
-**Status:** Implemented by migrations 0001–0010.
+**Status:** Implemented by migrations 0001–0010. All 10 migrations applied against local Supabase; cloud project not linked yet.
+
+**DB population (as of 2026-04-22):**
+
+| Table | Count | Source |
+|---|---:|---|
+| `team_members` | 9 | Manual seed (`supabase/seed/team_members.sql`); 7 have `slack_user_id` backfilled |
+| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`) |
+| `clients` (archived) | 68 | Soft-archived by the Active++ re-import cascade |
+| `slack_channels` (active) | 101 | 100 client channels + `ella-test` |
+| `slack_channels` (archived) | 21 | Cascaded from archived clients |
+| `client_team_assignments` (active) | 100 | Primary CSM mappings |
+| `client_team_assignments` (ended) | 24 | Cascaded from archived clients |
+| `calls` | 389 | Fathom backlog `.txt` ingest, Feb–Apr 2026 |
+| `call_participants` | 978 | Fathom backlog |
+| `call_action_items` | 0 | Deferred — see conventions §5 |
+| `documents` (`call_transcript_chunk`) | 319 | Fathom pipeline; 266 active + 53 inactive (retrievability floor) |
+| `documents` (`course_lesson`) | 297 | Content pipeline; 276 active + 21 inactive (NOT IN USE) |
+| `document_chunks` | 4,179 | ~3,528 from transcripts + ~651 from course content, all embedded |
+| `slack_messages` | 2,914 | 90-day history across 8 pilot channels |
+| `agent_runs` / `escalations` / `agent_feedback` | 0 | Populated by agent code (not built yet) |
+| `nps_submissions` / `client_health_scores` / `alerts` | 0 | Populated by CSM Co-Pilot (not built yet) |
 
 ## Design Principles
 

@@ -177,19 +177,20 @@ order by c.call_category, c.classification_confidence, c.started_at desc;
 ## 7. Distinct tag values across documents — content audit surface
 
 ```sql
--- Canonical query for finding / archiving old content versions once
--- Drive and other content ingestion land. Fathom pipeline leaves tags
--- empty today, so this returns near-zero rows for now; the query is
--- pre-built so the workflow is ready when content ingestion arrives.
+-- Canonical query for finding / archiving old content versions.
+-- Content ingestion (`ingestion/content/`) shipped 2026-04-22 — 297
+-- lessons tagged with `v1_content` + `module_*` + `section_*`, plus
+-- 21 retired lessons carrying `not_in_use` (is_active=false).
 --
--- Good: expected tag vocabulary (module_1, onboarding, sop,
---       methodology, etc. once content is in). Counts match the
---       number of docs you'd expect per tag.
+-- Good: expected tag vocabulary (v1_content = 297, one module_* tag
+--       per module with the right file count, section_* where
+--       subfolders exist, not_in_use = 21). Counts match what the
+--       content ingest's dry-run reported.
 -- Bad:  near-identical tags that differ only in case or whitespace
 --       (`module_1` vs `Module_1` vs `module 1`) — indicates a
 --       normalization bug in the ingestion pipeline. Stale tags
---       (e.g. `module_3_v1_deprecated` with non-zero count) flag
---       content that should be archived.
+--       (e.g. `v2_content` appearing alongside `v1_content` once
+--       Drive ingestion lands) flag the refresh cycle in progress.
 select
   tag,
   count(*) as document_count,
@@ -202,13 +203,14 @@ order by document_count desc;
 
 ### Tags plan
 
-Tags are currently unused by the Fathom pipeline (transcript chunk documents ship with `tags = '{}'`). They become useful once content ingestion lands:
+Fathom transcript-chunk documents ship with `tags = '{}'` — they don't need module / section labeling. Course content uses the tag vocabulary fully (per `ingestion/content/tagger.py`):
 
-- **Drive ingestion** (future) will tag each document with module / section / content-category (e.g. `module_1`, `sop`, `methodology`). Query #7 becomes the content audit surface.
-- **Archival workflow**: when a module gets a new version, the old version's documents flip to `is_active = false` but keep their tags. Query #7's `archived_count` column is how you spot those.
-- **Deprecation sweeps**: periodic runs to find tags starting with `deprecated_` or `v1_` and confirm those documents are inactive.
+- **Module tags** (e.g. `module_foundation`, `module_traffic_acquisition`) — one per lesson, derived from the top-level folder.
+- **Section tags** (e.g. `section_cold_calling`) — only when a lesson sits inside a subfolder under its module.
+- **Version tag** `v1_content` — on every lesson, always. Future Drive sync lands new lessons with `v2_content` and query #7's `archived_count` column surfaces the `v1_content` rows that should flip to `is_active=false`.
+- **Retirement tag** `not_in_use` — 21 lessons today, all `is_active=false`. Filename-prefix marker from content authors.
 
-No action needed today. Re-read this section the next time content ingestion gets touched.
+Query #7 is the live audit surface now. Expected today: `v1_content` = 297, `not_in_use` = 21, module counts match `ingestion/content/cli.py` dry-run output.
 
 ---
 
