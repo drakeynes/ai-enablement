@@ -88,3 +88,52 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Why deferred:** requires an extra LLM call per call during ingestion. The current word-window-with-speaker-boundary approach (see `docs/ingestion/metadata-conventions.md` §3) is sufficient for V1 and lets us see real retrieval failures before spending the complexity.
 - **Revisit trigger:** Ella V1 beta shows retrieval misses that a topic-aligned chunk would have caught — e.g. a query lands on a half-chunk mid-topic because the word boundary cut through a discussion.
 - **Logged:** 2026-04-21.
+
+## Atomic per-call ingest via Postgres RPC
+
+- **What:** replace the non-atomic supabase-py writes in `ingestion/fathom/pipeline.py` with a PL/pgSQL `ingest_fathom_call(...)` function taking call fields + participants + chunks (with embeddings) as JSON and doing every insert/update in one `BEGIN/COMMIT`. Python computes embeddings, hands one RPC call the full payload, gets back row counts.
+- **Why deferred:** V1 ingest is a batch job; re-runs are cheap; existing upsert shapes already converge to correct state on partial failure. The RPC would add ~150 lines of PL/pgSQL that's harder to test and evolve than Python.
+- **Revisit trigger:** first time partial-failure recovery becomes a real operational problem, OR the first non-batch ingest path (Fathom webhook) where re-run isn't free.
+- **Logged:** 2026-04-22.
+
+## Partial-unique constraint on client_team_assignments
+
+- **What:** replace `UNIQUE (client_id, team_member_id, role)` on `client_team_assignments` with a partial unique index `WHERE unassigned_at IS NULL`. Matches the pattern from migration `0007_partial_unique_archival.sql`. Today an ended assignment blocks re-assigning the same person to the same client in the same role.
+- **Why deferred:** nobody has been reassigned yet, so the latent bug hasn't fired.
+- **Revisit trigger:** first reassignment attempt that hits the constraint, OR as a small migration in the next maintenance pass — whichever comes first.
+- **Logged:** 2026-04-22.
+
+## RLS policies for browser-direct reads
+
+- **What:** write `CREATE POLICY` statements for tables the Next.js frontend reads directly with `anon` or authenticated user keys. Every table currently has RLS enabled with zero policies, so deny-default takes over and any non-service-role query returns empty.
+- **Why deferred:** V1 is service-role-only from the agent layer. The browser reads through the agent API, not directly against Supabase.
+- **Revisit trigger:** first browser-direct-to-Supabase read, OR before any Next.js dashboard component reads from the DB without going through a backend agent endpoint.
+- **Logged:** 2026-04-22.
+
+## Drop denormalized call_category from documents.metadata
+
+- **What:** remove `call_category` from the metadata blob the Fathom pipeline writes to `documents`. It's denormalized from `calls.call_category` for "filter-side speed" but isn't used as a filter in `match_document_chunks`. Removing it means re-classification on the `calls` table can't drift from the documents copy.
+- **Why deferred:** small cleanup, not blocking. The denormalized value is harmless until it drifts.
+- **Revisit trigger:** tomorrow or this week; dedicated 30-minute PR.
+- **Logged:** 2026-04-22.
+
+## call_action_items CHECK constraint for owner_type / owner_*_id consistency
+
+- **What:** add a CHECK that enforces: `owner_type='client' → owner_client_id is not null AND owner_team_member_id is null`; `owner_type='team_member'` → the mirror case; `owner_type='unknown' → both nullable`. Prevents inconsistent rows at the DB layer.
+- **Why deferred:** every row populated by today's pipeline has `owner_type='unknown'` (TXT backlog doesn't carry action items — see conventions §5 Deferrals). The constraint has nothing to catch yet.
+- **Revisit trigger:** when `call_action_items` starts getting populated — either via the Fathom webhook or the LLM-extraction fallback path.
+- **Logged:** 2026-04-22.
+
+## Status-vocabulary CHECK constraints
+
+- **What:** replace free-text `status` / `category` / `severity` / etc. columns with CHECK constraints enforcing the documented vocabularies. Catches typos at write time. Affects `clients.status`, `clients.journey_stage`, `calls.call_category`, `escalations.status`, `alerts.severity`, and a few others.
+- **Why deferred:** vocabularies are still settling. `clients.journey_stage` in particular will evolve once CSM Co-Pilot starts deriving it.
+- **Revisit trigger:** vocabularies stable for 2+ weeks of Ella V1 beta usage.
+- **Logged:** 2026-04-22.
+
+## Auto-created client review workflow
+
+- **What:** a short runbook + weekly canned query for clients with `tags @> array['needs_review']` AND `metadata->>'auto_created_from_call_ingestion' = 'true'`. Reviewer either confirms (clear the `needs_review` tag) or merges (find duplicate, archive the auto-created row).
+- **Why deferred:** zero auto-created clients yet; the workflow only matters once they exist.
+- **Revisit trigger:** first auto-create from the Fathom backlog ingest, OR a count of `needs_review` clients that exceeds 5.
+- **Logged:** 2026-04-22.
