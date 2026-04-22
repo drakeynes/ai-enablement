@@ -159,6 +159,20 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella's retrieval feels like it's surfacing "the same content twice" across adjacent chunks in sampled results, OR storage cost becomes a real line item (not at V1 scale, maybe at 100K+ chunks).
 - **Logged:** 2026-04-22.
 
+## Drive-sourced content ingestion pipeline
+
+- **What:** `ingestion/drive/` that pulls HTML / Google Doc content from Google Drive via the Drive API with version-awareness — re-ingest triggered on `modifiedTime` change, old versions auto-archived (tags `v1_content` → `is_active=false`, new row carries `v2_content`). Complements the filesystem-based `ingestion/content/` that ships today. When it lands, inspect_ingestion query #7 (distinct tag counts) becomes the active/archived-content surface.
+- **Why deferred:** filesystem copy handles V1 — the course content is relatively stable and Nabeel can trigger re-ingest manually after a content pass by dropping fresh HTML exports into `data/course_content/`. Drive API + version-awareness + auth setup is real work; not worth it until content revamp cadence exceeds "once a quarter."
+- **Revisit trigger:** content stabilizes and Nabeel wants edits to propagate without manual re-copy, OR a second content source (Notion SOPs, methodology docs) needs ingesting — both get addressed by the same API-aware pipeline shape.
+- **Logged:** 2026-04-22.
+
+## Client-facing rollout announcement template for Ella beta
+
+- **What:** standard message posted in each client channel before Ella gets added. Draft: *"You've been selected to take part in the beta of our new AI assistant, Ella. She's a pilot to help you get what you need faster, trained on nearly a million data points from client interactions over the last 12 months. @mention her in this channel anytime for help with course content, methodology, or resources. Your CSM is still your primary contact for anything else."*
+- **Why deferred:** Ella V1 rollout concern — message only matters the moment a channel gets `ella_enabled = true`. Template + tone want review by Scott/Lou alongside the system prompt before going live.
+- **Revisit trigger:** Ella V1 is deployable and ready for first pilot-client channel.
+- **Logged:** 2026-04-22.
+
 ## Slack real-time ingestion via Events API
 
 - **What:** HTTP endpoint receiving Slack Events API subscriptions (`message` events). Parses the event, runs it through `ingestion.slack.parser`, upserts to `slack_messages`. Reuses parser + author-resolution logic verbatim; adds the endpoint, signing-secret verification, and event deduplication via `event_id`. Complements the REST-based backfill (which stays the right tool for historical imports).
