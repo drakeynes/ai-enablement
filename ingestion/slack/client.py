@@ -160,6 +160,15 @@ class SlackClient:
     def users_info(self, user: str) -> dict[str, Any]:
         return self._call("users.info", params={"user": user})
 
+    def users_lookup_by_email(self, email: str) -> dict[str, Any]:
+        """Resolve an email to a Slack user object.
+
+        Requires the `users:read.email` scope. Raises `SlackAPIError`
+        with `error='users_not_found'` when the email isn't in the
+        workspace — callers catch and handle by `.error` code.
+        """
+        return self._call("users.lookupByEmail", params={"email": email})
+
     # -----------------------------------------------------------------------
     # Transport
     # -----------------------------------------------------------------------
