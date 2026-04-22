@@ -1,5 +1,7 @@
 # Agent: Ella (Slack Bot V1)
 
+> **Note for readers:** this is the full Ella spec — the target shape including behaviors deferred past V1 (cool-down on correction, formal eval harness, per-channel `ella_enabled` gating, team-test mode flag, reaction-based feedback capture, impersonation mode). For the tight scope that ships in week one, see **`docs/agents/ella-v1-scope.md`**. The deferred behaviors are logged individually in `docs/future-ideas.md` with explicit revisit triggers.
+
 ## Purpose
 
 Ella answers client questions in their private Slack channels at near-CSM quality. She reduces CSM load on repetitive or factual questions while CSMs retain oversight and handle anything judgment-based.

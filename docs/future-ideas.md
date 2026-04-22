@@ -159,6 +159,55 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella's retrieval feels like it's surfacing "the same content twice" across adjacent chunks in sampled results, OR storage cost becomes a real line item (not at V1 scale, maybe at 100K+ chunks).
 - **Logged:** 2026-04-22.
 
+## Cool-down-on-correction for Ella
+
+- **What:** when Ella receives a `thumbs_down` or `correction` feedback in a channel within the last 24 hours, lower her confidence threshold in that channel so she escalates more eagerly rather than confidently repeat a just-corrected mistake.
+- **Why deferred:** V1 optimizes for shipping speed. Correction feedback volume in the first week of client beta is too low for this logic to matter, and the downside (a CSM correcting a confident answer) is the same with or without cool-down for the first handful of corrections.
+- **Revisit trigger:** first week of client beta done, first visible correction patterns in `agent_feedback`, OR a specific channel surfaces 2+ corrections in a day.
+- **Logged:** 2026-04-22.
+
+## Golden dataset eval harness for Ella
+
+- **What:** curated set of 20+ Q&A pairs covering the four response categories (in-scope, out-of-scope-escalate, out-of-scope-decline, edge/injection). 90% pass rate as the ship gate for future Ella iterations. Replaces "team feel-test" with a reproducible check.
+- **Why deferred:** V1 replaces formal eval with live team testing in `#ella-test` over Thursday/Friday for speed. The harness is real work and gets more valuable once we have real-world examples of things Ella got wrong to seed it with.
+- **Revisit trigger:** first non-trivial Ella iteration after V1 (prompt changes, retrieval changes, chunking changes), OR first client correction that suggests regression risk from a future change.
+- **Logged:** 2026-04-22.
+
+## Per-channel ella_enabled beta gating
+
+- **What:** use the existing `slack_channels.ella_enabled` boolean as the live gate — Ella responds in channels where it's `true`, skips everything else. Controlled per channel via a manual UPDATE or a small admin CLI, no code deploy needed to add or remove a channel.
+- **Why deferred:** V1 hardcodes the pilot channel set (7 clients + `#ella-test`) directly in the agent config for speed. `ella_enabled` is already in the schema but the agent doesn't read it yet.
+- **Revisit trigger:** first time we need to add or remove a channel without a code deploy — e.g., expanding to a second client cohort, or pulling a specific pilot channel during an incident.
+- **Logged:** 2026-04-22.
+
+## Team-test mode flag
+
+- **What:** when a team member (`author_type=team_member`) @mentions Ella, stamp the `agent_runs` row with `trigger_metadata.is_team_test = true` so real-usage analytics can filter out test traffic. Ella still responds normally — the flag is telemetry-only.
+- **Why deferred:** V1 has no real-usage metrics to protect yet. Both pilot-client and team-test interactions land in `agent_runs` equivalently for now.
+- **Revisit trigger:** when post-launch metrics are being analyzed for the first time and team-generated test traffic in `#ella-test` starts distorting the view.
+- **Logged:** 2026-04-22.
+
+## Thumbs-up/down reaction capture
+
+- **What:** Slack reaction-emoji events on Ella's messages feed into `agent_feedback` as `thumbs_up` / `thumbs_down` entries automatically. Requires the Slack Events API subscription (separately deferred — see "Slack real-time ingestion via Events API" below) and a small reaction handler that maps emoji → feedback type → insert.
+- **Why deferred:** V1 team testing gets verbal feedback in the test channel directly to Drake/Nabeel. Formal reaction capture becomes valuable post-launch when clients (not team members) are the ones reacting.
+- **Revisit trigger:** client beta running AND team wants a passive feedback signal without CSMs having to report issues manually, OR the Slack real-time ingestion pathway ships first and this becomes a cheap bolt-on.
+- **Logged:** 2026-04-22.
+
+## Impersonation mode for Ella testing
+
+- **What:** team member can test how Ella would respond as if a specific client were asking — via slash command (`/ella-as <client-email> <question>`) or a message prefix. Drives Ella's retrieval through the target client's scope (their call summaries, their Slack history) so team-test output matches what the real client would see.
+- **Why deferred:** V1 testing uses direct @mentions in `#ella-test` by team members. Less realistic than impersonation (the client's specific retrieval context is missing), but faster to stand up and sufficient for "does she embarrass us" sign-off.
+- **Revisit trigger:** team wants to simulate specific client scenarios before rolling out significant Ella changes — e.g., testing how a prompt change would affect a known-tricky client's experience.
+- **Logged:** 2026-04-22.
+
+## Post-ship quick-fix template if Monday launch slips
+
+- **What:** a prepared short message the team can post in each pilot client channel if Monday's Ella launch slips. Keeps expectations aligned given Scott's announcement already went out to clients. Draft: *"Quick update — we're still putting some finishing touches on Ella. She'll be live in this channel by [day]. Appreciate the patience."* Posted by the client's primary CSM, not Ella (she's not live yet).
+- **Why prepared:** the announcement preceded technical readiness. Slippage risk is non-zero given the tight Thu/Fri test window, and silence after a "coming soon" announcement is worse than a "running a bit late" follow-up.
+- **Revisit trigger:** if Ella isn't shippable by Sunday evening, use this template Monday morning. Otherwise delete the entry after Monday launch.
+- **Logged:** 2026-04-22.
+
 ## Drive-sourced content ingestion pipeline
 
 - **What:** `ingestion/drive/` that pulls HTML / Google Doc content from Google Drive via the Drive API with version-awareness — re-ingest triggered on `modifiedTime` change, old versions auto-archived (tags `v1_content` → `is_active=false`, new row carries `v2_content`). Complements the filesystem-based `ingestion/content/` that ships today. When it lands, inspect_ingestion query #7 (distinct tag counts) becomes the active/archived-content surface.
