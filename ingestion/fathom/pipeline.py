@@ -21,8 +21,15 @@ Per-call flow:
      TXT exports don't carry summaries).
   7. For client-category calls only, create or update a parent document
      with `document_type='call_transcript_chunk'` plus its N child
-     `document_chunks`. Re-ingest that already has chunks skips
-     re-chunking (conventions §6) but syncs denormalized metadata.
+     `document_chunks`. The parent document's `is_active` is set from
+     the same retrievability value that `calls.is_retrievable_by_
+     client_agents` carries — medium-confidence (auto-created) calls
+     land with `is_active=false` so chunks exist but don't surface in
+     `match_document_chunks`. See `docs/future-ideas.md` →
+     "match_document_chunks: enforce calls retrievability via SQL
+     join" for the eventual function-side upgrade. Re-ingest that
+     already has chunks skips re-chunking (conventions §6) but syncs
+     denormalized metadata AND is_active.
   8. For non-client re-ingest of a call that previously had chunks:
      soft-archive the parent document (`is_active=false`). Chunks
      become invisible to `match_document_chunks` automatically.
@@ -185,6 +192,7 @@ def ingest_call(
             db,
             classification.should_auto_create_client,
             client_resolver,
+            record,
         )
         # Promote classification's primary_client_id to the resolved id
         # so downstream writes carry it. Confidence stays medium —
@@ -215,7 +223,8 @@ def ingest_call(
         doc_metadata = _build_document_metadata(record, classification, call_id)
         document_id, chunks_written, chunks_reused, doc_validation_failures = (
             _ensure_transcript_chunks(
-                db, record, call_id, classification, embed_fn, doc_metadata
+                db, record, call_id, classification, embed_fn, doc_metadata,
+                retrievable=final_retrievable,
             )
         )
         validation_failures.extend(doc_validation_failures)
@@ -257,11 +266,19 @@ def ingest_call(
 
 
 def _lookup_or_create_auto_client(
-    db, request: AutoCreateRequest, resolver: ClientResolver
+    db,
+    request: AutoCreateRequest,
+    resolver: ClientResolver,
+    record: FathomCallRecord,
 ) -> tuple[str, str]:
     """Lookup by email first; only insert if missing. Update the
     in-memory resolver so subsequent calls in the same batch reuse the
     row rather than double-insert.
+
+    Metadata carries a breadcrumb back to the triggering call — the
+    reviewer workflow (see `docs/future-ideas.md` → "Auto-created
+    client review workflow") uses these fields to find the recording
+    that prompted the auto-create.
     """
     email = request.email.lower()
 
@@ -277,6 +294,8 @@ def _lookup_or_create_auto_client(
         resolver._map[email] = existing_active["id"]  # noqa: SLF001
         return existing_active["id"], email
 
+    auto_metadata = _build_auto_create_metadata(request, record)
+
     # Second: if an archived row exists, reactivate it rather than insert
     # a new one. Preserves history under the partial unique index.
     existing_archived = next((r for r in (resp.data or [])), None)
@@ -284,11 +303,7 @@ def _lookup_or_create_auto_client(
         db.table("clients").update({
             "archived_at": None,
             "tags": ["needs_review"],
-            "metadata": {
-                "auto_created_from_call_ingestion": True,
-                "auto_create_reason": request.reason,
-                "auto_created_at": datetime.now(timezone.utc).isoformat(),
-            },
+            "metadata": auto_metadata,
         }).eq("id", existing_archived["id"]).execute()
         resolver._map[email] = existing_archived["id"]  # noqa: SLF001
         return existing_archived["id"], email
@@ -299,16 +314,24 @@ def _lookup_or_create_auto_client(
         "full_name": request.display_name or email.split("@", 1)[0],
         "status": "active",
         "tags": ["needs_review"],
-        "metadata": {
-            "auto_created_from_call_ingestion": True,
-            "auto_create_reason": request.reason,
-            "auto_created_at": datetime.now(timezone.utc).isoformat(),
-        },
+        "metadata": auto_metadata,
     }
     insert_resp = db.table("clients").insert(payload).execute()
     new_id = insert_resp.data[0]["id"]
     resolver._map[email] = new_id  # noqa: SLF001
     return new_id, email
+
+
+def _build_auto_create_metadata(
+    request: AutoCreateRequest, record: FathomCallRecord
+) -> dict[str, Any]:
+    return {
+        "auto_created_from_call_ingestion": True,
+        "auto_created_from_call_external_id": record.external_id,
+        "auto_created_from_call_title": record.title,
+        "auto_create_reason": request.reason,
+        "auto_created_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _with_primary_client_id(
@@ -459,16 +482,27 @@ def _ensure_transcript_chunks(
     classification: ClassificationResult,
     embed_fn: Callable[[str], list[float]] | None,
     doc_metadata: dict[str, Any],
+    *,
+    retrievable: bool,
 ) -> tuple[str | None, int, int, list[str]]:
     """Idempotent chunk-and-embed for a client call.
 
+    `retrievable` is the post-asymmetric-rule retrievability value for
+    the parent `calls` row. It maps 1:1 to `documents.is_active` for the
+    transcript_chunk document — today's invariant is "a transcript_chunk
+    document surfaces via `match_document_chunks` iff its call is
+    retrievable." Option (b) in `docs/future-ideas.md` moves the same
+    check into the SQL function via a join; until then the pipeline
+    enforces it at write time.
+
     Behavior:
-      - No existing parent doc → insert parent, chunk, embed, insert
-        all chunks.
-      - Existing parent doc with chunks → sync metadata, reuse chunks
-        (conventions §6 forbids re-embedding on re-classification).
+      - No existing parent doc → insert parent (with `is_active =
+        retrievable`), chunk, embed, insert all chunks.
+      - Existing parent doc with chunks → sync metadata, sync is_active
+        to the new retrievability, reuse chunks (conventions §6 forbids
+        re-embedding on re-classification).
       - Existing parent doc with 0 chunks (partial-failure recovery) →
-        sync metadata, chunk + embed + insert.
+        sync metadata, sync is_active, chunk + embed + insert.
 
     Returns `(document_id, chunks_written, chunks_reused, validation_failures)`.
     """
@@ -486,14 +520,19 @@ def _ensure_transcript_chunks(
     existing = _find_transcript_document(db, call_id)
 
     if existing is None:
-        doc_id = _insert_transcript_document(db, record, classification, doc_metadata)
+        doc_id = _insert_transcript_document(
+            db, record, classification, doc_metadata, is_active=retrievable
+        )
     else:
         doc_id = existing["id"]
         _sync_document_metadata(db, doc_id, existing, doc_metadata)
-        # Re-activate if a prior downgrade had archived it but we're
-        # now client again.
-        if not existing.get("is_active", True):
-            db.table("documents").update({"is_active": True}).eq("id", doc_id).execute()
+        # Sync is_active with the asymmetric retrievability result.
+        # `retrievable` already respects the no-auto-promote rule,
+        # so it's safe to pass through directly.
+        if existing.get("is_active", True) != retrievable:
+            db.table("documents").update(
+                {"is_active": retrievable}
+            ).eq("id", doc_id).execute()
 
     existing_chunk_count = _count_chunks(db, doc_id)
     if existing_chunk_count > 0:
@@ -566,7 +605,17 @@ def _insert_transcript_document(
     record: FathomCallRecord,
     classification: ClassificationResult,
     metadata: dict[str, Any],
+    *,
+    is_active: bool,
 ) -> str:
+    """Insert the parent call_transcript_chunk document.
+
+    `is_active` is passed in rather than hard-coded True so a
+    medium-confidence client call (auto-created participant, awaiting
+    human review) lands with `is_active = false` — its chunks exist in
+    the DB for future promotion but don't surface through
+    `match_document_chunks` yet.
+    """
     payload = {
         "source": _SOURCE,
         "external_id": record.external_id,
@@ -574,7 +623,7 @@ def _insert_transcript_document(
         "content": record.transcript,
         "document_type": _TRANSCRIPT_DOC_TYPE,
         "metadata": metadata,
-        "is_active": True,
+        "is_active": is_active,
     }
     resp = db.table("documents").insert(payload).execute()
     return resp.data[0]["id"]

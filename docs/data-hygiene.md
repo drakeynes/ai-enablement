@@ -25,6 +25,17 @@ The rule, in order:
 
 The same approach applies to any future spreadsheet source: sales pipeline exports, NPS surveys, anything. Don't rebuild the filter in code.
 
+## Canonical source for clients
+
+**Active++ is the canonical definition of "who is a client at this agency."** The sheet owner's saved view encodes that answer; everything downstream derives from it.
+
+The `clients` table holds Active++ plus two other categories that are still clients by other definitions:
+
+1. **Auto-created clients awaiting human review** — tagged `needs_review`, with `metadata.auto_created_from_call_ingestion = true` and a breadcrumb back to the triggering call (`metadata.auto_created_from_call_external_id` and `..._title`). The Fathom ingest pipeline creates these when it sees a 30mins-with-Scott call whose non-team participant isn't yet in `clients`. They're provisional: a reviewer either confirms (clearing the `needs_review` tag) or merges (finds the duplicate, archives the auto-created row). See the "Auto-created client review workflow" entry in `docs/future-ideas.md`.
+2. **Soft-archived clients** — `archived_at is not null`. Churned clients removed from Active++, or manually archived for any reason. History preserved, not visible to agents.
+
+Any discrepancy between Active++ and "non-archived, non-needs_review rows in `clients`" is a bug. Either the sheet has drifted from reality (fix the sheet, re-run `seed_clients.py`) or something outside the sheet inserted a row (track it down, either merge or promote via the review workflow). The two sources must agree.
+
 ## Historical data without ownership is noise, not history
 
 If nobody on the team can vouch for a batch of historical data — its source, its accuracy at ingest time, or the judgment calls that shaped it — don't import it. Soft-archive it, drop it, or leave it out. Real history accumulates forward, under current ownership, with context. Pretending to preserve a pre-ownership batch leaves agents and dashboards reading confidently-wrong context. The cheap fix is starting fresh and writing the playbook for how future events get captured properly.

@@ -460,6 +460,211 @@ def test_auto_create_client_reuses_when_email_exists():
 
 
 # ---------------------------------------------------------------------------
+# documents.is_active gating via retrievability
+# ---------------------------------------------------------------------------
+
+
+def test_high_confidence_client_call_inserts_document_is_active_true():
+    """Regression guard for the safety gap:
+    transcript_chunk documents must land with `is_active = true` only
+    when the calls row is retrievable (client + high + primary)."""
+    db = _FakeDB()
+    db.respond("select", "calls", [])                   # first ingest
+    db.respond("select", "documents", [])               # no prior transcript doc
+    db.respond("select", "document_chunks", [])         # no chunks yet
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({})
+
+    outcome = pipeline.ingest_call(
+        _record(),  # high-confidence client
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.retrievable is True
+    doc_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "documents"]
+    assert len(doc_inserts) == 1
+    assert doc_inserts[0][2]["payload"]["is_active"] is True
+
+
+def test_medium_confidence_client_call_lands_with_is_active_false():
+    """Auto-create path: 30mins_with_Scott + unknown participant →
+    client medium confidence, auto-created client. Document lands
+    with `is_active = false` so chunks exist but don't surface until
+    a human reviewer promotes the call."""
+    db = _FakeDB()
+    db.respond("select", "clients", [])   # auto-create insert path
+    db.insert_returning("clients", ["c-new"])
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Random Prospect)",
+        participants=[
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Random Prospect", email="prospect@example.com"),
+        ],
+    )
+    resolver = ClientResolver({})
+    team_resolver = pipeline.TeamMemberResolver({"scott@theaipartner.io": "tm-s"})
+
+    outcome = pipeline.ingest_call(
+        record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.category == "client"
+    assert outcome.confidence == CONFIDENCE_MEDIUM
+    assert outcome.retrievable is False       # medium — doesn't pass floor
+    assert outcome.auto_created_client_id == "c-new"
+
+    doc_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "documents"]
+    assert len(doc_inserts) == 1
+    assert doc_inserts[0][2]["payload"]["is_active"] is False
+
+
+def test_reingest_promote_to_high_syncs_document_is_active_up():
+    """A human previously promoted `calls.is_retrievable_by_client_agents`
+    to true (retrievable_before=True), classifier still passes the floor,
+    and the prior document was is_active=false (maybe from first-ingest
+    medium-confidence) — re-ingest syncs is_active up to true."""
+    db = _FakeDB()
+    db.respond("select", "calls", [{
+        "id": "call-1",
+        "is_retrievable_by_client_agents": True,   # human promoted
+    }])
+    db.respond("select", "documents", [{
+        "id": "doc-1",
+        "is_active": False,   # previously medium / not yet promoted
+        "metadata": {"call_id": "call-1"},
+    }])
+    db.respond("select", "document_chunks", [{"id": f"ch-{i}"} for i in range(3)])
+
+    resolver = ClientResolver({"client@example.com": "c-1"})
+    team_resolver = pipeline.TeamMemberResolver({})
+
+    outcome = pipeline.ingest_call(
+        _record(),
+        db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.retrievable is True
+    # Look for the update that flips documents.is_active = true
+    doc_updates = [
+        op for op in db.ops if op[0] == "update" and op[1] == "documents"
+    ]
+    assert any(
+        op[2]["payload"].get("is_active") is True for op in doc_updates
+    ), "expected documents.is_active to sync up to True"
+
+
+# ---------------------------------------------------------------------------
+# Auto-create breadcrumb metadata
+# ---------------------------------------------------------------------------
+
+
+def test_auto_create_metadata_carries_triggering_call_reference():
+    """The reviewer workflow needs a breadcrumb back to the call that
+    triggered the auto-create. Auto-created clients must carry
+    `auto_created_from_call_external_id` and
+    `auto_created_from_call_title` alongside the existing
+    `auto_created_from_call_ingestion` flag and `auto_created_at`
+    timestamp."""
+    db = _FakeDB()
+    db.respond("select", "clients", [])   # no existing match by email
+    db.insert_returning("clients", ["c-new"])
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    record = _record(
+        external_id="fathom-rec-999",
+        title="30mins with Scott (The AI Partner) (Random Prospect)",
+        participants=[
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Random Prospect", email="prospect@example.com"),
+        ],
+    )
+    resolver = ClientResolver({})
+    team_resolver = pipeline.TeamMemberResolver({"scott@theaipartner.io": "tm-s"})
+
+    pipeline.ingest_call(
+        record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    client_inserts = [op for op in db.ops if op[0] == "insert" and op[1] == "clients"]
+    assert len(client_inserts) == 1
+    metadata = client_inserts[0][2]["payload"]["metadata"]
+    assert metadata["auto_created_from_call_ingestion"] is True
+    assert metadata["auto_created_from_call_external_id"] == "fathom-rec-999"
+    assert "30mins with Scott" in metadata["auto_created_from_call_title"]
+    assert "auto_created_at" in metadata
+
+
+def test_auto_create_reactivate_archived_row_also_carries_breadcrumb():
+    """If the email matches an archived row, reactivate rather than
+    insert — and still stamp the breadcrumb so the reviewer sees which
+    call brought the client back."""
+    db = _FakeDB()
+    db.respond("select", "clients", [{
+        "id": "c-archived",
+        "archived_at": "2026-04-01T00:00:00+00:00",
+    }])
+    db.respond("select", "calls", [])
+    db.respond("select", "documents", [])
+    db.respond("select", "document_chunks", [])
+    db.insert_returning("calls", ["call-1"])
+    db.insert_returning("documents", ["doc-1"])
+
+    record = _record(
+        external_id="fathom-rec-1000",
+        title="30mins with Scott (The AI Partner) (Returning Client)",
+        participants=[
+            Participant(display_name="Scott Wilson", email="scott@theaipartner.io"),
+            Participant(display_name="Returning Client", email="returning@example.com"),
+        ],
+    )
+    resolver = ClientResolver({})
+    team_resolver = pipeline.TeamMemberResolver({})
+
+    outcome = pipeline.ingest_call(
+        record, db,
+        client_resolver=resolver,
+        team_resolver=team_resolver,
+        embed_fn=_fake_embed,
+        dry_run=False,
+    )
+
+    assert outcome.auto_created_client_id == "c-archived"
+    client_updates = [op for op in db.ops if op[0] == "update" and op[1] == "clients"]
+    assert len(client_updates) >= 1
+    metadata = client_updates[0][2]["payload"]["metadata"]
+    assert metadata["auto_created_from_call_external_id"] == "fathom-rec-1000"
+
+
+# ---------------------------------------------------------------------------
 # Validator failures — document vs chunk
 # ---------------------------------------------------------------------------
 

@@ -89,6 +89,13 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella V1 beta shows retrieval misses that a topic-aligned chunk would have caught — e.g. a query lands on a half-chunk mid-topic because the word boundary cut through a discussion.
 - **Logged:** 2026-04-21.
 
+## match_document_chunks: enforce calls retrievability via SQL join
+
+- **What:** migration `0011` extending `match_document_chunks` to join `calls` on `documents.metadata->>'call_id'` and filter on `calls.is_retrievable_by_client_agents` for client-scoped document types. Moves the invariant from the pipeline (where it lives today — `documents.is_active` is set from the computed retrievability at write time) down to the function layer.
+- **Why deferred:** today's pipeline fix (option a) already enforces the invariant at write time, which is sufficient for the V1 backlog ingest. The function-side version is more principled (invariants at the lowest layer, same pattern as migration 0010) but adds a join on every retrieval call and requires careful handling of `metadata->>'call_id'` type coercion. Worth doing when we want defense-in-depth or when the write-side enforcement gets a real counter-example.
+- **Revisit trigger:** someone manually flips `calls.is_retrievable_by_client_agents` and forgets to sync `documents.is_active` (production bug), OR a planned durability pass after Ella V1 beta validates the retrieval latency budget for the extra join.
+- **Logged:** 2026-04-22.
+
 ## Atomic per-call ingest via Postgres RPC
 
 - **What:** replace the non-atomic supabase-py writes in `ingestion/fathom/pipeline.py` with a PL/pgSQL `ingest_fathom_call(...)` function taking call fields + participants + chunks (with embeddings) as JSON and doing every insert/update in one `BEGIN/COMMIT`. Python computes embeddings, hands one RPC call the full payload, gets back row counts.
