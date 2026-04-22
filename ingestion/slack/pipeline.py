@@ -361,25 +361,34 @@ def _collect_messages(
 def _upsert_messages(
     db, channel_id: str, records: list[SlackMessageRecord]
 ) -> tuple[int, int]:
-    """Upsert records; return (inserts, updates) based on pre-fetched ts set."""
+    """Upsert records; return (inserts, updates) based on pre-fetched ts set.
+
+    The existing-ts fetch intentionally scopes by channel only (not by
+    the ts list) — stuffing hundreds of ts values into an `in_()`
+    filter produces URL-too-long 414s on busier channels. Fetching all
+    existing ts for the channel is ~1000 rows max at V1 scale.
+    """
     if not records:
         return 0, 0
 
-    # Pre-fetch existing ts values for this channel in the same window.
-    proposed_ts = {r.slack_ts for r in records}
     existing_resp = (
         db.table("slack_messages")
         .select("slack_ts")
         .eq("slack_channel_id", channel_id)
-        .in_("slack_ts", sorted(proposed_ts))
         .execute()
     )
     existing_ts = {row["slack_ts"] for row in (existing_resp.data or [])}
 
+    # Upsert in batches. PostgREST has a request-size ceiling — large
+    # payloads can hit the same URI-too-long / 413 Payload-Too-Large
+    # issues. 250 rows/batch is comfortably under the default limit.
     payloads = [_record_to_payload(r) for r in records]
-    db.table("slack_messages").upsert(
-        payloads, on_conflict="slack_channel_id,slack_ts"
-    ).execute()
+    batch_size = 250
+    for start in range(0, len(payloads), batch_size):
+        batch = payloads[start : start + batch_size]
+        db.table("slack_messages").upsert(
+            batch, on_conflict="slack_channel_id,slack_ts"
+        ).execute()
 
     inserts = sum(1 for r in records if r.slack_ts not in existing_ts)
     updates = len(records) - inserts
