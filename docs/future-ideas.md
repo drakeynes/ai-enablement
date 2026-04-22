@@ -144,3 +144,28 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Why deferred:** zero auto-created clients yet; the workflow only matters once they exist.
 - **Revisit trigger:** first auto-create from the Fathom backlog ingest, OR a count of `needs_review` clients that exceeds 5.
 - **Logged:** 2026-04-22.
+
+## Filler filter — collapse adjacent short utterances by the same speaker
+
+- **What:** extend `ingestion/fathom/chunker.py`'s filler filter to also collapse adjacent short utterances from the same speaker within a 1–2 second window. Current filter catches isolated short fillers but lets orphan fragments through when they're their own utterance. Observed in the backlog: `Owen Nordberg [00:02:06]: And.` immediately before the substantive `"He wants just a way..."`; `Rifat Chowdhury [00:01:59]: But I. / I. / I started it...` — three utterances in the same second that should merge into the next one.
+- **Why deferred:** retrieval quality is unaffected — embeddings capture semantic meaning, not orphan conjunctions. The fix is a small chunker change but benefits from real-data tuning (threshold: same-speaker + <N-second gap + short text) which is easier once CSM QA starts surfacing read-quality complaints.
+- **Revisit trigger:** first time a CSM in QA says "Ella retrieved the right chunk but the content reads janky," OR a systematic read of ~20 chunks spots the pattern >20% of the time.
+- **Logged:** 2026-04-22.
+
+## Chunker overlap calibration
+
+- **What:** tighten the ~50-word overlap spec in `ingestion/fathom/chunker.py` §3. Observed overlap on sampled backlog calls is 70–90 words because the speaker-boundary alignment rolls back to include the full preceding utterance, even when that utterance is long. Not breaking, just more retrieval redundancy than intended.
+- **Why deferred:** redundancy helps retrieval hit-rate at chunk boundaries and costs nothing on storage at current scale (3528 chunks total). The spec is an aspirational target, not a hard constraint. Fixing means adding a word-count cap on the overlap reach — easy change, low value right now.
+- **Revisit trigger:** Ella's retrieval feels like it's surfacing "the same content twice" across adjacent chunks in sampled results, OR storage cost becomes a real line item (not at V1 scale, maybe at 100K+ chunks).
+- **Logged:** 2026-04-22.
+
+## LLM post-processing for Fathom speaker misattribution
+
+- **What:** a Claude pass per transcript to fix obvious speaker misattributions from Fathom's diarization. Observed in the backlog: quotes attributed to the wrong speaker based on conversational flow (e.g., `"you have a tendency to over-engineer"` attributed to the person being described rather than the person doing the describing). This is a Fathom quality ceiling, not a pipeline bug — the TXT export faithfully records what Fathom produced.
+- **Three paths** (not mutually exclusive):
+  - **(a) Hedge in Ella's system prompt** — ships for free when Ella's prompt is written. Captured below.
+  - **(b) LLM post-processing pass over stored transcripts** — ~$5–10 one-time for the 389-call backlog, rewrite `calls.transcript` + chunk content with corrections; requires an eval because "fix based on conversational flow" is LLM judgment that can itself misattribute.
+  - **(c) Improve Fathom upstream** — voice profiles, speaker labels in calendar invites, post-meeting tagging by the host. Reduces future drift; doesn't fix the backlog.
+- **Why deferred:** path (a) is cheap and sufficient until we have evidence of real client-facing impact. Paths (b) and (c) add real cost and don't solve the backlog-vs-future-calls problem cleanly on their own.
+- **Revisit trigger:** first client complaint of "Ella said I said X but I didn't," OR multiple CSM QA flags on misattributed quotes in retrieved chunks.
+- **Logged:** 2026-04-22.
