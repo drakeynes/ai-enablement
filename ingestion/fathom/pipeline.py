@@ -136,27 +136,44 @@ def load_resolvers(db) -> tuple[ClientResolver, TeamMemberResolver, dict[str, st
 
     Returns `(client_resolver, team_member_resolver, client_id_to_name)`.
     The name map is used for dry-run display (matched client names).
+
+    ClientResolver's email map includes `metadata.alternate_emails`
+    and the name map includes `metadata.alternate_names` so merged-
+    duplicate clients remain matchable by their pre-merge identifiers.
     """
     client_resp = (
         db.table("clients")
-        .select("id,email,full_name")
+        .select("id,email,full_name,metadata")
         .is_("archived_at", "null")
         .execute()
     )
     team_resp = db.table("team_members").select("id,email").is_("archived_at", "null").execute()
 
     client_id_by_email: dict[str, str] = {}
+    client_id_by_name: dict[str, str] = {}
     client_id_to_name: dict[str, str] = {}
     for row in client_resp.data or []:
-        client_id_by_email[row["email"]] = row["id"]
-        client_id_to_name[row["id"]] = row["full_name"]
+        cid = row["id"]
+        if row.get("email"):
+            client_id_by_email[row["email"]] = cid
+        if row.get("full_name"):
+            client_id_by_name[row["full_name"]] = cid
+            client_id_to_name[cid] = row["full_name"]
+
+        metadata = row.get("metadata") or {}
+        for alt_email in (metadata.get("alternate_emails") or []):
+            if isinstance(alt_email, str) and alt_email:
+                client_id_by_email[alt_email] = cid
+        for alt_name in (metadata.get("alternate_names") or []):
+            if isinstance(alt_name, str) and alt_name:
+                client_id_by_name[alt_name] = cid
 
     team_id_by_email: dict[str, str] = {}
     for row in team_resp.data or []:
         team_id_by_email[row["email"]] = row["id"]
 
     return (
-        ClientResolver(client_id_by_email),
+        ClientResolver(client_id_by_email, client_id_by_name),
         TeamMemberResolver(team_id_by_email),
         client_id_to_name,
     )

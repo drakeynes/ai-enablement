@@ -328,3 +328,123 @@ def test_resolver_returns_none_for_missing():
     resolver = c.ClientResolver({})
     assert resolver.lookup("missing@example.com") is None
     assert resolver.lookup("") is None
+
+
+# ---------------------------------------------------------------------------
+# Alternate email + alternate name matching
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_lookup_by_name_matches_primary_and_alt_names():
+    resolver = c.ClientResolver(
+        client_id_by_email={"real@example.com": "c-real"},
+        client_id_by_name={
+            "Dhamen Hothi": "c-real",
+            "DHAMEN HOTHI": "c-real",   # alternate_names entry
+        },
+    )
+    assert resolver.lookup_by_name("Dhamen Hothi") == "c-real"
+    # Case-insensitive, whitespace-stripped
+    assert resolver.lookup_by_name("  dhamen hothi  ") == "c-real"
+    assert resolver.lookup_by_name("DHAMEN HOTHI") == "c-real"
+    assert resolver.lookup_by_name("Unknown Person") is None
+
+
+def test_30mins_scott_matches_client_via_alternate_email():
+    """Dhamen case: real row has metadata.alternate_emails =
+    [dhamen@flowstatetech.co]. A new 30mins call with that alt email
+    must resolve to the real client via email, not auto-create."""
+    record = _record(
+        title="30mins with Scott (The AI Partner) (DHAMEN HOTHI)",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("dhamen@flowstatetech.co", "DHAMEN HOTHI"),
+        ],
+    )
+    resolver = c.ClientResolver(
+        client_id_by_email={
+            "dhamenhothi@gmail.com": "c-dhamen",
+            "dhamen@flowstatetech.co": "c-dhamen",  # from alternate_emails
+        },
+        client_id_by_name={"Dhamen Hothi": "c-dhamen", "DHAMEN HOTHI": "c-dhamen"},
+    )
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+    assert result.primary_client_id == "c-dhamen"
+    assert result.should_auto_create_client is None
+    assert "email" in result.reasoning
+
+
+def test_30mins_scott_falls_back_to_name_when_email_unknown():
+    """If a participant's email isn't in the resolver but their
+    display name matches an alternate_name on a real client, resolve
+    via name and skip auto-create."""
+    record = _record(
+        title="30mins with Scott (The AI Partner) (King Musa)",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("brand_new_email@elsewhere.com", "King Musa"),
+        ],
+    )
+    resolver = c.ClientResolver(
+        client_id_by_email={"legendarywork1@gmail.com": "c-musa"},
+        client_id_by_name={"Musa Elmaghrabi": "c-musa", "King Musa": "c-musa"},
+    )
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+    assert result.primary_client_id == "c-musa"
+    assert result.should_auto_create_client is None
+    assert "alternate_name" in result.reasoning
+
+
+def test_participant_match_alt_email_promotes_external_to_client():
+    """A non-30mins call with a participant whose alt-email matches a
+    known client: step 2 participant_match should hit and classify
+    as client, not external."""
+    record = _record(
+        title="Allison / Scott",  # ordinary client call title
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("javier@buildficial.com", "Javier Pena"),  # alt email of real Javi
+        ],
+    )
+    resolver = c.ClientResolver(
+        client_id_by_email={
+            "javpen93@gmail.com": "c-javi",
+            "javier@buildficial.com": "c-javi",  # alt
+        },
+        client_id_by_name={"Javi Pena": "c-javi", "Javier Pena": "c-javi"},
+    )
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_HIGH
+    assert result.primary_client_id == "c-javi"
+    assert result.classification_method == "participant_match"
+
+
+def test_unknown_name_and_email_still_auto_creates():
+    """Regression guard: if neither email nor alt-name matches, the
+    30mins path must still request auto-create. The new lookup
+    behavior must not swallow unmatched participants."""
+    record = _record(
+        title="30mins with Scott (The AI Partner) (Brand New Prospect)",
+        participants=[
+            _pt("scott@theaipartner.io"),
+            _pt("prospect@example.com", "Brand New Prospect"),
+        ],
+    )
+    resolver = c.ClientResolver(
+        client_id_by_email={"other@example.com": "c-other"},
+        client_id_by_name={"Some Other Client": "c-other"},
+    )
+    result = c.classify(record, resolver)
+
+    assert result.call_category == "client"
+    assert result.classification_confidence == c.CONFIDENCE_MEDIUM
+    assert result.should_auto_create_client is not None
+    assert result.should_auto_create_client.email == "prospect@example.com"

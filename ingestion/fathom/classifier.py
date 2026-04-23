@@ -102,21 +102,42 @@ class ClassificationResult:
 
 
 class ClientResolver:
-    """Resolve participant emails to `clients.id`.
+    """Resolve participant emails / display-names to `clients.id`.
 
     Constructed once per batch from a single SELECT in the pipeline.
-    All lookups are lower-cased.
+    All lookups are lower-cased. Email map includes primary email plus
+    every entry in `metadata.alternate_emails`; name map includes
+    primary `full_name` plus `metadata.alternate_names`.
+
+    The name map is the fallback — classifier tries email first and
+    only falls back to name when email doesn't resolve. Prevents a
+    client with a common first name from accidentally matching an
+    unrelated participant.
     """
 
-    def __init__(self, client_id_by_email: dict[str, str]):
+    def __init__(
+        self,
+        client_id_by_email: dict[str, str],
+        client_id_by_name: dict[str, str] | None = None,
+    ):
         self._map: dict[str, str] = {
             email.lower(): cid for email, cid in client_id_by_email.items()
+        }
+        self._name_map: dict[str, str] = {
+            name.lower().strip(): cid
+            for name, cid in (client_id_by_name or {}).items()
+            if name
         }
 
     def lookup(self, email: str) -> str | None:
         if not email:
             return None
         return self._map.get(email.lower())
+
+    def lookup_by_name(self, display_name: str) -> str | None:
+        if not display_name:
+            return None
+        return self._name_map.get(display_name.lower().strip())
 
     def __contains__(self, email: str) -> bool:
         return email.lower() in self._map
@@ -219,6 +240,25 @@ def _matches_scott_1on1(title_norm: str) -> bool:
     return title_norm.startswith(SCOTT_1ON1_PATTERN)
 
 
+def _resolve_participant(
+    resolver: ClientResolver, participants: Iterable[Participant], email: str
+) -> tuple[str | None, str]:
+    """Try email first (includes alternate_emails); fall back to the
+    participant's display name (includes alternate_names).
+
+    Returns `(client_id, matched_via)` where matched_via is one of
+    `email`, `alternate_name`, or empty when no match.
+    """
+    cid = resolver.lookup(email)
+    if cid is not None:
+        return cid, "email"
+    display = _find_display_name(participants, email)
+    cid = resolver.lookup_by_name(display)
+    if cid is not None:
+        return cid, "alternate_name"
+    return None, ""
+
+
 def _classify_scott_1on1(
     record: FathomCallRecord,
     resolver: ClientResolver,
@@ -227,17 +267,14 @@ def _classify_scott_1on1(
     """Step 4 — Scott's 30mins 1:1 pattern.
 
     Exactly one non-team participant → client call. If that email
-    matches a known client, confidence is high and primary_client_id
-    is set. If not, confidence is medium and the pipeline is asked
-    to auto-create (lookup-first-insert-second per conventions §5).
+    matches a known client (or its display name matches the client's
+    full_name / alternate_names), confidence is high and primary_
+    client_id is set. If neither matches, confidence is medium and
+    the pipeline is asked to auto-create.
     """
     if len(external_emails) != 1:
-        # Pattern match but unexpected participant shape — treat as
-        # client medium and fall back to manual review via the
-        # "unclassified" category? Keep the observed common case
-        # simple: if it's Scott-1:1 with 0 or 2+ externals, the title
-        # is still a strong signal; mark client with medium confidence,
-        # no primary_client_id, no auto-create.
+        # Pattern match but unexpected participant shape — mark client
+        # with medium confidence, no primary_client_id, no auto-create.
         return ClassificationResult(
             call_category="client",
             call_type="coaching",
@@ -251,7 +288,9 @@ def _classify_scott_1on1(
         )
 
     participant_email = external_emails[0]
-    client_id = resolver.lookup(participant_email)
+    client_id, matched_via = _resolve_participant(
+        resolver, record.participants, participant_email
+    )
     if client_id is not None:
         return ClassificationResult(
             call_category="client",
@@ -259,7 +298,9 @@ def _classify_scott_1on1(
             classification_confidence=CONFIDENCE_HIGH,
             classification_method="title_pattern",
             primary_client_id=client_id,
-            reasoning=f"30mins_with_Scott + {participant_email} matched existing client",
+            reasoning=(
+                f"30mins_with_Scott + {participant_email} matched existing client via {matched_via}"
+            ),
         )
 
     # Unmatched participant — pipeline reifies a minimal clients row.
@@ -299,14 +340,17 @@ def _classify_by_participants(
             reasoning=f"{len(team_emails)} team + 0 external",
         )
 
-    # Any external matches a client → client, high
+    # Any external matches a client (by email, then alternate_name)
+    # → client, high
     matched_client_id: str | None = None
     matched_email: str | None = None
+    matched_via: str = ""
     for email in external_emails:
-        cid = resolver.lookup(email)
+        cid, via = _resolve_participant(resolver, record.participants, email)
         if cid is not None:
             matched_client_id = cid
             matched_email = email
+            matched_via = via
             break
 
     if matched_client_id is not None:
@@ -316,7 +360,7 @@ def _classify_by_participants(
             classification_confidence=CONFIDENCE_HIGH,
             classification_method="participant_match",
             primary_client_id=matched_client_id,
-            reasoning=f"{matched_email} matched existing client",
+            reasoning=f"{matched_email} matched existing client via {matched_via}",
         )
 
     # External but no match → external, medium
