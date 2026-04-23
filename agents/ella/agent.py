@@ -9,23 +9,28 @@ layer calls when Ella is @mentioned. The flow:
   4. Build the system prompt via `agents.ella.prompts`.
   5. Call Claude via `_call_claude` (real call into
      `shared.claude_client.complete` — token costs land on the run).
-  6. Detect escalation in the response text. If Ella signaled an
-     escalation, `escalate()` is called. Ella's own ack text is
-     preserved verbatim on the returned `EllaResponse` — the system
-     prompt trains her to write a short, warm escalation message
+  6. Detect the [ESCALATE] marker at the start of the response. If
+     Ella signaled an escalation, the marker is stripped and
+     `escalate()` is called. Ella's own warm ack (now marker-free)
+     is preserved verbatim on the returned `EllaResponse` — the
+     system prompt trains her to write a short, warm message
      (default cheerful / humble sparingly / emotional patterns).
      A canned ack would flatten the emotional-escalation
      distinction, which is the tone we care most about getting
      right.
   7. End the agent_run with terminal status and return `EllaResponse`.
 
-Escalation is pattern-based, not numeric. The system prompt instructs
-Ella to use one of a small set of phrases ("loop in your advisor",
-"check with your advisor", "get your advisor looped in") whenever she
-chooses to escalate. We grep her output for those phrases instead of
-relying on a confidence score the model would have to fabricate. The
-`confidence` field on `EllaResponse` is kept for telemetry continuity —
-1.0 for direct answers, 0.0 for escalations — but is no longer the
+Escalation is marker-based, not numeric. The system prompt instructs
+Ella to prefix every escalation response with the literal token
+[ESCALATE] on its own line; the detector checks for that token at the
+start of the response (after lstripping) and strips it before the
+text is returned to the handler or written to `escalations.context` —
+the client never sees the control token. This replaced a substring-
+matching approach that missed acks where Ella personalized by naming
+the advisor ("get Lou looped in") instead of using the literal phrase
+"your advisor," which is the behavior the system prompt rewards. The
+`confidence` field on `EllaResponse` is kept for telemetry continuity
+— 1.0 for direct answers, 0.0 for escalations — but is no longer the
 gate.
 """
 
@@ -41,14 +46,13 @@ from shared.claude_client import complete
 from shared.db import get_client
 from shared.logging import end_agent_run, logger, start_agent_run
 
-# Phrases Ella is instructed (in the system prompt) to use whenever she
-# wants to escalate. Match is case-insensitive substring. Keep this
-# list in sync with the escalation guidance block in prompts.py.
-_ESCALATION_PHRASES: tuple[str, ...] = (
-    "loop in your advisor",
-    "check with your advisor",
-    "get your advisor looped in",
-)
+# Literal token Ella is instructed (in the system prompt) to prefix
+# every escalation response with. Detection is start-of-response,
+# case-sensitive, exact bracket form — see prompts.py § WHAT YOU
+# ESCALATE. The marker is stripped before the response text is stored
+# on the agent_runs row, written to escalations.context, or returned
+# to the handler.
+_ESCALATION_MARKER = "[ESCALATE]"
 
 
 @dataclass(frozen=True)
@@ -111,18 +115,22 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
         system_prompt, query_text, context, run_id=run_id
     )
 
-    if _looks_like_escalation(response_text):
-        # `proposed_action` is intentionally omitted. Its contract is
-        # "what the agent wanted to do, for a reviewer to approve /
-        # reject / edit" — but in V1 there's no approval UI and Ella's
-        # response has already been posted to the client in-thread by
-        # the time this row lands. Ella's text is on the row via
+    if _is_escalation(response_text):
+        # Strip the control token before anything downstream sees it —
+        # the client doesn't need to see it, and neither does the CSM
+        # reviewing the escalations row. `proposed_action` is
+        # intentionally omitted; its contract is "what the agent
+        # wanted to do, for a reviewer to approve / reject / edit" —
+        # in V1 there's no approval UI and Ella's response has
+        # already been posted to the client by the time this row
+        # lands. The cleaned ack is on the row via
         # `context.ella_response` for reference.
+        client_text = _strip_escalation_marker(response_text)
         escalation_id = escalate(
             reason="ella_escalated",
             context={
                 "query_text": query_text,
-                "ella_response": response_text,
+                "ella_response": client_text,
                 "client_id": client["id"],
                 "event": _redact_event(event_data),
             },
@@ -136,7 +144,7 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
             confidence_score=confidence,
         )
         return EllaResponse(
-            response_text=response_text,
+            response_text=client_text,
             confidence=confidence,
             escalated=True,
             escalation_reason="ella_escalated",
@@ -179,11 +187,11 @@ def _call_claude(
 ) -> tuple[str, float]:
     """Call Claude with Ella's system prompt and the user's question.
 
-    Returns `(response_text, confidence)`. Confidence here is a
-    coarse signal for telemetry, not a gate — escalation is decided
-    by `_looks_like_escalation` on the response text. We return 1.0
-    for direct answers (the caller flips it to 0.0 if it later
-    detects an escalation phrase).
+    Returns `(response_text, confidence)`. The response text is
+    returned raw — including the [ESCALATE] marker if Ella emitted
+    one — so `_run` can route on the marker and strip it before the
+    text flows further. Confidence is a coarse telemetry signal, not
+    the gate: 1.0 for direct answers, 0.0 when the marker is present.
 
     `run_id` is passed through so token counts and cost land on the
     correct `agent_runs` row.
@@ -194,19 +202,33 @@ def _call_claude(
         run_id=run_id,
     )
     text = result.text.strip()
-    confidence = 0.0 if _looks_like_escalation(text) else 1.0
+    confidence = 0.0 if _is_escalation(text) else 1.0
     return text, confidence
 
 
-def _looks_like_escalation(response_text: str) -> bool:
-    """Detect whether Ella's response is an escalation ack.
+def _is_escalation(response_text: str) -> bool:
+    """Detect the [ESCALATE] marker at the start of the response.
 
-    Substring match (case-insensitive) against the small set of
-    phrases the system prompt instructs her to use. Intentionally
-    strict — we'd rather miss an ambiguous escalation and let the
-    client respond again than treat a confident answer as one."""
-    lowered = response_text.lower()
-    return any(phrase in lowered for phrase in _ESCALATION_PHRASES)
+    Case-sensitive, exact bracket form. Leading whitespace /
+    newlines are stripped before the check so Claude's occasional
+    leading newline doesn't cause a miss. Mid-string mentions of
+    [ESCALATE] (e.g., Ella explaining what escalation means, or
+    echoing a user who typed it) are deliberately not matched — only
+    a prefix signals a handoff.
+    """
+    return response_text.lstrip().startswith(_ESCALATION_MARKER)
+
+
+def _strip_escalation_marker(response_text: str) -> str:
+    """Remove the [ESCALATE] marker and the whitespace between it and
+    the ack body. Idempotent: returns the text unchanged if no marker
+    is present at the start.
+    """
+    leading_stripped = response_text.lstrip()
+    if not leading_stripped.startswith(_ESCALATION_MARKER):
+        return response_text
+    remainder = leading_stripped[len(_ESCALATION_MARKER):]
+    return remainder.lstrip()
 
 
 # ---------------------------------------------------------------------------
