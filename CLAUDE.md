@@ -82,7 +82,7 @@ ai-enablement/
 │   ├── seed_clients.py         # Load Active++ view into clients + client_team_assignments
 │   ├── backfill_team_slack_ids.py
 │   └── merge_client_duplicates.py   # One-shot merge of auto-created client rows into canonical
-├── tests/                      # pytest suite — 261 tests today, all green
+├── tests/                      # pytest suite — 270 tests today, all green
 └── data/                       # GITIGNORED. Source files for ingestion live here:
                                 #   data/client_seed/       (Active++ CSV export)
                                 #   data/fathom_backlog/    (Fathom .txt transcript exports)
@@ -199,7 +199,7 @@ As of 2026-04-23:
 - **Local Supabase:** populated, all 10 migrations applied (`0001_core_entities` through `0010_kb_search_exclude_transcript_chunks`), all ingestion pipelines have run.
 - **Cloud Supabase:** NOT yet populated — project not linked to the repo yet. Push (migrations + seeds + ingestion re-run against cloud) planned for end of this week.
 - **Slack app:** configured, installed in `#ella-test` + 7 pilot client channels. Event Subscriptions currently **disabled** — will be re-enabled once the Vercel webhook is up.
-- **Ella:** agent code exists in `agents/ella/` with 25 passing wiring tests. No live deployment yet — Slack webhook will live in a Vercel serverless function pointing at `agents.ella.slack_handler.handle_slack_event`.
+- **Ella:** agent code exists in `agents/ella/` with 34 passing wiring tests. Escalation detection migrated from phrase-matching to a structured `[ESCALATE]` marker on 2026-04-23 after a local harness run caught a false negative on a personalized emotional ack — see `docs/agents/ella.md` § System Prompt Direction point 10. No live deployment yet — Slack webhook will live in a Vercel serverless function pointing at `agents.ella.slack_handler.handle_slack_event`. `agent_runs.duration_ms` is currently `NULL` on every row (the agent doesn't time the turn); tracked as a deferred instrumentation fix in `docs/future-ideas.md`.
 - **Table fill (local):**
   - `team_members` — 9 (7 with Slack IDs)
   - `clients` — 146 active + 68 archived (100 from Active++ view + 46 auto-created; 4 merged into pilots)
@@ -216,11 +216,10 @@ As of 2026-04-23:
 
 Pick these up in order:
 
-1. **Manual agent testing.** Invoke `agents.ella.agent.respond_to_mention()` against the local DB with synthetic Slack event payloads. Verify behavior across a mix of in-scope content questions, out-of-scope escalations, emotional escalations, decline-without-escalating cases, and prompt injection attempts. Read back the resulting `agent_runs` / `escalations` rows to confirm instrumentation is landing correctly.
-2. **Live Slack wiring.** Deploy a Vercel serverless function that invokes `agents.ella.slack_handler.handle_slack_event`. Get a stable webhook URL. Re-enable Event Subscriptions in the Slack app console and point the URL at it. Wire the `text` returned from the handler back to Slack via `chat.postMessage` with `thread_ts`.
-3. **`#ella-test` testing** with Drake, Scott, and Nabeel — Thursday and Friday. Follow the test plan in `docs/agents/ella-v1-scope.md`.
-4. **Cloud Supabase push.** Link the remote project, run migrations + seeds, re-run ingestion pipelines against cloud.
-5. **Monday:** live in the 7 pilot client channels.
+1. **Live Slack wiring.** Deploy a Vercel serverless function that invokes `agents.ella.slack_handler.handle_slack_event`. Get a stable webhook URL. Re-enable Event Subscriptions in the Slack app console and point the URL at it. Wire the `text` returned from the handler back to Slack via `chat.postMessage` with `thread_ts`.
+2. **`#ella-test` testing** with Drake, Scott, and Nabeel — Thursday and Friday. Follow the test plan in `docs/agents/ella-v1-scope.md`.
+3. **Cloud Supabase push.** Link the remote project, run migrations + seeds, re-run ingestion pipelines against cloud.
+4. **Monday:** live in the 7 pilot client channels.
 
 ## Working With Claude Code — Prompting Tips
 

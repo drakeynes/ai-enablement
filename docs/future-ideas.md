@@ -222,12 +222,19 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella V1 is deployable and ready for first pilot-client channel.
 - **Logged:** 2026-04-22.
 
+## Test-fixture client for team-only Ella test channels
+
+- **What:** dedicated synthetic "Test Client" row in `clients` with Drake (or Scott) as primary advisor, plus team-only test channels (`#ella-test-drakeonly`, etc.) mapped to that client's UUID via `slack_channels.client_id`. Alternative shape: a `slack_channels.team_test_channel` boolean that teaches the handler to run without a client mapping at all — pick one, not both. Replaces the current workaround of pointing a team test channel at a real pilot client's UUID (harmless for an evening, muddies the model of what a pilot channel is).
+- **Why deferred:** the workaround is a single `UPDATE slack_channels SET client_id = '<pilot-uuid>' WHERE slack_channel_id = '...'` against Studio and takes 30 seconds — done. The formalized fixture is worth building once the pilot itself has validated the live flow; before then, touching the channel/client shape adds surface area no one asked for.
+- **Revisit trigger:** first time the team wants to run a multi-person test that isn't tied to a real pilot client's context, OR post-Monday when the pilot has proven out the live loop.
+- **Logged:** 2026-04-23.
+
 ## Slack real-time ingestion via Events API
 
-- **What:** HTTP endpoint receiving Slack Events API subscriptions (`message` events). Parses the event, runs it through `ingestion.slack.parser`, upserts to `slack_messages`. Reuses parser + author-resolution logic verbatim; adds the endpoint, signing-secret verification, and event deduplication via `event_id`. Complements the REST-based backfill (which stays the right tool for historical imports).
-- **Why deferred:** today's backfill covers the 90-day window for 8 pilot channels. Real-time only becomes necessary once Ella is responding in client channels and needs to see mentions as they happen.
-- **Revisit trigger:** Ella V1 beta deployment begins, OR a second backfill run is needed inside a 24-hour window (suggests polling is doing work a subscription should handle).
-- **Logged:** 2026-04-22.
+- **What:** Vercel serverless function receiving Slack Events API `message` subscriptions. Parses via `ingestion/slack/parser.py`, upserts to `slack_messages`. Reuses the parser verbatim; adds signing-secret verification and `event_id` deduplication. Complements the REST-based backfill, which stays the right tool for historical imports.
+- **Why deferred:** the 90-day backfill covers tonight's team testing and the early pilot. Real-time ingestion only moves the needle once Slack history is embedded into retrieval (see "Slack messages as a retrieval surface" below) — stale-but-embedded Slack history is less useful than live-but-embedded, so the two entries are best revisited together.
+- **Revisit trigger:** the retrieval-surface entry ships, OR Ella starts getting asked about same-day Slack conversations she can't see, OR a second manual backfill run becomes necessary inside a week.
+- **Logged:** 2026-04-23.
 
 ## Backfill team_members.slack_user_id from ingested messages
 
@@ -238,10 +245,10 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ## Slack messages as a retrieval surface (V1.1)
 
-- **What:** chunk + embed `slack_messages` text into `document_chunks` under a new `document_type = 'slack_message_chunk'` (or similar), metadata-gated per client like transcript chunks. Lets Ella retrieve prior conversation history ("has this client asked this before") alongside call summaries.
-- **Why deferred:** V1 ingest gets messages into `slack_messages`; that table is queryable without embeddings for the CSM Co-Pilot signals (accountability submissions, NPS, activity cadence). Embedding the long tail of Slack chatter adds noise to retrieval that isn't worth paying for until Ella V1 beta reveals concrete need.
-- **Revisit trigger:** Ella V1 beta user asks a question that past-Slack-conversation context would have answered, OR CSM QA feedback specifically asks for conversational memory.
-- **Logged:** 2026-04-22.
+- **What:** chunk + embed `slack_messages` text into `document_chunks` under a new `document_type = 'slack_message_chunk'`, metadata-gated per client the same way transcript chunks are. Maximally useful alongside real-time ingestion (see "Slack real-time ingestion via Events API" above), but the backfilled 90-day window alone would already let Ella reference prior in-channel conversations.
+- **Why deferred:** V1 ships with course content plus Fathom call summaries as Ella's retrieval surface. Slack history embedding is additive — more ingest tokens, more noise in the retrieval pool — worth doing once live testing shows a concrete gap Ella can't cover from the two existing surfaces.
+- **Revisit trigger:** a team-test or client question surfaces that Slack history would have answered AND course content + Fathom calls didn't, OR strong signal on that immediately after Monday's launch.
+- **Logged:** 2026-04-23.
 
 ## LLM post-processing for Fathom speaker misattribution
 
