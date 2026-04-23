@@ -253,3 +253,10 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Why deferred:** path (a) is cheap and sufficient until we have evidence of real client-facing impact. Paths (b) and (c) add real cost and don't solve the backlog-vs-future-calls problem cleanly on their own.
 - **Revisit trigger:** first client complaint of "Ella said I said X but I didn't," OR multiple CSM QA flags on misattributed quotes in retrieved chunks.
 - **Logged:** 2026-04-22.
+
+## `duration_ms` instrumentation on agent_runs
+
+- **What:** pass `duration_ms` through to `shared.logging.end_agent_run` from every agent. The column exists on `agent_runs`, the helper accepts the kwarg, but no agent currently times the turn — every row written by Ella today has `duration_ms = NULL`. Minimal fix: capture `time.monotonic()` at the top of `respond_to_mention` and pass the delta to `end_agent_run` on every terminal path (success / escalated / error / skipped).
+- **Why deferred:** surfaced during the 2026-04-23 local harness run; decided not to block Ella V1 beta on it. Token counts and cost already land on the row via `shared.claude_client.complete()`, which covers the "is she expensive?" question; latency observability is a nice-to-have for perf tuning, not a safety property. Also: the same gap likely exists in whatever agent ships next, so fixing it once globally (e.g., a context manager in `shared/logging.py` that wraps `start_agent_run` / `end_agent_run`) is worth more than a per-agent patch.
+- **Revisit trigger:** (1) first time we need to diagnose a perceived-slow Ella response from a real client thread, OR (2) when the eval harness lands and we want per-run latency as a metric, OR (3) CSM Co-Pilot gets built and would benefit from the same instrumentation — whichever lands first.
+- **Logged:** 2026-04-23.
