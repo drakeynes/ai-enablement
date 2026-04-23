@@ -1,0 +1,8 @@
+# Runtime deps for the Vercel Python function(s) under api/.
+# Mirrors [project.dependencies] in pyproject.toml; kept in sync by
+# hand for now. Vercel's Python runtime installs from this file at
+# build time.
+anthropic>=0.68,<1.0
+supabase>=2.9,<3.0
+openai>=1.58,<2.0
+python-dotenv>=1.0,<2.0
