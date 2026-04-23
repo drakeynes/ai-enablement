@@ -1,23 +1,27 @@
 """Ella (Slack Bot V1) — entry point.
 
 `respond_to_mention(event_data)` is the function the Slack interface
-layer will call when Ella is @mentioned. Today it's a skeleton: wires
-up `agent_runs` logging around retrieval + Claude + escalation so the
-pieces are in place for prompt work and live testing to slot in.
-
-Shape:
+layer calls when Ella is @mentioned. The flow:
 
   1. Start an `agent_runs` row via `shared.logging.start_agent_run`.
   2. Resolve the client from the Slack user id in the event.
   3. Retrieve context via `agents.ella.retrieval`.
-  4. Build the system prompt via `agents.ella.prompts` (stub today).
-  5. Call Claude via `_call_claude` (stub today — canned response).
-  6. Decide: confident response or escalate via `agents.ella.escalation`.
+  4. Build the system prompt via `agents.ella.prompts`.
+  5. Call Claude via `_call_claude` (real call into
+     `shared.claude_client.complete` — token costs land on the run).
+  6. Detect escalation in the response text. If Ella signaled an
+     escalation, `escalate()` is called and the response_text is
+     swapped for a short client-facing ack.
   7. End the agent_run with terminal status and return `EllaResponse`.
 
-The two placeholders (`build_system_prompt` and `_call_claude`) get
-real implementations in the next session once the system prompt is
-drafted. No other call sites should need to change.
+Escalation is pattern-based, not numeric. The system prompt instructs
+Ella to use one of a small set of phrases ("loop in your advisor",
+"check with your advisor", "get your advisor looped in") whenever she
+chooses to escalate. We grep her output for those phrases instead of
+relying on a confidence score the model would have to fabricate. The
+`confidence` field on `EllaResponse` is kept for telemetry continuity —
+1.0 for direct answers, 0.0 for escalations — but is no longer the
+gate.
 """
 
 from __future__ import annotations
@@ -28,11 +32,18 @@ from typing import Any
 from agents.ella.escalation import escalate
 from agents.ella.prompts import build_system_prompt
 from agents.ella.retrieval import ContextBundle, retrieve_context_for_client
+from shared.claude_client import complete
 from shared.db import get_client
 from shared.logging import end_agent_run, logger, start_agent_run
 
-# Confidence floor — below this, escalate instead of answering.
-_CONFIDENCE_FLOOR = 0.7
+# Phrases Ella is instructed (in the system prompt) to use whenever she
+# wants to escalate. Match is case-insensitive substring. Keep this
+# list in sync with the escalation guidance block in prompts.py.
+_ESCALATION_PHRASES: tuple[str, ...] = (
+    "loop in your advisor",
+    "check with your advisor",
+    "get your advisor looped in",
+)
 
 
 @dataclass(frozen=True)
@@ -82,15 +93,25 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
 
     query_text = event_data.get("text") or ""
     context = _retrieve_context(client["id"], query_text)
-    system_prompt = build_system_prompt(client, context.primary_csm)
-    response_text, confidence = _call_claude(system_prompt, query_text, context)
 
-    if confidence < _CONFIDENCE_FLOOR:
+    # Stitch the primary CSM dict onto the client dict so prompts.py
+    # has a single bag of profile data to render from. ContextBundle
+    # stays the canonical retrieval shape; the prompt just needs the
+    # flat view.
+    client_for_prompt = dict(client)
+    client_for_prompt["primary_csm"] = context.primary_csm
+
+    system_prompt = build_system_prompt(client_for_prompt, context.chunks)
+    response_text, confidence = _call_claude(
+        system_prompt, query_text, context, run_id=run_id
+    )
+
+    if _looks_like_escalation(response_text):
         escalation_id = escalate(
-            reason="low_confidence",
+            reason="ella_escalated",
             context={
                 "query_text": query_text,
-                "confidence": confidence,
+                "ella_response": response_text,
                 "client_id": client["id"],
                 "event": _redact_event(event_data),
             },
@@ -98,21 +119,17 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
             agent_run_id=run_id,
             proposed_action={"response_text": response_text},
         )
-        ack = (
-            "Good question — let me check with your CSM on this one. "
-            "They'll get back to you shortly. 🙏"
-        )
         end_agent_run(
             run_id,
             status="escalated",
-            output_summary=f"escalated to CSM (escalation_id={escalation_id})",
+            output_summary=f"escalated to advisor (escalation_id={escalation_id})",
             confidence_score=confidence,
         )
         return EllaResponse(
-            response_text=ack,
+            response_text=response_text,
             confidence=confidence,
             escalated=True,
-            escalation_reason="low_confidence",
+            escalation_reason="ella_escalated",
             escalation_id=escalation_id,
             agent_run_id=run_id,
         )
@@ -132,7 +149,7 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
 
 
 # ---------------------------------------------------------------------------
-# Placeholders — replaced when the system prompt + Claude call land
+# Claude + retrieval seams
 # ---------------------------------------------------------------------------
 
 
@@ -147,14 +164,39 @@ def _call_claude(
     system_prompt: str,
     user_text: str,
     context: ContextBundle,
+    *,
+    run_id: str | None = None,
 ) -> tuple[str, float]:
-    """STUB. Returns a canned response and neutral confidence.
+    """Call Claude with Ella's system prompt and the user's question.
 
-    Will be replaced with `shared.claude_client.complete(...)` after
-    the system prompt is drafted. The tuple shape is the contract the
-    agent depends on; don't change it without updating callers.
+    Returns `(response_text, confidence)`. Confidence here is a
+    coarse signal for telemetry, not a gate — escalation is decided
+    by `_looks_like_escalation` on the response text. We return 1.0
+    for direct answers (the caller flips it to 0.0 if it later
+    detects an escalation phrase).
+
+    `run_id` is passed through so token counts and cost land on the
+    correct `agent_runs` row.
     """
-    return ("(ella response placeholder — prompt not yet implemented)", 0.5)
+    result = complete(
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_text}],
+        run_id=run_id,
+    )
+    text = result.text.strip()
+    confidence = 0.0 if _looks_like_escalation(text) else 1.0
+    return text, confidence
+
+
+def _looks_like_escalation(response_text: str) -> bool:
+    """Detect whether Ella's response is an escalation ack.
+
+    Substring match (case-insensitive) against the small set of
+    phrases the system prompt instructs her to use. Intentionally
+    strict — we'd rather miss an ambiguous escalation and let the
+    client respond again than treat a confident answer as one."""
+    lowered = response_text.lower()
+    return any(phrase in lowered for phrase in _ESCALATION_PHRASES)
 
 
 # ---------------------------------------------------------------------------
