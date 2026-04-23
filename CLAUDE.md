@@ -203,7 +203,7 @@ As of 2026-04-23:
 - **Table fill (local):**
   - `team_members` — 9 (7 with Slack IDs)
   - `clients` — 146 active + 68 archived (100 from Active++ view + 46 auto-created; 4 merged into pilots)
-  - `slack_channels` — 101 active + 21 archived
+  - `slack_channels` — 102 active + 21 archived (includes `#ella-test-drakeonly` mapped to Javi Pena's `client_id` as the team-only test channel for tonight)
   - `client_team_assignments` — 100 active + 24 ended
   - `calls` — 389 (Feb–Apr 2026 Fathom backlog)
   - `call_participants` — 978
