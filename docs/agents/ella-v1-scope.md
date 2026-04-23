@@ -61,7 +61,7 @@ Team agrees she won't embarrass the company in front of pilot clients. That's it
 
 ## Known limitations the team should expect
 
-- **Hallucination risk on unusual questions.** She's instructed not to fabricate, but if a question lands outside the retrieved context, she may still say something wrong. Escalation pattern is the safety net; confidence scoring is the detection.
+- **Hallucination risk on unusual questions.** She's instructed not to fabricate, but if a question lands outside the retrieved context, she may still say something wrong. Escalation is the safety net — when she signals a handoff, the backend routes it to the advisor's DM. (Under the hood she emits a structured marker the backend matches on; you'll never see it.)
 - **Fathom transcript misattribution.** Fathom's speaker diarization occasionally attributes quotes to the wrong person. Ella hedges on transcript quotes for this reason — she'll paraphrase or say *"based on the notes from your call on [date]"* rather than naming a specific speaker. Flag any misattributions you see.
 - **No memory across threads.** Each @mention is stateless. If a client asks a follow-up in a new thread, Ella doesn't recall the earlier thread's content unless the retrieval surface covers it.
 - **94 "unknown" Slack authors** in the backfilled data — messages from users we couldn't resolve to a client or team member. Won't affect Ella's answers but will show up in any Slack-sourced retrieval as `author_type=unknown`. Backfill pass planned post-launch.
