@@ -82,7 +82,7 @@ ai-enablement/
 │   ├── seed_clients.py         # Load Active++ view into clients + client_team_assignments
 │   ├── backfill_team_slack_ids.py
 │   └── merge_client_duplicates.py   # One-shot merge of auto-created client rows into canonical
-├── tests/                      # pytest suite — 270 tests today, all green
+├── tests/                      # pytest suite — see Live System State for count
 └── data/                       # GITIGNORED. Source files for ingestion live here:
                                 #   data/client_seed/       (Active++ CSV export)
                                 #   data/fathom_backlog/    (Fathom .txt transcript exports)
@@ -202,7 +202,7 @@ As of 2026-04-23:
 - **Ella:** agent code exists in `agents/ella/` with 34 passing wiring tests. Escalation detection migrated from phrase-matching to a structured `[ESCALATE]` marker on 2026-04-23 after a local harness run caught a false negative on a personalized emotional ack — see `docs/agents/ella.md` § System Prompt Direction point 10. No live deployment yet — Slack webhook will live in a Vercel serverless function pointing at `agents.ella.slack_handler.handle_slack_event`. `agent_runs.duration_ms` is currently `NULL` on every row (the agent doesn't time the turn); tracked as a deferred instrumentation fix in `docs/future-ideas.md`.
 - **Table fill (local):**
   - `team_members` — 9 (7 with Slack IDs)
-  - `clients` — 146 active + 68 archived (100 from Active++ view + 46 auto-created; 4 merged into pilots)
+  - `clients` — 142 active + 62 archived (100 from Active++ view + 46 auto-created; duplicates merged into pilots via `scripts/merge_client_duplicates.py` — most recent archival 2026-04-23)
   - `slack_channels` — 102 active + 21 archived (includes `#ella-test-drakeonly` mapped to Javi Pena's `client_id` as the team-only test channel for tonight)
   - `client_team_assignments` — 100 active + 24 ended
   - `calls` — 389 (Feb–Apr 2026 Fathom backlog)
@@ -210,7 +210,8 @@ As of 2026-04-23:
   - `documents` — 616 (319 `call_transcript_chunk` + 297 `course_lesson`)
   - `document_chunks` — 4,179, all embedded via `text-embedding-3-small`
   - `slack_messages` — 2,914 across 8 pilot channels, 90-day window
-  - **Still empty** (populated by agent code that runs in Phase 1+): `call_action_items`, `agent_runs`, `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
+  - **Local harness spillover:** `agent_runs` — 11 rows, `escalations` — 5 rows (from yesterday's and today's `scripts/test_ella_locally.py` sessions; not from live Slack yet).
+  - **Still empty** (populated by agent code that runs in Phase 1+): `call_action_items`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
 
 ## Next Session Priorities
 
