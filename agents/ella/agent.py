@@ -10,8 +10,13 @@ layer calls when Ella is @mentioned. The flow:
   5. Call Claude via `_call_claude` (real call into
      `shared.claude_client.complete` — token costs land on the run).
   6. Detect escalation in the response text. If Ella signaled an
-     escalation, `escalate()` is called and the response_text is
-     swapped for a short client-facing ack.
+     escalation, `escalate()` is called. Ella's own ack text is
+     preserved verbatim on the returned `EllaResponse` — the system
+     prompt trains her to write a short, warm escalation message
+     (default cheerful / humble sparingly / emotional patterns).
+     A canned ack would flatten the emotional-escalation
+     distinction, which is the tone we care most about getting
+     right.
   7. End the agent_run with terminal status and return `EllaResponse`.
 
 Escalation is pattern-based, not numeric. The system prompt instructs
