@@ -5,26 +5,34 @@ Deployed by Vercel as a serverless Python function at
 this module is the only place `app_mention` events cross from
 Slack's edge into our agent code.
 
-Why a dedicated webhook module (not just calling the handler directly):
-Slack retries any webhook that doesn't return 200 within 3 seconds.
-Ella's full roundtrip (retrieval → Claude → DB logging → Slack post)
-takes ~3–10 seconds. If we processed the mention synchronously we'd
-miss the ack window on cold starts and get duplicate-processed on
-retries. So the flow is:
+V1 flow (synchronous):
 
   1. Verify the HMAC signature on the raw body. Reject bad signatures
      (401) and stale timestamps (>5 min) without further work.
   2. Handle the one-off `url_verification` challenge inline. Slack
      fires this once when the Event Subscription is first configured.
-  3. On `event_callback` + `app_mention`: kick off a background
-     thread that runs `agents.ella.slack_handler.handle_slack_event`
-     and posts the result via `chat.postMessage`, then return 200
-     immediately. The thread is non-daemon so the Vercel invocation
-     stays alive until it completes (bounded by `maxDuration` in
-     `vercel.json`).
-  4. On Slack retries (`X-Slack-Retry-Num` header present): 200
-     without re-processing. The original thread is still handling
-     this event; a duplicate would produce two Slack replies.
+  3. On Slack retries (`X-Slack-Retry-Num` header present): ack 200
+     immediately without re-processing. The original invocation is
+     still handling this event; a duplicate would produce two Slack
+     replies.
+  4. On `event_callback` + `app_mention`: run the agent and post the
+     reply synchronously via `chat.postMessage`, then return 200.
+     Ella's roundtrip is ~5–10s and Slack's ack window is 3s, so the
+     first-delivery on a cold start will time out from Slack's
+     perspective — Slack retries, our retry branch acks fast (step 3)
+     and the original invocation still lands the post.
+
+Why synchronous and not background-threaded: Vercel's Python runtime
+terminates the function process as soon as `do_POST` returns, which
+kills any non-daemon `threading.Thread` before it can finish
+`chat.postMessage`. Smoke test on 2026-04-23 confirmed this — the
+first deployment tried the ack-then-thread pattern and produced zero
+replies in Slack despite 200 acks on every request. Fluid Compute
+would fix it at the runtime level, but it's a project-level opt-in
+we don't have enabled yet. The sync+retry pattern works without any
+Vercel config change and costs ~2x container seconds per mention
+(first invocation does the work; one retry is acked fast then
+discarded). Acceptable for V1 pilot volume.
 
 Env vars required (must be set in the Vercel project):
   SLACK_SIGNING_SECRET       — HMAC verification of inbound webhooks.
@@ -42,7 +50,6 @@ import hmac
 import json
 import logging
 import os
-import threading
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler
@@ -50,14 +57,14 @@ from typing import Any
 
 from agents.ella.slack_handler import handle_slack_event
 
-# Vercel surfaces stdout/stderr in the function's log stream. basicConfig
-# is a no-op if handlers are already attached (which they will be in the
-# Vercel runtime), so this is safe to leave in at module scope.
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# Vercel's Python runtime pre-configures the root logger at WARNING
+# level, so a naive `logging.basicConfig(level=INFO)` is a no-op and
+# our INFO lines get silently dropped. Set the root logger level
+# directly so our INFO-level operational logs land in the Vercel log
+# stream (smoke test on 2026-04-23 confirmed this was happening).
+logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger("ai_enablement.slack_webhook")
+logger.setLevel(logging.INFO)
 
 # Slack's replay-protection window. Requests older than this are
 # rejected regardless of signature — an attacker who captured a valid
@@ -117,15 +124,18 @@ class handler(BaseHTTPRequestHandler):
         if payload.get("type") == "event_callback":
             event = payload.get("event") or {}
             if event.get("type") == "app_mention":
-                # Non-daemon so the Python process stays alive until
-                # the thread completes. The serverless invocation is
-                # bounded by `maxDuration` (see vercel.json), which is
-                # sized to cover Ella's typical 5–10s roundtrip.
-                threading.Thread(
-                    target=_process_mention,
-                    args=(payload,),
-                    daemon=False,
-                ).start()
+                logger.info(
+                    "slack_webhook: processing app_mention channel=%s user=%s",
+                    event.get("channel"),
+                    event.get("user"),
+                )
+                # Synchronous so the work actually happens. Vercel's
+                # Python runtime kills background threads the moment
+                # the response is written, so a fire-and-forget
+                # threaded post never lands. See module docstring for
+                # why this is acceptable: Slack retries fast on our
+                # missed ack, and the retry branch above catches them.
+                _process_mention(payload)
 
         # Ack regardless of inner event type. Anything non-200 tells
         # Slack to retry, which we don't want for events we didn't
