@@ -20,11 +20,7 @@ Internal AI enablement system for a coaching/consulting agency. Agents across cu
 
 ## Project Status
 
-**Current phase:** Phase 0 foundation
-**Immediate target:** Slack Bot V1 and CSM Co-Pilot V1 by end of April
-**12-week target:** Demonstrable B2B-ready product
-
-See the full roadmap (separate document) for phase-by-phase plan.
+See the **Current Focus** section of [`CLAUDE.md`](CLAUDE.md) for canonical status. Near-term milestone: Ella V1 in pilot-client beta the week of April 27.
 
 ## Key Principles
 
