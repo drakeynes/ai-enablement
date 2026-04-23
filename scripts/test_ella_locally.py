@@ -166,10 +166,13 @@ def pick_pilot_setup() -> dict[str, Any]:
     """
     db = get_client()
 
+    # slack_channels uses `is_archived boolean`, not `archived_at` — per
+    # the 0007 migration changelog in docs/schema/schema-v1.md. Other core
+    # entities use archived_at, which is why this filter is one-off.
     channels_resp = (
         db.table("slack_channels")
         .select("slack_channel_id,client_id,name")
-        .is_("archived_at", "null")
+        .eq("is_archived", False)
         .execute()
     )
     mapped_channels = [
