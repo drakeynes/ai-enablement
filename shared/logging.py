@@ -102,6 +102,9 @@ def end_agent_run(
     `status` must be one of `success`, `escalated`, `error`, or `skipped`.
     Sets `ended_at` to now() via database default-less explicit write so
     both success and error paths are dated consistently.
+
+    Note: if `shared.claude_client.complete()` was called with this
+    run_id, the llm_* fields are already written — omit them here.
     """
     if status not in TERMINAL_STATUSES:
         raise ValueError(
