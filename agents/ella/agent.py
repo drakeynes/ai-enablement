@@ -112,6 +112,12 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
     )
 
     if _looks_like_escalation(response_text):
+        # `proposed_action` is intentionally omitted. Its contract is
+        # "what the agent wanted to do, for a reviewer to approve /
+        # reject / edit" — but in V1 there's no approval UI and Ella's
+        # response has already been posted to the client in-thread by
+        # the time this row lands. Ella's text is on the row via
+        # `context.ella_response` for reference.
         escalation_id = escalate(
             reason="ella_escalated",
             context={
@@ -122,7 +128,6 @@ def _run(event_data: dict[str, Any], run_id: str) -> EllaResponse:
             },
             client_id=client["id"],
             agent_run_id=run_id,
-            proposed_action={"response_text": response_text},
         )
         end_agent_run(
             run_id,
