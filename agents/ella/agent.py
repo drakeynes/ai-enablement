@@ -221,9 +221,10 @@ def _resolve_client_from_slack_user(slack_user_id: str | None) -> dict[str, Any]
 
 
 def _redact_event(event_data: dict[str, Any]) -> dict[str, Any]:
-    """Keep only fields useful for logging; drop Slack payload bulk."""
-    return {
-        k: event_data.get(k)
-        for k in ("user", "channel", "ts", "thread_ts", "event_ts")
-        if event_data.get(k) is not None
-    }
+    """Keep only fields useful for logging; drop Slack payload bulk.
+
+    `is_team_test` is included when the Slack handler stamps it onto
+    the event so we can later filter team-test runs out of client
+    interaction metrics."""
+    keys = ("user", "channel", "ts", "thread_ts", "event_ts", "is_team_test")
+    return {k: event_data.get(k) for k in keys if event_data.get(k) is not None}
