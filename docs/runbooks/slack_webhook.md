@@ -5,29 +5,31 @@ How to operate the Vercel serverless function that receives Slack `app_mention` 
 ## Where the code lives
 
 - `api/slack_events.py` — the webhook handler. Vercel auto-routes `api/*.py` as individual serverless functions; the production URL for this one is `https://<vercel-project>.vercel.app/api/slack_events`.
-- `vercel.json` — function config. Sets `maxDuration: 60` for `api/slack_events.py` so the background thread has headroom to complete Ella's roundtrip after we've already acked Slack.
+- `vercel.json` — function config. Pins `runtime: @vercel/python@4.3.1` (required for Vercel to register `api/*.py` as Serverless Functions when the `functions` block is declared) and sets `maxDuration: 60` so Ella's synchronous roundtrip has headroom before the invocation is killed.
 - `requirements.txt` — Vercel installs Python deps from here at build time. Kept in sync by hand with `[project.dependencies]` in `pyproject.toml`.
 - `agents/ella/slack_handler.py` — the handler the webhook calls into. Routing rules and team-test mode logic live there; do not duplicate them in the webhook layer.
 
-## Architecture (why it's split)
+## Architecture (why this is synchronous)
 
-Slack retries any webhook that doesn't return 200 within 3 seconds. Ella's full roundtrip takes 3–10 seconds. So `api/slack_events.py` acks first, then spawns a background thread to run the agent and post the reply via `chat.postMessage`:
+Slack retries any webhook that doesn't return 200 within 3 seconds. Ella's full roundtrip (retrieval → Claude → Slack post) takes 3–10 seconds, which doesn't fit. The natural shape would be *"ack first, do the work in a background thread"* — and that's what the first iteration of this code did. It didn't work: Vercel's Python runtime terminates the function process the moment `do_POST` returns, killing a non-daemon `threading.Thread` before it finishes `chat.postMessage`. Confirmed live on 2026-04-23 — every webhook returned 200, zero replies ever landed.
+
+**V1 shape: synchronous handler + fast retry-acks.** We run everything inline and ack after the Slack post. Cold starts miss Slack's 3s window, Slack retries with `X-Slack-Retry-Num`, and the retry branch acks those immediately without re-processing so the user only sees one reply.
 
 ```
 Slack → POST /api/slack_events
             ├── verify HMAC signature on raw body
             ├── handle url_verification challenge (if present)
-            ├── detect X-Slack-Retry-Num (skip; original still running)
+            ├── detect X-Slack-Retry-Num → ack 200 fast, skip processing
             └── for app_mention:
-                    threading.Thread(target=_process_mention).start()
-                    return 200 "ok"      ← Slack sees this in <100ms
-
-Background thread (same invocation, up to maxDuration=60s):
-    handle_slack_event(payload)        ← agents.ella.slack_handler
-    chat.postMessage (thread_ts, text) ← urllib.request, no SDK
+                    [INFO: slack_webhook: processing app_mention channel=... user=...]
+                    handle_slack_event(payload)        ← sync
+                    chat.postMessage(thread_ts, ...)   ← sync
+                    return 200 "ok"                     ~3s warm, ~5–10s cold
 ```
 
-The thread is non-daemon: the Python process stays alive until it finishes or `maxDuration` kills it. If Ella routinely takes longer than 60s (she shouldn't — Claude is 3–5s, retrieval is sub-second), bump `maxDuration` in `vercel.json`.
+Cost: roughly 2x container-seconds per mention on a cold start — the first invocation does the full work, one or two fast retry-acks run concurrently. For V1 pilot volume this is fine. `vercel.json` sets `maxDuration: 60` as a hard ceiling on the full handler; if Ella's roundtrip ever exceeds that, the invocation is killed and no Slack post lands.
+
+**Why not Fluid Compute.** Vercel's Fluid Compute runtime setting lets a handler return a response while work continues in the background — exactly what the threaded V0 was trying to do. It's a project-level opt-in we don't currently have enabled. Turning it on would let us move back to the ack-then-work pattern and cut user-visible latency back under 3s. Worth revisiting when pilot volume makes the cold-start lag uncomfortable; not worth bending the deploy ahead of the Monday launch.
 
 ## Required env vars on the Vercel project
 
@@ -61,12 +63,15 @@ Vercel dashboard → the project → Logs tab. Filter by function `api/slack_eve
 
 - `signature verification failed` — mismatched `SLACK_SIGNING_SECRET` or a replayed request.
 - `url_verification challenge received` — one-time handshake when the Event Subscription URL is first saved. Good sign.
-- `skipping retry #N` — Slack retried (almost always because the first delivery took >3s). The original thread is still handling it.
+- `processing app_mention channel=... user=...` — the handler entered the app_mention branch. If you see this but no follow-up `slack.postMessage ok` or `handle_slack_event raised`, the invocation was likely killed by `maxDuration` mid-work. A `Connection refused` trace right after this line means the function couldn't reach Supabase — check that `SUPABASE_URL` in Vercel is the cloud URL, not `127.0.0.1:54321`.
+- `skipping retry #N` — Slack retried (almost always because the first delivery took >3s on a cold start). The original invocation is still processing; this retry is acked fast and discarded.
 - `slack.postMessage ok: ...` — Ella posted successfully.
 - `slack.postMessage failed: ...` — full JSON body from Slack's Web API; check `error` field (`not_in_channel`, `missing_scope`, `channel_not_found`, etc.).
 - `handle_slack_event raised: ...` — agent crash. Full traceback follows.
 
-Cross-reference with `agent_runs` rows in Supabase Studio — every mention should have landed a row, whether the thread succeeded or the Slack post failed.
+Cross-reference with `agent_runs` rows in Supabase Studio — every mention should have landed a row, whether the handler succeeded or the Slack post failed.
+
+**Logger level gotcha.** Vercel's Python runtime pre-configures the root logger at `WARNING`. A naive `logging.basicConfig(level=INFO)` is a no-op because basicConfig doesn't override existing handlers, so your `logger.info(...)` lines get dropped silently. `api/slack_events.py` fixes this by calling `logging.getLogger().setLevel(logging.INFO)` at import time; any new module whose logs need to be visible in Vercel must do the same.
 
 ## Rolling back
 
@@ -100,7 +105,8 @@ V1 does not consult `slack_channels.ella_enabled` — the enabled-channel list i
 
 ## Known limits and gotchas
 
-- **Cold starts can miss the 3s ack.** First request after idle may take 2–5s for Python + deps to load. Slack will retry; the retry-detection in `api/slack_events.py` prevents duplicate responses, but the user sees a slight lag on their first message after idle.
-- **`maxDuration: 60` is a hard ceiling.** If Ella's roundtrip ever exceeds 60s, the background thread is killed mid-flight and no `chat.postMessage` lands. Diagnose via agent_runs row (started but not ended) + Vercel log showing the invocation was terminated.
-- **Thread posting errors are logged, not retried.** If `chat.postMessage` fails (e.g., transient Slack outage), the message is lost for that mention. Acceptable for V1; a retry queue belongs with eval / HITL work later.
+- **Every first-mention cold start will miss the 3s ack** — this is by design given the synchronous architecture. Slack retries; the retry branch acks in <1s and discards. User sees the reply ~5–10s after mentioning on cold start, ~3s on warm. If the perceived lag becomes a problem, enable Fluid Compute (project-level setting) and revert to the threaded pattern.
+- **`maxDuration: 60` is a hard ceiling on the full synchronous handler.** If Ella's roundtrip exceeds it, the invocation is killed with no Slack post. Diagnose via `agent_runs` row (status `running`, `ended_at` null) + Vercel log showing invocation termination.
+- **Posting errors are logged, not retried.** If `chat.postMessage` fails (transient Slack outage, missing scope, bot not in channel), the message is lost for that mention. Acceptable for V1; a retry queue belongs with eval / HITL work later.
 - **No event-id deduplication.** If Slack delivers the same event twice via a path that doesn't set `X-Slack-Retry-Num` (shouldn't happen, but possible), we'd process it twice. Log it in `docs/future-ideas.md` if it surfaces.
+- **Vercel env vars must match the target Supabase.** If `SUPABASE_URL` still points at `127.0.0.1:54321` (local dev), every mention fails at `_lookup_channel` with `httpx.ConnectError: [Errno 111] Connection refused` — Lambda has no route to your laptop's loopback. Smoke test caught this on 2026-04-23. Cloud Supabase push swaps both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the cloud project's values.
