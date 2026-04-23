@@ -4,12 +4,12 @@ First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co
 
 **Status:** Implemented by migrations 0001–0010. All 10 migrations applied against local Supabase; cloud project not linked yet.
 
-**DB population (as of 2026-04-22):**
+**DB population (as of 2026-04-23):**
 
 | Table | Count | Source |
 |---|---:|---|
 | `team_members` | 9 | Manual seed (`supabase/seed/team_members.sql`); 7 have `slack_user_id` backfilled |
-| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`) |
+| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`); 4 of the auto-created rows merged into pilot clients via `scripts/merge_client_duplicates.py` |
 | `clients` (archived) | 68 | Soft-archived by the Active++ re-import cascade |
 | `slack_channels` (active) | 101 | 100 client channels + `ella-test` |
 | `slack_channels` (archived) | 21 | Cascaded from archived clients |
