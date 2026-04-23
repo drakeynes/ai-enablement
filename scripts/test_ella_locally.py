@@ -383,6 +383,15 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="List scenario names and exit.",
     )
+    parser.add_argument(
+        "--dry",
+        action="store_true",
+        help=(
+            "Resolve and print the pilot channel / client / team-member "
+            "triple and exit. No scenarios are fired; no Claude / OpenAI / "
+            "DB writes. Useful for pre-flight sanity."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -396,6 +405,10 @@ def main() -> None:
         return
 
     setup = pick_pilot_setup()
+    if args.dry:
+        print("pilot setup (dry run — no scenarios will fire):")
+        print(_pretty(setup))
+        return
     print("pilot setup:")
     print(_pretty(setup))
     print()
