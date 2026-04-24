@@ -30,7 +30,7 @@ These four principles protect the system from lock-in and rebuilds. Apply them t
 | Hosting | Vercel | Frontend + serverless Python functions (Ella's Slack webhook handler will live here). |
 | Voice | ElevenLabs | Course audio, future voice agents. |
 | Dev environment | WSL2 Ubuntu on Windows | All dev happens inside WSL. VS Code with Remote-WSL extension. |
-| Secrets | Bitwarden master list + env vars | `.env.local` locally, Vercel env vars in production. See `.env.example` — required keys today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SLACK_BOT_TOKEN`. |
+| Secrets | Bitwarden master list + env vars | `.env.local` locally, Vercel env vars in production. See `.env.example` — required keys today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`. `SUPABASE_DB_PASSWORD` is also set in `.env.local` for ops scripts that connect directly via psycopg2 (migrations, seeds, diagnostics) — not required by the webhook or the agent runtime. |
 
 ## Language Policy
 
@@ -194,42 +194,35 @@ Documented in `docs/future-ideas.md` with explicit revisit triggers:
 
 ## Live System State
 
-As of 2026-04-23:
+As of 2026-04-24:
 
-- **Local Supabase:** populated, all 10 migrations applied (`0001_core_entities` through `0010_kb_search_exclude_transcript_chunks`), all ingestion pipelines have run.
-- **Cloud Supabase:** NOT yet populated — project not linked to the repo yet. Push (migrations + seeds + ingestion re-run against cloud) planned for end of this week.
-- **Slack app:** configured, installed in `#ella-test-drakeonly` (Drake-only test channel, mapped to Javi Pena's client_id), `#ella-test` (team test channel), and the 7 pilot client channels. Event Subscriptions **enabled** on 2026-04-23; `app_mention` subscribed and points at `https://ai-enablement-sigma.vercel.app/api/slack_events` (URL verified green after one retry).
-- **Ella:** agent code in `agents/ella/` with 34 passing wiring tests. Escalation detection uses a structured `[ESCALATE]` marker (migrated 2026-04-23 after a false negative on a personalized emotional ack — see `docs/agents/ella.md` § System Prompt Direction point 10). **Vercel webhook deployed** at `https://ai-enablement-sigma.vercel.app/api/slack_events`. Signature verification, `url_verification` handshake, and the `app_mention` routing path (through `handle_slack_event` into `_lookup_channel`) have all been verified in production from `#ella-test-drakeonly` on 2026-04-23. Architecture is synchronous (not threaded) because Vercel's Python runtime kills background threads at response time — see `docs/runbooks/slack_webhook.md` for the full reasoning. **Currently blocked on cloud Supabase push:** Vercel's `SUPABASE_URL` still points at `127.0.0.1:54321`, so real mentions reach the handler but die at the first DB call with `httpx.ConnectError: [Errno 111] Connection refused`. `agent_runs.duration_ms` still `NULL` — deferred per `docs/future-ideas.md`.
-- **Table fill (local):**
-  - `team_members` — 9 (7 with Slack IDs)
-  - `clients` — 142 active + 62 archived (100 from Active++ view + 46 auto-created; duplicates merged into pilots via `scripts/merge_client_duplicates.py` — most recent archival 2026-04-23)
-  - `slack_channels` — 102 active + 21 archived (includes `#ella-test-drakeonly` mapped to Javi Pena's `client_id` as the team-only test channel for tonight)
-  - `client_team_assignments` — 100 active + 24 ended
-  - `calls` — 389 (Feb–Apr 2026 Fathom backlog)
-  - `call_participants` — 978
-  - `documents` — 616 (319 `call_transcript_chunk` + 297 `course_lesson`)
-  - `document_chunks` — 4,179, all embedded via `text-embedding-3-small`
-  - `slack_messages` — 2,914 across 8 pilot channels, 90-day window
-  - **Local harness spillover:** `agent_runs` — 11 rows, `escalations` — 5 rows (from yesterday's and today's `scripts/test_ella_locally.py` sessions; not from live Slack yet).
-  - **Still empty** (populated by agent code that runs in Phase 1+): `call_action_items`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
+- **Cloud Supabase** is the production target. Project ref `sjjovsjcfffrftnraocu` (region us-east-2, Ohio). All 10 migrations applied (`0001_core_entities` through `0010_kb_search_exclude_transcript_chunks`). Accessed via the pooler URL stored in `supabase/.temp/pooler-url`; the DB password lives in `.env.local` as `SUPABASE_DB_PASSWORD` (quoted because it contains a `#`).
+- **Local Supabase** (Docker stack at `127.0.0.1:54321`, Postgres on `:54322`) is a dev-only mirror — useful for harness runs, inspection, and copying reference data. Not consulted by any deployed component. `.env.local`'s `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` now carry cloud values; local connections require explicit `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+- **Vercel deployment** live at `https://ai-enablement-sigma.vercel.app/api/slack_events`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the project now point at cloud (verified via API); redeployed after the swap. `vercel.json` pins `runtime: @vercel/python@4.3.1` and `maxDuration: 60`. Full operational detail in `docs/runbooks/slack_webhook.md`; cloud-push specifics in `docs/runbooks/cloud_supabase.md`.
+- **Slack app:** configured, installed in `#ella-test-drakeonly` (Drake-only test channel, mapped to Javi Pena's `client_id` as a temporary fixture — see followups for the plan to move off this), `#ella-test` (team test channel, not yet remapped), and the 7 pilot client channels. Event Subscriptions enabled; `app_mention` subscribed; Request URL verified green against the Vercel endpoint.
+- **Ella:** agent code in `agents/ella/`. Escalation detection uses a structured `[ESCALATE]` marker — see `docs/agents/ella.md` § System Prompt Direction point 10. Architecture is synchronous (not threaded) because Vercel's Python runtime kills background threads at response time — see `docs/runbooks/slack_webhook.md`. **Live in `#ella-test-drakeonly`** — smoke test passed: Drake @mentioned, Ella replied in-thread grounded in course-content retrieval. `agent_runs.duration_ms` still `NULL` — deferred per `docs/followups.md`.
+- **Table fill (cloud):**
+  - `team_members` — 9 (7 with `slack_user_id`, copied from local during push)
+  - `clients` — 100 (from Active++ seed; all carry `slack_user_id` from the sheet)
+  - `slack_channels` — 101 (100 from seed + the `#ella-test-drakeonly` fixture mapped to Javi Pena)
+  - `client_team_assignments` — 100
+  - `calls` — 0 (Fathom backlog ingestion deferred — next-session priority #1)
+  - `call_participants` — 0 (same)
+  - `documents` — 297 (`course_lesson` only; no `call_transcript_chunk` yet)
+  - `document_chunks` — 651, embedded via `text-embedding-3-small`
+  - `slack_messages` — 0 (90-day backfill deferred; not needed for V1 retrieval per `docs/future-ideas.md` § "Slack messages as a retrieval surface")
+  - `agent_runs` — 5 (from smoke tests and local harness runs against cloud)
+  - **Still empty**: `call_action_items`, `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`.
+- **Test suite:** 270 passing (34 on the Ella module).
 
 ## Next Session Priorities
 
 Pick these up in order:
 
-1. **Cloud Supabase push — unblocks the live webhook.** The Vercel function can't reach local Supabase (Lambda has no route to laptop loopback), so every real @mention dies at the first DB call. Steps:
-   - `supabase link --project-ref ...` to point the repo at the cloud project.
-   - `supabase db push` to apply all 10 migrations (`0001_core_entities` through `0010_kb_search_exclude_transcript_chunks`).
-   - Apply seeds — `supabase/seed/team_members.sql` at minimum; audit `supabase/seed/` for anything else that should go up.
-   - Re-run the 4 ingestion pipelines against cloud:
-     - Active++ clients — `python scripts/seed_clients.py --apply` (uses the same `SUPABASE_URL` env the webhook does, so pointing it at cloud is the switch).
-     - Fathom backlog — `ingestion/fathom/` against `data/fathom_backlog/`.
-     - Slack 90-day backfill — `ingestion/slack/` against the 8 pilot channels.
-     - Course content — `ingestion/content/` against `data/course_content/`.
-   - Swap Vercel env vars: update `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the cloud project's values (Vercel dashboard → Project Settings → Environment Variables), then trigger a redeploy so the new values land (Vercel doesn't propagate env changes to running deployments).
-2. **Smoke test the webhook end-to-end.** @mention Ella in `#ella-test-drakeonly`, watch Vercel logs (`npx vercel logs --no-follow --since 10m`), confirm `processing app_mention` → `slack.postMessage ok` → reply in-thread. First cold-start mention will miss Slack's 3s ack and trigger a retry-skip; warm mentions reply in 3–5s.
-3. **`#ella-test` testing** with Drake, Scott, and Nabeel — Thursday and Friday. Follow the test plan in `docs/agents/ella-v1-scope.md`.
-4. **Monday:** live in the 7 pilot client channels.
+1. **Fathom backlog ingestion against cloud.** Deferred from the cloud-push session to keep scope tight. Run `.venv/bin/python -m ingestion.fathom.cli --apply` against the 389 transcripts in `data/fathom_backlog/`. Roughly 10–30 min wall time, roughly $5–15 in OpenAI embedding cost (see `docs/future-ideas.md` § "pg_dump local embeddings to cloud" for the one-time workaround once scale makes re-embedding uncomfortable). Populates `calls`, `call_participants`, and 319 `call_transcript_chunk` documents with ~3,528 chunks. Ella gets call-context retrieval as a result.
+2. **Team-test channel setup with synthetic test client.** Per `docs/future-ideas.md` § "Test-fixture client for team-only Ella test channels" (now active). Create a `clients` row tagged `test_fixture`, remap `#ella-test` (or a new channel — Drake's call) to that client so team testing stops riding on Javi Pena's context.
+3. **`reply_broadcast=true` behavior change.** Ella's threaded replies are currently private to the thread; setting `reply_broadcast=true` on the `chat.postMessage` call makes the reply visible in the main channel while staying threaded. Spec note in `docs/agents/ella.md` § Response Location; not yet in `api/slack_events.py`.
+4. **Pilot rollout to the remaining 6 client channels.** Javi Pena is already carrying the fixture pattern. Bring in Fernando G, Musa Elmaghrabi, Jenny Burnett, Dhamen Hothi, Trevor Heck, Art Nuno — confirm the Slack app is installed in each, confirm each has a `clients` row + `slack_channels` row (`seed_clients.py` already covered this), run one @mention per channel as a smoke.
 
 ## Working With Claude Code — Prompting Tips
 
