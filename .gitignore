@@ -41,3 +41,8 @@ Thumbs.db
 /data/
 /tmp/
 .vercel
+
+# Supabase Studio scratch — ad-hoc SQL snippets saved from the dashboard
+# land here. Not part of the checked-in schema; migrations/ is the
+# canonical source.
+supabase/snippets/
