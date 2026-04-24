@@ -222,12 +222,12 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** Ella V1 is deployable and ready for first pilot-client channel.
 - **Logged:** 2026-04-22.
 
-## Test-fixture client for team-only Ella test channels
+## Test-fixture client for team-only Ella test channels — **ACTIVE (next-session priority #2)**
 
-- **What:** dedicated synthetic "Test Client" row in `clients` with Drake (or Scott) as primary advisor, plus team-only test channels (`#ella-test-drakeonly`, etc.) mapped to that client's UUID via `slack_channels.client_id`. Alternative shape: a `slack_channels.team_test_channel` boolean that teaches the handler to run without a client mapping at all — pick one, not both. Replaces the current workaround of pointing a team test channel at a real pilot client's UUID (harmless for an evening, muddies the model of what a pilot channel is).
-- **Why deferred:** the workaround is a single `UPDATE slack_channels SET client_id = '<pilot-uuid>' WHERE slack_channel_id = '...'` against Studio and takes 30 seconds — done. The formalized fixture is worth building once the pilot itself has validated the live flow; before then, touching the channel/client shape adds surface area no one asked for.
-- **Revisit trigger:** first time the team wants to run a multi-person test that isn't tied to a real pilot client's context, OR post-Monday when the pilot has proven out the live loop.
-- **Logged:** 2026-04-23.
+- **Status:** promoted from "deferred idea" to next-session priority on 2026-04-24 after the first live smoke test ran against Javi Pena's channel/context. The workaround is now actively muddying the team's mental model of what a pilot channel is and what a test channel is; formalizing the fixture is the right next step.
+- **What:** dedicated synthetic "Test Client" row in `clients` with Drake (or Scott) as primary advisor, plus team-only test channels (`#ella-test-drakeonly`, and a newly-set-up `#ella-test`) mapped to that client's UUID via `slack_channels.client_id`. Alternative shape: a `slack_channels.team_test_channel` boolean that teaches the handler to run without a client mapping at all — pick one, not both. Replaces the current workaround of pointing `#ella-test-drakeonly` at Javi Pena's UUID.
+- **Revisit trigger:** done — triggered. Work plan lives in `CLAUDE.md` § Next Session Priorities.
+- **Logged:** 2026-04-23. **Activated:** 2026-04-24.
 
 ## Slack real-time ingestion via Events API
 
@@ -267,3 +267,17 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Why deferred:** surfaced during the 2026-04-23 local harness run; decided not to block Ella V1 beta on it. Token counts and cost already land on the row via `shared.claude_client.complete()`, which covers the "is she expensive?" question; latency observability is a nice-to-have for perf tuning, not a safety property. Also: the same gap likely exists in whatever agent ships next, so fixing it once globally (e.g., a context manager in `shared/logging.py` that wraps `start_agent_run` / `end_agent_run`) is worth more than a per-agent patch.
 - **Revisit trigger:** (1) first time we need to diagnose a perceived-slow Ella response from a real client thread, OR (2) when the eval harness lands and we want per-run latency as a metric, OR (3) CSM Co-Pilot gets built and would benefit from the same instrumentation — whichever lands first.
 - **Logged:** 2026-04-23.
+
+## pg_dump local embeddings to cloud to skip re-embedding on large loads
+
+- **What:** for ingestion runs where the chunks + embeddings already exist in the local Supabase, `pg_dump` the `documents` + `document_chunks` rows from local and restore into cloud, instead of re-running the ingestion pipeline against cloud (which re-chunks and re-pays the OpenAI embedding cost). Narrow scope: just rows whose embeddings are stable — typically `course_lesson` and `call_transcript_chunk` where the source hasn't changed.
+- **Why deferred:** for the Fathom backlog at ~389 calls / ~3,528 chunks the re-embed is ~$5–15 and ~10–30 min — not painful enough to justify the dump/restore dance, which brings its own risks (row-id collisions, RLS interactions, accidentally copying stale metadata). The cost/complexity crossover point is somewhere north of 10k chunks or a corpus that'd cost >$50 to re-embed.
+- **Revisit trigger:** next corpus load that'd cost >$50 to re-embed OR take >1 hour, whichever lands first. Likely candidates: a Drive-sourced content ingestion once we have the full course library (vs. today's curated subset), or a second pass that re-chunks call transcripts with topic-based chunking (see entry above).
+- **Logged:** 2026-04-24.
+
+## Ella profile picture + branding
+
+- **What:** upload a custom app icon for Ella in the Slack app console (api.slack.com/apps → your app → Basic Information → App-Level App Icon) so she stops showing up as the default Slack gear avatar in client channels. Branding direction (warm / on-theme-with-TAP / distinctive) is TBD — needs a design pass or a handful of options to choose from.
+- **Why deferred:** purely cosmetic; doesn't block any V1 functionality. Real clients will see her as the default avatar in the pilot, which looks unfinished. Worth landing before wide pilot rollout but not before the core loop is validated.
+- **Revisit trigger:** before the expanded beta (beyond the 7 pilot clients), OR the first time a client reacts to Ella's appearance in a way that suggests the avatar's hurting trust.
+- **Logged:** 2026-04-24.
