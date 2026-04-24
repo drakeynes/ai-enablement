@@ -43,7 +43,9 @@ Ella answers client questions in their private Slack channels at near-CSM qualit
 
 ### Response Location
 
-Always respond in-thread to the triggering message. Never post in the main channel.
+Always respond in-thread to the triggering message. Never post Ella's answer as a new top-level message in the channel.
+
+**Pending behavior change — `reply_broadcast=true`.** Today `api/slack_events.py` calls `chat.postMessage` with only `channel` and `thread_ts`. The reply is visible only to clients who open the thread. For V1 pilot channels this is noisier than useful — the CSM and the client both often miss replies that happened inside a thread they weren't watching. The change: pass `reply_broadcast=true` on the `chat.postMessage` call so the reply stays threaded (answer lives in-thread) but is also echoed to the main channel feed so everyone in the channel sees it. No other behavior changes. Tracked as Next Session Priority #3 in `CLAUDE.md`.
 
 ### Confidence-Based Routing
 
