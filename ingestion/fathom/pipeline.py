@@ -245,11 +245,32 @@ def ingest_call(
             )
         )
         validation_failures.extend(doc_validation_failures)
+
+        # Summary doc — only populated by webhook-sourced records today;
+        # backlog TXT records leave summary_text=None and this is a no-op.
+        # F2.3 closes the `call_summary` deferral that F1 carried.
+        if record.summary_text:
+            summary_validation_failures = _ensure_summary_document(
+                db, record, call_id, classification, embed_fn,
+                retrievable=final_retrievable,
+            )
+            validation_failures.extend(summary_validation_failures)
     else:
         # Non-client call. If a prior client-classification wrote a
         # document for this call, soft-archive it so chunks stop
         # appearing in client-mode retrieval.
         document_id = _soft_archive_transcript_document_if_exists(db, call_id)
+
+    # Action items — written regardless of category because internal and
+    # external calls can also produce trackable commitments. Three-state
+    # contract: None = "no info" (TXT backlog), [] = "call has zero",
+    # [..] = "replace existing with these". Delete-replace inside the
+    # helper keeps idempotency simple since Fathom doesn't give us stable
+    # per-item ids. Closes the call_action_items deferral from F1.
+    if record.action_items is not None:
+        _upsert_action_items(
+            db, call_id, record.action_items, client_resolver, team_resolver,
+        )
 
     action = "updated" if was_pre_existing else "inserted"
 
@@ -429,7 +450,7 @@ def _raw_payload(record: FathomCallRecord) -> dict[str, Any]:
     """
     source_filename = record.source_path.name if record.source_path else None
     return {
-        "source_format": "txt",
+        "source_format": record.source_format,
         "source_filename": source_filename,
         "raw_text": record.raw_text,
         "parse_warnings": list(record.parse_warnings),
@@ -753,6 +774,236 @@ def _soft_archive_transcript_document_if_exists(db, call_id: str) -> str | None:
         return existing["id"]
     db.table("documents").update({"is_active": False}).eq("id", existing["id"]).execute()
     return existing["id"]
+
+
+# ---------------------------------------------------------------------------
+# call_summary document (webhook-sourced only, V1)
+# ---------------------------------------------------------------------------
+
+_SUMMARY_DOC_TYPE = "call_summary"
+
+
+def _ensure_summary_document(
+    db,
+    record: FathomCallRecord,
+    call_id: str,
+    classification: ClassificationResult,
+    embed_fn: Callable[[str], list[float]] | None,
+    *,
+    retrievable: bool,
+) -> list[str]:
+    """Idempotent upsert of a call_summary document + one chunk.
+
+    V1 writes a single chunk per summary. Fathom's default_summary is
+    typically 200–500 words — well under the embedding model's input
+    limit. If we later encounter summaries large enough to warrant
+    splitting, add a paragraph-aware chunker; the contract here
+    (document per call, chunks[] under it) already supports N chunks.
+
+    Idempotency: keyed on (source='fathom', external_id=<recording_id>,
+    document_type='call_summary') via the migration-0011 unique.
+    Re-runs find the existing doc, sync metadata + is_active, reuse the
+    existing chunk (skip re-embed — saves cost on backfill sweeps).
+
+    Returns the list of validation failure strings (empty on success).
+    """
+    validation_failures: list[str] = []
+    summary_text = (record.summary_text or "").strip()
+    if not summary_text:
+        return validation_failures
+
+    # Reuse the same metadata shape as transcript_chunk — validator spec
+    # allows it. call_id / client_id / call_category / started_at are all
+    # required; retrieval downstream joins doc + chunk metadata so every
+    # call_summary chunk inherits this context.
+    doc_metadata = _build_document_metadata(record, classification, call_id)
+
+    try:
+        validate_document_metadata(
+            doc_metadata, source=_SOURCE, document_type=_SUMMARY_DOC_TYPE
+        )
+    except ValueError as exc:
+        validation_failures.append(f"summary document: {exc}")
+        logger.error(
+            "Summary document validation failed for call %s: %s", call_id, exc
+        )
+        return validation_failures
+
+    existing = _find_summary_document(db, record.external_id)
+    if existing is None:
+        doc_id = _insert_summary_document(
+            db, record, summary_text, doc_metadata, is_active=retrievable
+        )
+    else:
+        doc_id = existing["id"]
+        _sync_document_metadata(db, doc_id, existing, doc_metadata)
+        _sync_summary_content(db, doc_id, existing, summary_text)
+        if existing.get("is_active", True) != retrievable:
+            db.table("documents").update(
+                {"is_active": retrievable}
+            ).eq("id", doc_id).execute()
+
+    if _count_chunks(db, doc_id) > 0:
+        return validation_failures
+
+    # Single-chunk write. Chunk metadata is intentionally empty — the
+    # validator spec for (fathom, call_summary) chunks is unpinned (see
+    # shared/ingestion/validate.py), which means empty metadata passes
+    # silently. Doc-level metadata carries all retrieval context; no need
+    # to duplicate it at the chunk level.
+    if embed_fn is None:
+        raise RuntimeError(
+            "embed_fn is required for summary ingest; pass shared.kb_query.embed."
+        )
+    try:
+        embedding = embed_fn(summary_text)
+    except Exception as exc:  # pragma: no cover — network path
+        logger.error("Summary embedding failed for document %s: %s", doc_id, exc)
+        return validation_failures
+
+    db.table("document_chunks").upsert(
+        {
+            "document_id": doc_id,
+            "chunk_index": 0,
+            "content": summary_text,
+            "embedding": embedding,
+            "metadata": {},
+        },
+        on_conflict="document_id,chunk_index",
+        ignore_duplicates=True,
+    ).execute()
+    return validation_failures
+
+
+def _find_summary_document(db, external_id: str) -> dict[str, Any] | None:
+    """Find the call_summary doc for a given recording_id.
+
+    Keyed on `(source, external_id, document_type)` — the widened unique
+    from migration 0011. Direct lookup, O(1), unlike the transcript_chunk
+    finder which filters metadata in Python for historical reasons.
+    """
+    resp = (
+        db.table("documents")
+        .select("id,is_active,metadata,content")
+        .eq("source", _SOURCE)
+        .eq("external_id", external_id)
+        .eq("document_type", _SUMMARY_DOC_TYPE)
+        .limit(1)
+        .execute()
+    )
+    rows = resp.data or []
+    return rows[0] if rows else None
+
+
+def _insert_summary_document(
+    db,
+    record: FathomCallRecord,
+    summary_text: str,
+    metadata: dict[str, Any],
+    *,
+    is_active: bool,
+) -> str:
+    payload = {
+        "source": _SOURCE,
+        "external_id": record.external_id,
+        "title": record.title,
+        "content": summary_text,
+        "document_type": _SUMMARY_DOC_TYPE,
+        "metadata": metadata,
+        "is_active": is_active,
+    }
+    resp = db.table("documents").insert(payload).execute()
+    return resp.data[0]["id"]
+
+
+def _sync_summary_content(
+    db, doc_id: str, existing: dict[str, Any], new_content: str
+) -> None:
+    """Keep documents.content in sync if Fathom regenerated the summary.
+
+    When Fathom fires `new-meeting-content-ready` twice for the same call
+    (docs don't confirm this happens but the F2.2 live-test is open on
+    it), the second delivery may carry an updated summary. Refresh the
+    text; do NOT re-embed (chunk reused) — the chunk's content column
+    stays at the old text but its embedding is still semantically close
+    to the new summary. If embedding staleness bites in retrieval, the
+    cheap fix is to delete the chunk row so the next re-run re-embeds.
+    """
+    if existing.get("content") == new_content:
+        return
+    db.table("documents").update({"content": new_content}).eq("id", doc_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# call_action_items (webhook-sourced only, V1)
+# ---------------------------------------------------------------------------
+
+
+def _upsert_action_items(
+    db,
+    call_id: str,
+    items,
+    client_resolver: ClientResolver,
+    team_resolver: TeamMemberResolver,
+) -> int:
+    """Delete-and-replace action items for this call.
+
+    Fathom doesn't provide a stable per-item id, so a clean replace is
+    the simplest idempotent pattern. On re-ingest of a call whose action
+    items changed (item added / removed / marked complete), the final
+    state matches whatever the most recent delivery carried.
+
+    Returns the number of rows inserted. When `items` is empty (Fathom
+    delivered an empty list for this call), deletes existing and writes
+    nothing — the contract the pipeline caller relies on.
+    """
+    db.table("call_action_items").delete().eq("call_id", call_id).execute()
+    if not items:
+        return 0
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        owner_type, owner_client_id, owner_team_member_id = _resolve_action_item_owner(
+            item, client_resolver, team_resolver
+        )
+        rows.append({
+            "call_id": call_id,
+            "owner_type": owner_type,
+            "owner_client_id": owner_client_id,
+            "owner_team_member_id": owner_team_member_id,
+            "description": item.description,
+            "status": "done" if item.completed else "open",
+            "completed_at": now_iso if item.completed else None,
+        })
+    if rows:
+        db.table("call_action_items").insert(rows).execute()
+    return len(rows)
+
+
+def _resolve_action_item_owner(
+    item,
+    client_resolver: ClientResolver,
+    team_resolver: TeamMemberResolver,
+) -> tuple[str, str | None, str | None]:
+    """Map Fathom's assignee to our owner_type + FK.
+
+    Team-member match takes precedence over client match — a team member
+    owning an action item is a stronger signal than a client owning one,
+    and the schema's CHECK on owner_type (`client`/`team_member`/`unknown`)
+    is exclusive. When the email is missing entirely, owner_type lands
+    as `unknown` with both FKs null.
+    """
+    email = (item.assignee_email or "").lower()
+    if not email:
+        return "unknown", None, None
+    team_id = team_resolver.lookup(email)
+    if team_id:
+        return "team_member", None, team_id
+    client_id = client_resolver.lookup(email)
+    if client_id:
+        return "client", client_id, None
+    return "unknown", None, None
 
 
 # ---------------------------------------------------------------------------

@@ -47,19 +47,17 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 - **Revisit trigger:** backlog ingest has been stable for 1+ week AND Ella V1 has been in beta with acceptable retrieval quality for at least several days.
 - **Logged:** 2026-04-21.
 
-## LLM-based call summary generation (fallback to Fathom webhook)
+## LLM-based call summary generation — RESOLVED 2026-04-24 via F2.3 (webhook path)
 
-- **What:** a Claude call per stored transcript that produces a clean summary, written into `documents` with `document_type='call_summary'` and metadata per conventions §2. Back-fills summaries for the backlog calls the TXT pipeline couldn't populate.
-- **Why deferred:** costs ~$5–10 one-time across the backlog, runs in a few minutes, but requires an eval harness for summary quality — and that harness doesn't exist yet. The preferred path is the Fathom webhook above, which gets summaries "free" from Fathom's own post-processing. LLM generation is the fallback if the webhook path stalls.
-- **Revisit trigger:** Ella V1 in beta with reviewer bandwidth available to validate summaries, OR Fathom webhook integration stalls for 2+ weeks.
-- **Logged:** 2026-04-22.
+- **Status:** superseded. F2.3 (2026-04-24) implemented `_ensure_summary_document` in `ingestion/fathom/pipeline.py`, which writes a `documents` row with `document_type='call_summary'` + one embedded chunk whenever a `FathomCallRecord` has `summary_text` populated. The webhook adapter in `ingestion/fathom/webhook_adapter.py` extracts that from Fathom's `default_summary` field. No LLM generation needed — Fathom's own post-processing provides the summary, we just ingest it. The migration-0011 widened unique (`source, external_id, document_type`) allows call_summary and call_transcript_chunk to coexist for the same recording.
+- **Backlog back-fill** (the original motivation for the LLM-based fallback) is NOT addressed by this — the TXT backlog has no summaries, so the 388 backlog transcripts stay without summary docs until either (a) a future re-export includes summaries, (b) the Fathom API's `GET /recordings/{id}/summary` endpoint is called per backlog call (cheap, ~$0 cost per call, only needs rate-limit awareness), or (c) LLM fallback is actually built. Option (b) is likely cheaper and faster than (c); worth considering as a one-off backfill script if retrieval demands it.
+- **Logged:** 2026-04-22 (original deferral); **resolved for new calls:** 2026-04-24 (F2.3). Backlog-backfill subtask remains open; re-log as a new entry if it becomes needed.
 
-## LLM-based action item extraction (fallback to Fathom webhook)
+## LLM-based action item extraction — RESOLVED 2026-04-24 via F2.3 (webhook path)
 
-- **What:** Claude pass over stored transcripts that extracts action items into `call_action_items`, one row per item with `owner_type`, description, due_date inferred when present. Back-fills the table the TXT pipeline couldn't populate.
-- **Why deferred:** Similar cost profile to LLM summaries (~$8–20 to backfill 389 calls) and requires an extraction-quality eval that we don't have. Cross-reference: see the LLM-summary entry above for the same pattern. Preferred path is the Fathom webhook, which delivers action items alongside summaries. LLM extraction is the fallback.
-- **Revisit trigger:** Ella V1 in beta + reviewer bandwidth available to validate extractions, OR Fathom webhook integration stalls.
-- **Logged:** 2026-04-22.
+- **Status:** superseded. F2.3 implemented `_upsert_action_items` in `ingestion/fathom/pipeline.py` which delete-replaces `call_action_items` rows for a call whenever a `FathomCallRecord` has `action_items` populated. The webhook adapter converts Fathom's `action_items[]` to our `ActionItem` dataclass, and the pipeline resolves each item's assignee via `ClientResolver`/`TeamMemberResolver` for `owner_type` + `owner_client_id` / `owner_team_member_id`. No LLM extraction needed — Fathom's own AI surfaces action items, we ingest them directly.
+- **Backlog back-fill** is NOT addressed — same reasoning as the summary deferral above: TXT backlog has no action items, so the 388 backlog transcripts stay with 0 rows in `call_action_items` until a new export includes them, the Fathom API is called per call, or LLM extraction is actually built. Priority for backfill is low — action items are most useful on recent calls for accountability tracking, not historical ones.
+- **Logged:** 2026-04-22 (original deferral); **resolved for new calls:** 2026-04-24 (F2.3). Backlog-backfill subtask remains open.
 
 ## scripts/churn_client.py atomic churn helper
 

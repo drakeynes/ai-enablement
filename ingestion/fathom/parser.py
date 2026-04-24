@@ -53,8 +53,28 @@ class Utterance:
 
 
 @dataclass(frozen=True)
+class ActionItem:
+    """One action item extracted from a call.
+
+    Shape mirrors Fathom's webhook `ActionItem` with light normalization
+    (email lowercased, playback url preserved verbatim). The backlog TXT
+    path never populates these — backlog records leave
+    `FathomCallRecord.action_items = None`. Only the webhook adapter
+    produces ActionItem instances.
+    """
+    description: str
+    user_generated: bool
+    completed: bool
+    recording_timestamp: str | None = None     # "HH:MM:SS" or None
+    recording_playback_url: str | None = None
+    assignee_email: str | None = None
+    assignee_display_name: str | None = None
+
+
+@dataclass(frozen=True)
 class FathomCallRecord:
-    """Structured view of a Fathom `.txt` transcript export."""
+    """Structured view of a Fathom call — from either the .txt backlog
+    export or the `new-meeting-content-ready` webhook payload."""
 
     # external_id comes from the Recording ID line, NOT from the URL's
     # call id. Recording ID is Fathom's durable artifact identifier and
@@ -79,6 +99,22 @@ class FathomCallRecord:
     raw_text: str
     source_path: Path | None = None
     parse_warnings: list[str] = field(default_factory=list)
+
+    # Webhook-sourced fields — None on TXT backlog records, populated by
+    # ingestion.fathom.webhook_adapter when ingesting from live deliveries.
+    # Three-state semantics on action_items matter for the pipeline:
+    #   None -> "no info, don't touch DB"
+    #   []   -> "call has zero action items; delete any existing, write none"
+    #   [..] -> "write these, replacing any existing for the call"
+    summary_text: str | None = None
+    action_items: list[ActionItem] | None = None
+
+    # "txt" (backlog) or "fathom_webhook" (live). Persisted into
+    # calls.raw_payload.source_format so the origin of a row is recoverable
+    # from the DB alone — matters when debugging a mis-ingested call or
+    # when the webhook payload shape evolves and we need to re-parse a
+    # single source's rows.
+    source_format: str = "txt"
 
 
 def parse_file(path: Path | str) -> FathomCallRecord:

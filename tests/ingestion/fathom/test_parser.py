@@ -123,16 +123,18 @@ def test_parse_text_preserves_transcript_and_raw_text():
 # ---------------------------------------------------------------------------
 
 
-def test_parse_text_without_action_items_succeeds():
-    """The backlog export has no ACTION ITEM lines. Parser must not
-    require them (and the pipeline deliberately doesn't populate
-    call_action_items from these transcripts — see
-    docs/ingestion/metadata-conventions.md §5 deferral)."""
+def test_parse_text_leaves_webhook_only_fields_none():
+    """The backlog export has no ACTION ITEM lines and no summary section.
+    F2.3 added nullable `summary_text` and `action_items` to FathomCallRecord
+    for the webhook adapter path. Backlog records must leave both unset
+    (None) — that's the three-state contract the pipeline relies on:
+      None -> "no info from this source, don't touch DB"
+      []   -> "call has zero action items, delete any existing"
+      [..] -> "write these, replacing existing"
+    See ingestion.fathom.parser.FathomCallRecord for the contract."""
     record = p.parse_text(_fixture_1on1())
-    # Nothing in the parser surfaces action items; the pipeline skips
-    # them for this source. The test guards against drift if someone
-    # adds an action-item extractor without reading the deferral note.
-    assert not hasattr(record, "action_items")
+    assert record.summary_text is None
+    assert record.action_items is None
 
 
 def test_parse_text_tolerates_extra_blank_lines_and_whitespace():
