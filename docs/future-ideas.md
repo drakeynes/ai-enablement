@@ -11,6 +11,46 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ---
 
+## Ella V2 — conversational behavior
+
+Four upgrades to how Ella handles Slack conversation flow, all surfaced during pilot testing 2026-04-27. None are bugs in V1 scope; all are "she's correct but feels stiff." Grouped here so they get picked up together, since each one's testing surface (the `#ella-test-drakeonly` channel + the pilot 7) is the same — easier to validate as a batch than one at a time.
+
+**Common revisit trigger for all four: after CSM Co-Pilot V1 ships.** CSM Co-Pilot is the next agent build and the higher business priority. Ella's V2 polish waits for that to land so we don't fragment focus.
+
+### V2.1 — Reply outside thread when contextually appropriate
+
+- **What:** today Ella always replies in-thread via `thread_ts` (set in `agents/ella/slack_handler.py` to the original mention's `ts` or thread root). Want her to sometimes reply in the main channel instead — quick acknowledgments ("got it, looking now") in channel; longer / multi-paragraph responses in thread. Today's threading is correct-but-stiff: a "yes" answer in a thread feels weirdly formal.
+- **Why deferred:** the rule for in-channel-vs-in-thread isn't crisp. Picking wrong is worse than always-thread. Needs either a heuristic (response length? whether the question itself was threaded?) or a content classification step. Both are V2 territory.
+- **Why this matters:** pilot clients are getting tone-perfect content from Ella but the conversational shape feels like a chatbot. Mixing channel + thread replies based on context is what a human teammate does.
+- **Revisit trigger:** after CSM Co-Pilot V1 ships.
+- **Logged:** 2026-04-27 (M1.3 testing in `#ella-test-drakeonly`).
+
+### V2.2 — Read prior thread context when @-mentioned mid-thread
+
+- **What:** when Ella is @-mentioned inside an existing Slack thread (not at thread root), she only sees the mentioning message — the thread's prior turns are invisible to her. The agent should fetch the full thread history via Slack's `conversations.replies` API, format the turns into the existing `thread_history` plumbing in `agents/ella/prompts.py:_render_context_section` (which already accepts a `thread_history` arg, currently unused), and include it in the system prompt so she has conversational context.
+- **Why deferred:** requires a Slack API call (`conversations.replies` with `channel` + `ts`) on every mid-thread mention, plus token-budget management for long threads. Scope-wise it's ~50 lines but it's surface area we don't need for the V1 pilot use case (most pilot mentions are at thread root).
+- **Why this matters:** as pilot adoption grows, threaded back-and-forth conversations will become normal. Today, asking Ella "and what about Y?" in a thread where she just answered about X gets a confused response because she doesn't see the X exchange.
+- **Revisit trigger:** after CSM Co-Pilot V1 ships, OR a pilot client visibly hits the "Ella forgot the thread" failure mode.
+- **Logged:** 2026-04-27 (M1.3 testing).
+
+### V2.3 — Respond to bare @-mentions
+
+- **What:** today, mentioning `@Ella` alone (no follow-up message) produces no reply — the agent extracts an empty string after `_strip_mentions` and presumably the LLM returns nothing useful. Should respond to bare pings with a friendly conversational opener like "Hey, what's up?" or "I'm here — what do you need?" so the interaction doesn't feel dead.
+- **Why deferred:** trivial fix (~10 lines: detect empty stripped text in `agents/ella/slack_handler.py`, return a canned warm response without going through the agent). But "trivial" multiplies fast — there's no reason to ship this in isolation when V2.1/V2.2/V2.4 all touch the same module.
+- **Why this matters:** a Slack ping with no reply feels broken even when nothing was technically wrong. Pilot clients will mention Ella out of curiosity ("hey @Ella"); a silent response erodes trust.
+- **Revisit trigger:** after CSM Co-Pilot V1 ships, batched with the rest of V2.x.
+- **Logged:** 2026-04-27 (M1.3 testing).
+
+### V2.4 — Speaker identification beyond the channel's mapped client
+
+- **What:** Ella currently treats every speaker in a pilot channel as the channel's mapped client. In `#ella-test-drakeonly` (mapped to Javi Pena per the test fixture), she addresses Drake as "Javi" because the channel→client resolution defaults to the channel's mapped row. In real client channels with multiple participants (Scott + the client + maybe a partner or assistant), she'd mis-attribute every non-client message as the client. The fix: resolve each Slack message's `user` field to the right `clients` or `team_members` row via `slack_user_id`, and pass that resolved identity into the prompt's "who is asking right now" section.
+- **Why deferred:** plumbing change across `slack_handler.py` (asker resolution lookup), `agent.py` (asker context passed through), `prompts.py` (new section for the asker if they're not the channel's mapped client). Not hard but touches multiple files and has prompt-engineering implications (how does Ella address a non-client speaker in a client channel? "Scott, I see Javi is asking..."?). V2 scope.
+- **Why this matters:** as soon as a pilot channel has more than one human participant, mis-attribution is visible and weird. Today this doesn't happen because most pilot mentions come from the mapped client themselves. The day Scott jumps into a pilot channel to clarify something and Ella calls him "Javi," credibility takes a hit.
+- **Revisit trigger:** after CSM Co-Pilot V1 ships, OR first time a non-mapped-client human messages Ella in a pilot channel and the mis-attribution is visible.
+- **Logged:** 2026-04-27 (M1.3 testing — observed Drake being addressed as "Javi").
+
+---
+
 ## Coaching moments / playbook document type
 
 - **What:** a new `document_type = 'coaching_moment'` (or `'playbook'`) for curated cross-client insights distilled from call summaries — high-signal patterns, scripts, objection handlers — promoted to globally retrievable documents so Ella can surface them to any client who asks.
