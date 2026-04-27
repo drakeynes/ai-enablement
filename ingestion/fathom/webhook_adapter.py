@@ -304,27 +304,39 @@ def _build_action_items(raw: Any) -> list[ActionItem] | None:
 def _extract_summary_text(summary_obj: Any) -> str | None:
     """Pull a plain-text summary from Fathom's `default_summary` field.
 
-    F2.1 doc read didn't capture `MeetingSummary`'s exact shape — only
-    that it's a nested object. This extractor tolerates the three shapes
-    plausibly in play:
-      - `default_summary` is a string  (e.g., `{..., "default_summary":
-        "Summary text..."}`)
-      - `default_summary` is `{"text": "...", ...}` or `{"markdown":
-        "...", ...}` — common webhook conventions
-      - missing / None / unknown shape — returns None, pipeline skips
-        writing a call_summary document
+    Real-world shape (verified 2026-04-27 against M1.2.5 cron sweep
+    payloads): Fathom delivers `default_summary` as
+    `{"markdown_formatted": "## Customer:\\n\\n...", "template_name":
+    "Customer Success"}`. The `markdown_formatted` key is canonical
+    today; the others below are defensive fallbacks for spec drift /
+    older account configurations.
 
-    When Fathom ships a first real payload, verify against this extractor
-    and tighten. Until then, return None defensively rather than crash the
-    whole ingest for a missing summary — action_items + transcript still
-    land.
+    F2.1 doc read missed `markdown_formatted` (the OpenAPI spec was
+    silent on `MeetingSummary`'s field names) so M1.2.5's first real
+    sweep produced 0 summary docs across 15 client calls. The fix —
+    adding `markdown_formatted` to the priority list — is what closes
+    that gap.
+
+    Returns:
+      - The first non-empty string found at one of the recognized keys.
+      - None if the input is missing, empty, or has no recognized key.
     """
     if summary_obj is None:
         return None
     if isinstance(summary_obj, str):
         return summary_obj.strip() or None
     if isinstance(summary_obj, dict):
-        for key in ("markdown", "text", "content", "body", "summary"):
+        # `markdown_formatted` is what Fathom actually sends today;
+        # `markdown` / `text` / `content` / `body` / `summary` cover
+        # spec-documented or convention-shaped fallbacks.
+        for key in (
+            "markdown_formatted",
+            "markdown",
+            "text",
+            "content",
+            "body",
+            "summary",
+        ):
             val = summary_obj.get(key)
             if isinstance(val, str) and val.strip():
                 return val.strip()

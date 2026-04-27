@@ -190,6 +190,39 @@ def test_summary_with_text_field_accepted():
     assert record.summary_text == "Plain-text summary"
 
 
+def test_summary_with_markdown_formatted_field_accepted():
+    """Real Fathom shape verified 2026-04-27 against M1.2.5 cron sweep.
+
+    Fathom delivers `default_summary` as `{"markdown_formatted": "...",
+    "template_name": "..."}`. F2.1 doc read missed this — neither
+    `markdown_formatted` nor `template_name` were in the spec. M1.2.5
+    ingested 15 client calls with 0 summary docs because the adapter
+    didn't recognize the key. This test pins the real shape so a
+    future regression can't drop it again."""
+    payload = _fixture_happy_path()
+    payload["default_summary"] = {
+        "markdown_formatted": "## Customer:\n\n[Fernando — bilingual SDR...]",
+        "template_name": "Customer Success",
+    }
+    record = a.record_from_webhook(payload)
+    assert record.summary_text is not None
+    assert record.summary_text.startswith("## Customer:")
+    assert "Fernando" in record.summary_text
+
+
+def test_summary_priority_markdown_formatted_over_others():
+    """When a payload has both `markdown_formatted` AND a fallback key,
+    the canonical Fathom shape (markdown_formatted) wins."""
+    payload = _fixture_happy_path()
+    payload["default_summary"] = {
+        "markdown_formatted": "the canonical one",
+        "markdown": "the fallback",
+        "text": "another fallback",
+    }
+    record = a.record_from_webhook(payload)
+    assert record.summary_text == "the canonical one"
+
+
 def test_summary_whitespace_only_produces_none():
     payload = _fixture_happy_path()
     payload["default_summary"] = {"markdown": "   \n\n  "}
