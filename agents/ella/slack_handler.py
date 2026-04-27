@@ -43,6 +43,7 @@ from typing import Any
 from agents.ella.agent import respond_to_mention
 from shared.db import get_client
 from shared.logging import logger
+from shared.slack_format import markdown_to_mrkdwn
 
 # Slack mention tokens look like `<@U12345>` or `<@U12345|name>`. We
 # strip them out before passing the text to the agent so the model
@@ -117,9 +118,18 @@ def handle_slack_event(event_payload: dict[str, Any]) -> dict[str, Any]:
 
     response = respond_to_mention(agent_event)
 
+    # Convert any standard Markdown in Claude's reply into Slack mrkdwn
+    # before handing off to the post path. The system prompt asks for
+    # mrkdwn natively; the converter is the safety net for cases where
+    # Claude reverts to **Markdown** anyway. agent_runs.output_summary
+    # stores the raw response (set in agent.py) so this transformation
+    # only affects what the user sees in Slack — historical raw output
+    # stays available for debugging and future non-Slack consumers.
+    slack_text = markdown_to_mrkdwn(response.response_text)
+
     return {
         "responded": True,
-        "text": response.response_text,
+        "text": slack_text,
         "thread_ts": thread_ts,
         "channel_id": channel_id,
         "escalated": response.escalated,
