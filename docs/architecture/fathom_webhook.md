@@ -17,6 +17,31 @@ still open; the design is robust to worst-case assumptions on both.
 - `docs/runbooks/slack_webhook.md` — sync-on-Vercel precedent (same pattern here)
 - `docs/agents/ella.md` — downstream consumer of the data this lands
 
+## Doc-vs-reality deltas surfaced at deploy (M1.2.5, 2026-04-27)
+
+Two F2.1 doc-read assumptions turned out to differ from Fathom's
+deployed API. Both fixed; pinned by unit tests; flagged here so this
+doc is the source of truth on what actually ships:
+
+1. **Outbound auth: `X-Api-Key`, not `Authorization: Bearer`.** The
+   OpenAPI spec describes `securitySchemes: bearerAuth`, but Fathom's
+   deployed `/external/v1/*` endpoints accept `X-Api-Key: <key>` and
+   reject `Bearer` with 401. `api/fathom_backfill.py:_fetch_meetings_window`
+   sends `X-Api-Key`. Cited in inline comments at the request site.
+2. **Summary key: `markdown_formatted`, not `markdown`.** Fathom
+   delivers `default_summary` as `{"markdown_formatted": "...",
+   "template_name": "..."}`. The spec didn't enumerate `MeetingSummary`'s
+   fields, so F2.1's defensive fallback list (`markdown`/`text`/
+   /`content`/`body`/`summary`) missed the actual key. Adapter at
+   `ingestion/fathom/webhook_adapter.py:_extract_summary_text` now
+   checks `markdown_formatted` first, with the legacy fallbacks
+   retained. Pinned by `test_summary_with_markdown_formatted_field_accepted`.
+
+The shared lesson: read OpenAPI carefully, but probe with one real
+curl before declaring discovery done. Captured in `docs/followups.md`
+§ "API integration discovery — verify auth scheme empirically before
+declaring done" and in saved memory.
+
 ## Non-goals
 
 - Streaming webhooks into agents in real time. Agents consume via retrieval; a call landing at 2:04pm doesn't need to be in Ella's next reply at 2:04pm.

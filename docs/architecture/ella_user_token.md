@@ -151,6 +151,26 @@ tied to whichever account did the OAuth. If Drake ever leaves or his
 account is deactivated, his user token revokes. Better to bind the
 token to a dedicated automation account that exists for this purpose.
 
+### 2a. Collaborator workaround (surfaced at M1.4.2)
+
+When Ella first attempted the install URL, Slack rejected with:
+*"Contact a member of your team who is a Collaborator of this app
+and they can add you."* The "Reinstall to Workspace" path on
+api.slack.com is collaborator-gated for non-distributed apps —
+Ella isn't an app collaborator by default.
+
+**Fix:** in admin browser, api.slack.com → Settings → Collaborators
+→ Add Collaborators → search Ella → confirm. Ella can then run the
+install. Optional cleanup after the OAuth completes: remove Ella as
+a Collaborator (the token persists past collaborator status — it's
+bound to the consent grant). Tightens least-privilege; not required.
+
+This will hit again on every future re-install (e.g., scope changes,
+secret rotation). Documented in `docs/followups.md` §
+"Fathom webhook registration UI viewport bug" — same pattern in a
+different vendor; same lesson (provider UIs are friction surfaces
+that re-bite on every re-auth).
+
 ### 3. Add Ella to pilot channels
 
 The Ella user account needs to be added to each of the 7 pilot client
@@ -181,6 +201,41 @@ assumes the AI Partner workspace owns the channels.
 | Slack's developer policy on AI / impersonation flags this | Low if disclosed | See "Slack policy" below — disclose clearly. |
 | Existing `#ella-test-drakeonly` history stays attributed to bot | Certain | No retroactive re-attribution. Cutover produces a history split (bot before, user after). Acceptable. |
 | Cutover breaks something we didn't anticipate | Medium | Keep `SLACK_BOT_TOKEN` env var live; conditional in `_post_to_slack` to fall back if the user-token path fails. Rollback = flip an env var, redeploy. |
+
+## Post-deploy observation: the mention-target asymmetry (M1.4.3)
+
+After M1.4.3 deployed and smoke-tested in `#ella-test-drakeonly`,
+Drake observed: Ella's *replies* render as the @ella user (no APP tag,
+exactly as designed) — but the *@-mention used to invoke her* still
+targets the bot account (which displays "APP" next to the bot's name
+in the mention itself). Two distinct surfaces:
+
+- **Reply rendering** (the message content) — comes from
+  `chat.postMessage`, controlled by which token the handler uses.
+  M1.4.3 made this `xoxp-` → no APP tag. ✅ Solved.
+- **Mention target** (the `@<who>` someone types or autocompletes
+  to invoke Ella) — comes from Slack's Events API subscription.
+  `app_mention` events are bound to the bot user; that's a Slack
+  architectural constraint. Mentioning the @ella user account
+  doesn't fire any event our handler subscribes to. So users still
+  type `@<bot-name>` to wake Ella, and Slack renders that mention
+  with the bot's "APP" tag.
+
+Whether this fully addresses Nabeel's "looks unprofessional" feedback
+is open as of 2026-04-27 close-out. M1.4.5 (pilot rollout) holds
+until Nabeel's read comes back. Possible next-steps if the mention
+asymmetry isn't acceptable:
+
+- Switch Ella's invocation surface entirely (slash command — no
+  bot user appearance, but loses thread context)
+- Subscribe to plain `message.channels` events and filter for `@ella`
+  user mentions (works but: every message in every pilot channel hits
+  our endpoint, and Ella has to be a workspace member of each — already
+  true)
+- Accept the asymmetry; document it as a known visual quirk of
+  Slack's bot-vs-user model
+
+No code change today. Decision lives with Drake + Nabeel feedback.
 
 ## Slack policy on AI / impersonation
 
