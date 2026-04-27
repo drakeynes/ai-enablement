@@ -21,7 +21,7 @@ Design rationale (`docs/architecture/fathom_webhook.md` §f):
 Sync flow:
 
   1. Auth check — bearer token in `Authorization` header, compared
-     constant-time against `BACKFILL_AUTH_TOKEN`. Fail → 401.
+     constant-time against `FATHOM_BACKFILL_AUTH_TOKEN`. Fail → 401.
   2. Determine lookback window:
        since = MAX(received_at) FROM webhook_deliveries
                 WHERE source LIKE 'fathom%' - 6h
@@ -40,7 +40,7 @@ Sync flow:
      `more_remaining=true`. Tomorrow's cron picks up where we stopped.
 
 Env vars required (set in the Vercel project — NOT committed):
-  BACKFILL_AUTH_TOKEN          — random secret, value of the cron's
+  FATHOM_BACKFILL_AUTH_TOKEN          — random secret, value of the cron's
                                  `Authorization: Bearer <token>` header.
                                  Drake generates and sets in M1.2.5.
   FATHOM_API_KEY               — Fathom team-account API key with read
@@ -265,13 +265,13 @@ def _verify_auth(headers: Any) -> bool:
 
     Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` where
     CRON_SECRET is a Vercel project env var. We read our own
-    BACKFILL_AUTH_TOKEN env var and compare constant-time. Drake will
-    set CRON_SECRET = BACKFILL_AUTH_TOKEN to the same value when wiring
+    FATHOM_BACKFILL_AUTH_TOKEN env var and compare constant-time. Drake will
+    set CRON_SECRET = FATHOM_BACKFILL_AUTH_TOKEN to the same value when wiring
     the cron up in Vercel.
     """
-    expected = os.environ.get("BACKFILL_AUTH_TOKEN") or ""
+    expected = os.environ.get("FATHOM_BACKFILL_AUTH_TOKEN") or ""
     if not expected:
-        logger.error("fathom_backfill: BACKFILL_AUTH_TOKEN not configured")
+        logger.error("fathom_backfill: FATHOM_BACKFILL_AUTH_TOKEN not configured")
         return False
     auth_header = headers.get("Authorization") or headers.get("authorization") or ""
     if not auth_header.startswith("Bearer "):

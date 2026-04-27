@@ -20,7 +20,7 @@ Requires:
   - FATHOM_API_KEY in .env.local (the real production one — Drake will
     have set it during M1.2.5; for this M1.2 dev-loop test we read it
     from .env.local just like other shared.* modules do)
-  - BACKFILL_AUTH_TOKEN — generated locally for this test only (random
+  - FATHOM_BACKFILL_AUTH_TOKEN — generated locally for this test only (random
     bytes); production Vercel will get its own value from Drake
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ load_dotenv(_REPO / ".env.local")
 # Set the test bearer BEFORE importing the handler so module-level reads
 # (none today, but defensive) see it.
 _TEST_TOKEN = "BACKFILL_TEST_" + secrets.token_hex(16)
-os.environ["BACKFILL_AUTH_TOKEN"] = _TEST_TOKEN
+os.environ["FATHOM_BACKFILL_AUTH_TOKEN"] = _TEST_TOKEN
 
 from api.fathom_backfill import handler  # noqa: E402 — must follow env setup
 
