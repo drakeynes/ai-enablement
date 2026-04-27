@@ -11,6 +11,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## API integration discovery — verify auth scheme empirically before declaring done
+
+- **What:** F2.1's discovery session (Fathom webhook intel) thoroughly read the OpenAPI spec, payload schemas, signature verification, retry semantics — but missed that Fathom's external API uses `X-Api-Key: <key>` for outbound auth, NOT `Authorization: Bearer <key>`. F2.1 produced an architecture doc and 8 commits' worth of code on the assumption of Bearer auth; M1.2's `api/fathom_backfill.py:_fetch_meetings_window` shipped with `Authorization: Bearer ${api_key}` and 401'd against Fathom on first real run. M1.2.5 caught it via Drake's manual-curl probe (`curl -H "X-Api-Key: ..." https://api.fathom.ai/external/v1/meetings` → 200). One-line code fix; the lost time was the deploy → 401 → diagnose loop.
+- **Why it matters:** every future external-API integration (CRM, Calendar, n8n webhook receivers, future agent integrations) has the same risk — read the spec carefully, miss one detail, ship code that 401s on first real call. The OpenAPI / docs are the *intended* shape but providers don't always document the actual deployed auth scheme accurately, especially when the spec says `securitySchemes: bearerAuth` but the provider's implementation accepts something else.
+- **Next action:** before declaring any API discovery session "done," **run one real curl against the production API endpoint with the documented auth scheme.** A 200 confirms the auth shape; a 401 surfaces the gap before code ships. Add this as a step to a future `docs/runbooks/api_integration_discovery.md` runbook (analog to `adding_new_ingestion_source.md`) — written when the second integration starts (CSM Co-Pilot V2 may add CRM API integration; that's the trigger).
+- **Logged:** 2026-04-27 (M1.2.5 deploy caught the F2.1 gap).
+
 ## Fathom webhook registration UI viewport bug — workaround needed every time
 
 - **What:** Fathom's webhook registration UI (Settings → API Access → Add Webhook) has a viewport rendering bug where the verify/save button renders below the fold without a scrollbar. On a default browser zoom + standard laptop display, you can fill the form but not submit it. M1.1 lost ~3 days to this — registration appeared complete but Fathom never sent deliveries because the registration object hadn't been finalized server-side. **Workaround:** zoom browser out (Cmd-/Ctrl-`-`) until the verify button is visible, then submit.

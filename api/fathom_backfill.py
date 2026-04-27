@@ -364,7 +364,12 @@ def _fetch_meetings_window(api_key: str, since: datetime) -> list[dict[str, Any]
             url,
             method="GET",
             headers={
-                "Authorization": f"Bearer {api_key}",
+                # Fathom's external API uses X-Api-Key, NOT Authorization:
+                # Bearer. F2.1 doc read missed this; M1.2.5 deploy caught
+                # it via real-curl probe. Verified 2026-04-27 against
+                # GET /external/v1/meetings: X-Api-Key returns 200, Bearer
+                # returns 401.
+                "X-Api-Key": api_key,
                 "Accept": "application/json",
             },
         )

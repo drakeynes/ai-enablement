@@ -26,7 +26,7 @@ pause" below.
   the webhook `id` back to the user, **we don't have the webhook id
   captured**. This matters only for teardown — the id can be fetched via
   Fathom's list-webhooks API later if rotation or deletion is needed:
-  `curl -sS -H "Authorization: Bearer $FATHOM_API_KEY" https://api.fathom.ai/external/v1/webhooks`.
+  `curl -sS -H "X-Api-Key: $FATHOM_API_KEY" https://api.fathom.ai/external/v1/webhooks`.
 - `FATHOM_WEBHOOK_SECRET` set in Vercel env vars (Production scope),
   redeploy done.
 
@@ -156,7 +156,7 @@ immediately — Fathom only shows it once. Store in Bitwarden as
 
 ```bash
 curl -sS -X POST https://api.fathom.ai/external/v1/webhooks \
-  -H "Authorization: Bearer <FATHOM_API_KEY_PROD>" \
+  -H "X-Api-Key: <FATHOM_API_KEY_PROD>" \
   -H "Content-Type: application/json" \
   -d '{
     "destination_url": "https://ai-enablement-sigma.vercel.app/api/fathom_events",
@@ -317,7 +317,7 @@ order by received_at desc;
 | Symptom | Likely cause | Action |
 |---|---|---|
 | `select max(received_at) from webhook_deliveries where source='fathom_cron'` is older than 36h | Cron didn't fire OR fired and 401'd | Vercel dashboard → Cron Jobs tab — should show daily 08:00 UTC entries. If they're 401ing, `FATHOM_BACKFILL_AUTH_TOKEN` and `CRON_SECRET` env vars don't match. |
-| Sweep returns `meetings_seen=0` consistently | `FATHOM_API_KEY` invalid OR account has no meetings in window | Verify the key works: `curl -H "Authorization: Bearer $KEY" https://api.fathom.ai/external/v1/meetings?include_summary=true` should return JSON. |
+| Sweep returns `meetings_seen=0` consistently | `FATHOM_API_KEY` invalid OR account has no meetings in window | Verify the key works: `curl -H "X-Api-Key: $KEY" https://api.fathom.ai/external/v1/meetings?include_summary=true` should return JSON. |
 | Sweep returns `more_remaining=true` repeatedly | More than 50 missed calls in the lookback window | Tomorrow's run continues catch-up. If catch-up doesn't converge after a week, raise `_MAX_INGESTS_PER_SWEEP` in `api/fathom_backfill.py` or run a manual sweep with a shorter window. |
 | `failed` rows accumulating | Pipeline raising on a specific payload shape | Inspect `webhook_deliveries.processing_error` for the failing rows; the `payload` jsonb has the raw delivery for re-running through the adapter locally. |
 | Sweep took >5 min and Vercel killed it | Too many missed calls + slow embeddings | Same as above — raise `_MAX_INGESTS_PER_SWEEP` OR manually run with `--limit` (the per-sweep cap defends against this). |
@@ -436,7 +436,7 @@ To stop Fathom deliveries entirely (e.g., for maintenance window):
 
 ```bash
 curl -sS -X DELETE https://api.fathom.ai/external/v1/webhooks/<WEBHOOK_ID> \
-  -H "Authorization: Bearer <FATHOM_API_KEY_PROD>"
+  -H "X-Api-Key: <FATHOM_API_KEY_PROD>"
 ```
 
 Fathom stops delivering immediately. The Vercel endpoint stays live (200s
