@@ -7,6 +7,13 @@
     "api/fathom_events.py": {
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 60
+    },
+    "api/fathom_backfill.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/fathom_backfill", "schedule": "0 8 * * *" }
+  ]
 }

@@ -208,6 +208,136 @@ registered with a wrong URL.
 
 ---
 
+## Backfill cron — `api/fathom_backfill.py`
+
+The cron is the daily safety net behind the live webhook. Even with a healthy
+webhook, Fathom can drop or delay deliveries during outages, retry exhaustion,
+or the registration-bug scenarios from M1.1. The cron sweeps Fathom's
+`GET /meetings` once a day, identifies anything not yet in `calls`, and
+ingests it through the same adapter + pipeline the webhook uses.
+
+### Status
+
+**As of 2026-04-27 (M1.2 paused):** handler at `api/fathom_backfill.py` built
+and locally tested for auth-only paths (no auth → 401, wrong bearer → 401,
+missing `FATHOM_API_KEY` → 500). NOT YET deployed. NOT YET exercised against
+real Fathom data — that requires `FATHOM_API_KEY` in `.env.local` for the
+local test, OR M1.2.5 deploy + manual cron trigger. The "Deploy" section of
+this runbook below covers M1.2.5.
+
+### Schedule
+
+Daily at **08:00 UTC** (`0 8 * * *` cron expression in `vercel.json`). Chosen
+because:
+- Fathom's own post-processing for US-hours coaching calls finishes by
+  ~04:00 UTC the next day (Scott's calls end ~22:00 UTC, summaries ready
+  ~15 min later).
+- 08:00 UTC is before US business hours so any gap surfaces before pilot
+  clients are active in Slack.
+- Daily is conservative — if empirical miss-rate demands faster catch-up,
+  tighten to hourly (Vercel Pro tier required for sub-day cadence).
+
+### Required env vars (Vercel project)
+
+| Var | Purpose | Source |
+|---|---|---|
+| `FATHOM_API_KEY` | Read access to `/external/v1/meetings` | Drake generates from Fathom team account during M1.2.5 |
+| `BACKFILL_AUTH_TOKEN` | Bearer token the cron sends in `Authorization` | Generate with `openssl rand -hex 32` during M1.2.5 |
+| `CRON_SECRET` | Same value as `BACKFILL_AUTH_TOKEN` — what Vercel Cron actually puts in the header | Set both to the same value |
+| Existing | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY` | Already in Vercel env from earlier sessions |
+
+### Deploy (M1.2.5 — not yet done)
+
+1. **Generate `BACKFILL_AUTH_TOKEN`:**
+   ```bash
+   openssl rand -hex 32
+   ```
+   Save to Bitwarden as `FATHOM_BACKFILL_AUTH_TOKEN`.
+
+2. **Generate `FATHOM_API_KEY`** from the Fathom team account: Settings →
+   API Access → Generate API Key. Save to Bitwarden as `FATHOM_API_KEY_PROD`.
+   (Distinct from the webhook secret.)
+
+3. **Set env vars on Vercel** (Project → Settings → Environment Variables,
+   Production scope):
+   - `FATHOM_API_KEY` = the Fathom key
+   - `BACKFILL_AUTH_TOKEN` = the random hex from step 1
+   - `CRON_SECRET` = the same random hex (Vercel Cron uses this internally
+     to populate the `Authorization` header)
+
+4. **Push the commit** that adds `api/fathom_backfill.py` + the cron entry
+   in `vercel.json`. Vercel auto-builds. The cron entry takes effect on
+   the next deploy.
+
+5. **Manual trigger to verify before waiting for 08:00 UTC:**
+   ```bash
+   curl -i -X POST \
+     -H "Authorization: Bearer <BACKFILL_AUTH_TOKEN>" \
+     https://ai-enablement-sigma.vercel.app/api/fathom_backfill
+   ```
+   Expect a 200 with summary JSON: `{"ok": true, "meetings_seen": N,
+   "already_present": M, "ingested": K, "failed": 0, "more_remaining": false,
+   ...}`. The first sweep should show `already_present` ≈ count of
+   F1.4 backlog calls in the lookback window, `ingested` = however many
+   weekend/Monday calls landed since registration.
+
+6. **Verify downstream rows** for any ingested call:
+   ```sql
+   select c.external_id, c.title, c.call_category,
+          (select count(*) from documents where source='fathom' and external_id=c.external_id) as docs,
+          (select count(*) from call_action_items where call_id=c.id) as ai
+   from calls c
+   where c.external_id in (
+     select call_external_id from webhook_deliveries where source='fathom_cron'
+   );
+   ```
+
+### Daily monitoring queries
+
+```sql
+-- Did the cron run today?
+select max(received_at) from webhook_deliveries where source = 'fathom_cron';
+
+-- Per-source counts for the last 24h (gives the webhook-vs-cron coverage picture)
+select source, processing_status, count(*)
+from webhook_deliveries
+where received_at > now() - interval '24 hours'
+group by source, processing_status order by source, processing_status;
+
+-- Recent failures across both paths
+select webhook_id, source, processing_status, received_at, processing_error
+from webhook_deliveries
+where processing_status in ('failed','malformed')
+  and received_at > now() - interval '7 days'
+order by received_at desc;
+```
+
+### Failure modes and what to do
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| `select max(received_at) from webhook_deliveries where source='fathom_cron'` is older than 36h | Cron didn't fire OR fired and 401'd | Vercel dashboard → Cron Jobs tab — should show daily 08:00 UTC entries. If they're 401ing, `BACKFILL_AUTH_TOKEN` and `CRON_SECRET` env vars don't match. |
+| Sweep returns `meetings_seen=0` consistently | `FATHOM_API_KEY` invalid OR account has no meetings in window | Verify the key works: `curl -H "Authorization: Bearer $KEY" https://api.fathom.ai/external/v1/meetings?include_summary=true` should return JSON. |
+| Sweep returns `more_remaining=true` repeatedly | More than 50 missed calls in the lookback window | Tomorrow's run continues catch-up. If catch-up doesn't converge after a week, raise `_MAX_INGESTS_PER_SWEEP` in `api/fathom_backfill.py` or run a manual sweep with a shorter window. |
+| `failed` rows accumulating | Pipeline raising on a specific payload shape | Inspect `webhook_deliveries.processing_error` for the failing rows; the `payload` jsonb has the raw delivery for re-running through the adapter locally. |
+| Sweep took >5 min and Vercel killed it | Too many missed calls + slow embeddings | Same as above — raise `_MAX_INGESTS_PER_SWEEP` OR manually run with `--limit` (the per-sweep cap defends against this). |
+
+### Manual rerun (out-of-band)
+
+If something goes sideways and you need to force a sweep mid-day:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer <BACKFILL_AUTH_TOKEN>" \
+  https://ai-enablement-sigma.vercel.app/api/fathom_backfill
+```
+
+Same idempotency rules apply — already-ingested external_ids skip cleanly.
+A manual rerun within minutes of a scheduled run will mostly produce
+`already_present` rows (the just-ingested ones).
+
+---
+
 ## Monitoring
 
 ### Daily health query
