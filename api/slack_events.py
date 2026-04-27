@@ -247,25 +247,107 @@ def _process_mention(payload: dict[str, Any]) -> None:
 
 
 def _post_to_slack(*, channel: str, text: str, thread_ts: str | None) -> None:
-    """POST to Slack's Web API chat.postMessage endpoint.
+    """POST Ella's reply to Slack via chat.postMessage.
 
-    Uses stdlib `urllib.request` to avoid adding `requests` or
-    `slack_sdk` as a runtime dep — the call is simple enough that the
-    heavier libraries aren't earning their keep.
+    Two-token strategy (M1.4):
+      1. If `SLACK_USER_TOKEN` is set, post via the user token (`xoxp-`).
+         Renders as a regular user message — no APP tag. This is the
+         polish Nabeel asked for.
+      2. On any failure of the user path (HTTP error, network exception,
+         Slack-side `ok=false` like missing_scope / not_in_channel),
+         fall through to the bot-token path (`xoxb-`). Bot path renders
+         with the APP tag but works as a permanent safety net.
 
-    Slack's Web API returns HTTP 200 even on application errors;
-    `ok: false` in the response body signals failure. We parse and
-    log the full body on failure so a missing scope or wrong channel
-    surfaces in Vercel logs.
+    Operational rollback: unset `SLACK_USER_TOKEN` on Vercel and redeploy.
+    The user path is then skipped entirely and posts revert to the bot
+    path — no code change needed.
+
+    Failure logging captures HTTP status and Slack `error` codes only.
+    Tokens and request bodies are NEVER logged.
     """
-    token = os.environ.get("SLACK_BOT_TOKEN")
-    if not token:
-        raise RuntimeError("SLACK_BOT_TOKEN not set")
-
     body: dict[str, Any] = {"channel": channel, "text": text}
     if thread_ts:
         body["thread_ts"] = thread_ts
 
+    user_token = os.environ.get("SLACK_USER_TOKEN")
+    if user_token:
+        try:
+            ok, slack_error = _call_chat_post_message(user_token, body)
+            if ok:
+                logger.info(
+                    "slack.postMessage ok via user-token: channel=%s thread_ts=%s",
+                    channel,
+                    thread_ts,
+                )
+                return
+            logger.warning(
+                "slack.postMessage user-token path returned ok=false "
+                "(slack_error=%s) — falling back to bot-token",
+                slack_error,
+            )
+        except Exception as exc:
+            # Any transport-level failure on the user path: HTTP non-2xx,
+            # timeout, JSON decode error, etc. Catch broadly so the bot
+            # path is reachable. Don't include the request body or token
+            # in the log line.
+            logger.warning(
+                "slack.postMessage user-token path raised %s: %s — "
+                "falling back to bot-token",
+                type(exc).__name__,
+                exc,
+            )
+
+    # Bot path — either user token absent or user path failed. This is
+    # the exact behavior the handler had before M1.4; preserved verbatim
+    # as the safety net.
+    bot_token = os.environ.get("SLACK_BOT_TOKEN")
+    if not bot_token:
+        raise RuntimeError("SLACK_BOT_TOKEN not set")
+    try:
+        ok, slack_error = _call_chat_post_message(bot_token, body)
+        if ok:
+            logger.info(
+                "slack.postMessage ok via bot-token: channel=%s thread_ts=%s",
+                channel,
+                thread_ts,
+            )
+        else:
+            # Bot path also failed at the Slack-app layer. Log loudly
+            # so this surfaces in Vercel logs; caller (_process_mention)
+            # already swallows exceptions, so we don't re-raise on
+            # ok=false. The original Slack ack was already 200; this
+            # is post-ack error logging only.
+            logger.error(
+                "slack.postMessage bot-token also returned ok=false: "
+                "channel=%s slack_error=%s",
+                channel,
+                slack_error,
+            )
+    except Exception:
+        # Bot path transport failure — re-raise so the caller's
+        # logger.exception captures the traceback. Slack's ack already
+        # returned 200; the function's caller never sees this exception
+        # propagate to the HTTP response.
+        logger.exception(
+            "slack.postMessage bot-token path raised — both paths failed",
+        )
+        raise
+
+
+def _call_chat_post_message(token: str, body: dict[str, Any]) -> tuple[bool, str | None]:
+    """Make one POST to chat.postMessage with the given token.
+
+    Returns `(ok, slack_error)`:
+      - `ok=True, slack_error=None` on Slack-side success.
+      - `ok=False, slack_error=<code>` on HTTP 200 with `ok=false`
+        (e.g., `missing_scope`, `not_in_channel`, `channel_not_found`).
+      - Raises on transport-level failure (HTTP non-2xx, network
+        timeout, JSON decode error). The caller decides whether to
+        fall through to a different token.
+
+    The token is held only in the Authorization header sent to Slack;
+    never logged, never appears in any returned value.
+    """
     req = urllib.request.Request(
         "https://slack.com/api/chat.postMessage",
         data=json.dumps(body).encode("utf-8"),
@@ -275,21 +357,7 @@ def _post_to_slack(*, channel: str, text: str, thread_ts: str | None) -> None:
         },
         method="POST",
     )
-
     with urllib.request.urlopen(req, timeout=_SLACK_POST_TIMEOUT_SECONDS) as resp:
         response_body = resp.read().decode("utf-8")
-
     parsed = json.loads(response_body)
-    if not parsed.get("ok"):
-        logger.error(
-            "slack.postMessage failed: channel=%s error=%s full_response=%s",
-            channel,
-            parsed.get("error"),
-            parsed,
-        )
-    else:
-        logger.info(
-            "slack.postMessage ok: channel=%s thread_ts=%s",
-            channel,
-            thread_ts,
-        )
+    return bool(parsed.get("ok")), parsed.get("error")
