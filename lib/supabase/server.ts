@@ -19,8 +19,11 @@ export function createClient() {
               cookieStore.set(name, value, options),
             )
           } catch {
-            // Server Components may not set cookies; safe to ignore
-            // because middleware refreshes the session on each request.
+            // Server Components may not set cookies. Safe to ignore:
+            // the auth gate in app/(authenticated)/layout.tsx calls
+            // getUser() on every render, which does its own session
+            // freshness check. (Middleware was dropped in M2.3a due to
+            // Vercel Edge incompat — see followups.md.)
           }
         },
       },
