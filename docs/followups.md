@@ -13,6 +13,7 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ## Aman sales-call classification — needed before CSM Co-Pilot V1
 
+- **Status update (2026-04-28):** superseded by the "Aman automated classifier — deferred" entry below. The decision landed on manual reclassification via the Gregory dashboard (M2.5) rather than an automated classifier change for V1. The original "next action" below is no longer the live plan — kept for history.
 - **What:** Aman's sales/prospect calls don't have a clean classifier category in `ingestion/fathom/classifier.py`. Today they likely land as `external` (non-team-domain participant + no client match → external) which means **no transcript chunks land in the KB** (`_INDEXABLE_CATEGORIES = {"client"}`). The `_apply_aman_sales_override` function in classifier.py already detects "Aman + no CSM → call_type='sales'" and bumps confidence, but the category stays `external` so chunks aren't indexed. As-is: Aman's prospect call content is invisible to retrieval.
 - **Why it matters:** for CSM Co-Pilot V1 (next priority after this), if sales-call content surfaces unfiltered to CSMs, the agent reasons over content that isn't its scope. Conversely, if sales calls have legitimate CSM-relevant content (handoff context, client backstory), losing them entirely from retrieval is also wrong. Need a deliberate decision before Co-Pilot ships.
 - **Next action:** discovery + design first — three options to weigh: (a) keep as `external`, document the omission, accept the tradeoff; (b) add a new `sales` category to the classifier and route sales-call content to a dedicated index/scope; (c) tag Aman-recorded `external` rows and filter at retrieval time. (b) is the cleanest schema-wise but biggest change — adds a 5th `call_category` enum value, possibly extends `_INDEXABLE_CATEGORIES`, may need migration. (c) is lightest but stretches `external` semantics. Backfill Aman's existing calls after the decision: `select count(*) from calls where call_category='external' and primary_client_id is null and id in (select call_id from call_participants where email='aman@theaipartner.io')`. Full reasoning in CLAUDE.md § Next Session Priorities #1.
@@ -210,3 +211,38 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Why it matters:** current cold-start experience is a 5–10s gap between @mention and reply — acceptable for V1 pilot volume, will get noticeable if pilot usage climbs. The retry-skip branch in `api/slack_events.py` keeps the architecture correct either way; Fluid Compute would just make it feel faster.
 - **Next action:** revisit when (a) pilot users flag the lag explicitly, (b) pilot volume makes cold starts visible several times per day per channel, or (c) we're adding a second agent on the same Vercel project and want the runtime choice unified. Toggling Fluid Compute is a project-level setting; enabling it means reverting the sync path in `api/slack_events.py` to the ack-then-thread pattern that was originally designed.
 - **Logged:** 2026-04-24.
+
+## Aman automated classifier — deferred in favor of manual reclassification via Gregory dashboard
+
+- **What:** an auto-classifier path for sales calls (via new `sales` category, tag on `external`, or LLM-based classification). The original M2 plan was to design and implement this.
+- **Why deferred:** replaced by manual reclassification via the Gregory Calls page (M2.5). Manual review at current call volume (~66 backlog + ~few/week new) is sustainable.
+- **Revisit trigger:** manual review becomes a recurring pain (Drake or Zain spending >30 min/week on it), OR Aman's call volume materially increases, OR a new sales hire is added to the team.
+- **Logged:** 2026-04-28.
+
+## RLS revisit trigger for Gregory dashboard
+
+- **What:** Row-Level Security policies for the dashboard. V1 ships with RLS off — app-level auth gate is sufficient for solo dev + Zain. V2 needs per-CSM scoping (CSMs see only their assigned clients).
+- **Why deferred:** premature for current 2-user model.
+- **Revisit trigger:** first non-admin CSM gets dashboard access.
+- **Logged:** 2026-04-28.
+
+## Doc bugs in CLAUDE.md fathom_webhook section (caught in M2.1)
+
+- **What:** the example queries in CLAUDE.md's fathom_webhook description reference column names that don't match the actual migration 0011: `status` should be `processing_status`, `error->>'traceback'` should be `processing_error`. Also: the description of `webhook_deliveries`' status enum mentions "processed" and "failed-via-race" but the actual enum is `received`, `processed`, `failed`, `duplicate`, `malformed`.
+- **Why deferred:** doc cleanup, not a code bug. The actual code uses the right column names.
+- **Revisit trigger:** next time CLAUDE.md gets a substantive edit, OR if these queries are ever copy-pasted by someone (Drake, Zain) and fail.
+- **Logged:** 2026-04-28.
+
+## docs/strategic-context.md missing
+
+- **What:** Drake's session handoff template references `docs/strategic-context.md` as priority reading, but the file doesn't exist in the repo.
+- **Why deferred:** either create the file (capturing the working norms currently in the handoff message) or remove the reference from the handoff template. 30-second fix, but not blocking.
+- **Revisit trigger:** next session that has documentation slack to absorb a small task.
+- **Logged:** 2026-04-28.
+
+## Readability of `documents` table for human inspection
+
+- **What:** the `documents` table mixes course content, call summaries, and call transcript chunks. Reviewing the table in Supabase Studio is hard because rows are heterogeneous and content is long.
+- **Why deferred:** the Gregory dashboard (V1) solves this for call summaries (Section 4 of Calls detail). Course content readability is a separate concern, lower priority.
+- **Revisit trigger:** course content auditing becomes a workflow Drake or someone else needs to do regularly.
+- **Logged:** 2026-04-28.
