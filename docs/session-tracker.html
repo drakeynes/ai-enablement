@@ -230,12 +230,12 @@
 
   <header class="session-head">
     <div class="id">Session M2</div>
-    <h1>Fathom verification, Aman classifier, Co-Pilot V1 scoping</h1>
+    <h1>Fathom verification + Gregory dashboard scoping + scaffold prep</h1>
     <div class="goal">
-      Verify the M1.2.5 cron sweep landed cleanly, decide and implement how Aman's sales calls are classified, scope CSM Co-Pilot V1.
+      Verify the M1.2.5 cron sweep landed cleanly, scope Gregory (CSM dashboard) V1 and prep migrations for M2.3 scaffold. Aman classifier work pivoted to manual review via the dashboard in M2.5.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> 2026-04-28 (M2.0 done)</span>
+      <span><strong>Last updated:</strong> 2026-04-28 (M2.2 in progress)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -245,32 +245,26 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">4</span>
+        <span class="count">3</span>
       </header>
 
       <div class="card">
-        <div class="id">M2.2</div>
-        <div class="title">Aman classifier — discovery (read-only)</div>
-        <div class="subtitle">Audit how Aman's prospect calls are landing today and quantify scope.</div>
-      </div>
-
-      <div class="card">
         <div class="id">M2.3</div>
-        <div class="title">Aman classifier — recommendation, approval, implement, backfill, tests</div>
-        <div class="subtitle">Pick option (a/b/c) → Drake approval → ship classifier change + backfill Aman's existing calls.</div>
+        <div class="title">Dashboard V1 scaffold + auth + Clients page</div>
+        <div class="subtitle">Apply 0012 + 0013 migrations, scaffold dashboard/, wire Supabase Auth, ship Clients list + detail with inline-save. vercel.json edit needs Drake's eyes.</div>
       </div>
 
       <div class="card">
         <div class="id">M2.4</div>
-        <div class="title">CSM Co-Pilot V1 scoping doc</div>
-        <div class="subtitle">Mirror Ella V1 scope shape; Drake-in-the-loop on key decisions.</div>
+        <div class="title">Dashboard V1 Calls page + edit flow</div>
+        <div class="subtitle">List + detail + edit mode + classification_history writes on save. "Needs review" filter for Aman backlog and F1.5 bug surfaces.</div>
       </div>
 
       <div class="card">
         <div class="id">M2.5</div>
-        <div class="title">CSM Co-Pilot skeleton</div>
-        <div class="subtitle">Folder + entry points only, no agent logic yet.</div>
-        <div class="pills"><span class="pill stretch">stretch</span></div>
+        <div class="title">Aman manual review (Drake-led, dashboard-driven)</div>
+        <div class="subtitle">Reclassify ~66 external calls one-at-a-time via the new Calls page. Hand off to Zain after Drake validates the workflow.</div>
+        <div class="pills"><span class="pill">drake-led</span></div>
       </div>
     </div>
 
@@ -281,23 +275,29 @@
       </header>
 
       <div class="card">
-        <div class="id">M2.1</div>
-        <div class="title">Fathom data sanity checks</div>
-        <div class="subtitle">Drake running queries with Claude.ai outside Code; will brief Code if drift surfaces.</div>
-        <div class="pills"><span class="pill">drake-led</span></div>
+        <div class="id">M2.2</div>
+        <div class="title">Gregory scoping doc + 0012/0013 migration files + CLAUDE.md cleanup</div>
+        <div class="subtitle">Documentation only. No code, no Vercel changes, no migrations applied.</div>
       </div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">1</span>
+        <span class="count">2</span>
       </header>
 
       <div class="card">
         <div class="id">M2.0</div>
         <div class="title">Spin up docs/session-tracker.html</div>
         <div class="subtitle">Single-page visual tracker for SOD/EOD recordings.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.1</div>
+        <div class="title">Fathom data sanity checks</div>
+        <div class="subtitle">Clean — no drift, 146 missing-transcript calls all explained by category, F1.5 bug count stable at 9. Queries saved to docs/runbooks/fathom_sanity_checks.md.</div>
+        <div class="pills"><span class="pill">drake-led</span></div>
       </div>
     </div>
 
