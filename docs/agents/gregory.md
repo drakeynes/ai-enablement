@@ -140,32 +140,44 @@ New append-only audit table for manual edits to `call_category`, `call_type`, an
 
 ## Repo location
 
-`dashboard/` at repo root.
+Next.js at repo root, alongside the existing Python serverless functions in `api/`. The "dashboard" label survives as a conceptual grouping (Next.js routes live under `app/`, dashboard helpers under `components/` and `lib/`) rather than a literal top-level directory.
 
 ```
 ai-enablement/
 ├── api/                     # existing Python serverless functions
+├── app/                     # Next.js 14 app router (dashboard routes)
+│   ├── (authenticated)/     #   route group — auth-gated layout wraps all child routes
+│   │   ├── clients/         #     /clients list + /clients/[id] detail
+│   │   └── calls/           #     /calls list + /calls/[id] detail (M3.1)
+│   ├── login/               #   /login
+│   ├── layout.tsx           #   root layout (html, body, fonts)
+│   └── page.tsx             #   root → redirects to /clients
+├── components/              # shared UI (top-nav, ui/* shadcn primitives)
+├── lib/                     # dashboard utilities
+│   ├── db/clients.ts        #   data layer (uses service-role client)
+│   └── supabase/            #   client/server/admin Supabase factories + types
 ├── ingestion/               # existing
-├── shared/                  # existing
-├── supabase/                # existing
-├── dashboard/               # NEW
-│   ├── package.json
-│   ├── next.config.js
-│   ├── app/                 # Next.js 14 app router
-│   ├── components/
-│   └── lib/
+├── shared/                  # existing Python utilities
+├── supabase/                # existing migrations / seeds
+├── package.json             # NEW (Next.js + Tailwind + shadcn deps)
+├── next.config.mjs          # NEW
+├── tsconfig.json            # NEW
 ├── pyproject.toml           # existing
-├── vercel.json              # MODIFIED — see below
+├── vercel.json              # MODIFIED — declares framework + Python functions
 └── CLAUDE.md
 ```
 
-### Vercel config gotcha
+### Why Next.js at root, not in `dashboard/`
 
-Current `vercel.json` declares Python serverless functions. Adding Next.js means Vercel needs to know which framework owns which path.
+The original M2.3 spec planned a nested `dashboard/` directory. Reality forced Next.js to repo root because Vercel auto-detects Next.js from a *root-level* `package.json` with a `next` dependency. With Next.js nested, Vercel would need either (a) a project-level `rootDirectory` setting (which would then exclude the existing `api/*.py` serverless functions from the deploy), (b) the legacy `builds` block in `vercel.json` which mixes awkwardly with the modern `functions` block, or (c) a second Vercel project for the dashboard. None match the "single Vercel project; same deploy" constraint that gregory.md committed to.
 
-Approach: scope existing Python functions explicitly to `/api/*` paths in `vercel.json`. Let Next.js claim everything else. Single Vercel project; same deploy.
+Putting Next.js at root keeps a single Vercel project with both Next.js and Python serverless functions deploying together. The trade-off is repo-root visual clutter — `package.json`, `next.config.mjs`, `tsconfig.json`, `app/`, `components/`, `lib/` all sit alongside `pyproject.toml`, `api/`, `ingestion/`, `shared/`. Acceptable.
 
-This is a hard-stop checkpoint in the M2.3 build prompt — Code must not modify `vercel.json` without showing the diff first.
+### vercel.json shape
+
+The current `vercel.json` declares (a) the Python functions per file path, (b) the daily Fathom backfill cron, and (c) `"framework": "nextjs"` so Vercel builds the Next.js app alongside the Python functions.
+
+The framework declaration is required, not optional. An explicit `functions` block in vercel.json suppresses Vercel's framework auto-detection from `package.json` — without `"framework": "nextjs"`, Vercel treats the project as static + functions and skips the Next.js build entirely (every dashboard route 404s). Caught and fixed during M2.3a deploy; documented in `docs/followups.md` as the lesson "explicit framework declaration is required when functions is also explicit."
 
 ## Stack
 
@@ -223,5 +235,29 @@ V1 renders raw JSON acceptably; V1.1 nails the shape against whatever Gregory's 
 Same as Ella — Gregory follows the four core principles in CLAUDE.md. Specifically:
 
 - Dashboard reads from Supabase only; never queries Fathom or Slack directly.
-- All Supabase access goes through a thin data layer (`dashboard/lib/db/`) so swapping Supabase for another backend is contained.
+- All Supabase access goes through a thin data layer (`lib/db/`) so swapping Supabase for another backend is contained.
 - Page components are thin clients on the data layer; no business logic in pages.
+
+## Build log
+
+### M2.3a — Dashboard scaffold + auth (deployed 2026-04-28)
+
+Shipped: Next.js 14 + TypeScript + Tailwind + shadcn scaffold at repo root. Supabase Auth wired (email/password). `/login`, auth-gated `/(authenticated)` route group, top nav with Clients / Calls links + logout. Migrations 0012 (`clients.notes`) and 0013 (`call_classification_history`) created as files. Deployed to https://ai-enablement-sigma.vercel.app.
+
+Deviations from the M2.3a spec:
+
+- **Next.js at repo root, not in `dashboard/`.** The original spec assumed a nested directory; Vercel auto-detection requires Next.js at root when `vercel.json` declares explicit functions. Spec section "Repo location" rewritten in this same housekeeping pass to reflect the actual layout.
+- **Server Component auth gate, not middleware.** `@supabase/ssr` middleware crashes on Vercel Edge runtime (transitive dep uses Node-only `__dirname`). Replaced with a Server Component auth gate in `app/(authenticated)/layout.tsx` — both are documented Supabase patterns; the Server Component variant is functionally equivalent for our 2-user dashboard. Token refresh happens client-side in `@supabase/supabase-js` when tokens expire; no server-side refresh-on-every-request, which doesn't matter at our scale.
+- **Cookie API uses `getAll`/`setAll`** (current pattern). The original spec used the deprecated `get`/`set`/`remove` triplet which crashes silently on Edge.
+- **vercel.json required `"framework": "nextjs"`.** The original Task 7 analysis declared the vercel.json edit a no-op; that was wrong — an explicit `functions` block suppresses Vercel's framework auto-detection from `package.json`, so Next.js never built and every dashboard route 404'd. One-line fix.
+
+### M2.3b — Clients pages (deployed 2026-04-28, smoke test pending)
+
+Shipped: Data layer at `lib/db/clients.ts` (`getClientsList`, `getClientById`, `updateClient`, `changePrimaryCsm`). Migration 0014 (`change_primary_csm` Postgres function for atomic CSM reassignment). Clients list page with filters (status / journey / primary CSM / has open action items / auto-created needs review), debounced search on name + email, sortable columns, default sort `last_call_date desc nulls last`. Clients detail page with all 7 sections per spec — Identity (inline-save), Status (inline-save), Primary CSM (confirmation dialog + atomic swap via RPC), Indicators (4 cards: Health Score V1 empty, Call Cadence live, Concerns V1 empty, NPS live-or-empty), Recent Calls (read-only), Open Action Items (read-only), Notes (inline-save to `clients.notes`). Server Actions for inline-save and CSM swap. `needs_review` pill renders in the detail-page header with amber treatment.
+
+Deviations from the M2.3b spec:
+
+- **RLS fix required mid-session.** The data layer was first written using the auth-aware Supabase client (anon key + user session). All 134 clients in cloud, but page returned 0 because every public table has RLS enabled with zero policies (deny-default, already documented as a known issue in `docs/future-ideas.md`). Resolution: split into two Supabase clients — auth client (anon key + cookies, for user session in layout) and data client (service role + no cookies + `'server-only'` import guard, for `lib/db/` queries and `team_members` lookups in the page entry). This matches gregory.md's locked V1 spec ("RLS off for V1; app-level auth gate is sufficient"). Server-side-only constraint enforced; the service role key never reaches the browser bundle.
+- **M2.3b smoke test steps 2–10 NOT YET RUN.** Step 1 (visual confirmation: page loads, all 134 clients populating) confirmed by Drake. Steps 2–10 (clicking into a client, inline edits actually persisting, CSM swap creating two `client_team_assignments` rows, filter chips narrowing the list, debounced search, sort toggling) are scheduled as the first task in M3.1 tomorrow. Building Calls pages on top of unverified Clients code would compound risk; the smoke test gates M3.1b.
+- **`shadcn form` component skipped.** shadcn v4's registry didn't expose a `form` component under that name; the login form and detail-page inputs use plain controlled state + Server Actions instead of `react-hook-form`. Revisit if M3.x adds forms with non-trivial validation.
+- **Tailwind v4 + shadcn v4** (not v3 as originally implied). shadcn v4's emitted components target Tailwind v4 utilities (`ring-3`, OKLCH theme colors, `@theme inline` directive, `@base-ui/react` primitives). Local upgrade was the cleaner path than backporting components to v3.
