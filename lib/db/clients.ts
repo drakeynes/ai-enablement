@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/lib/supabase/types'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
@@ -62,7 +62,7 @@ export type ClientsListRow = ClientRow & {
 export async function getClientsList(
   filters: ClientsListFilters = {},
 ): Promise<ClientsListRow[]> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   let query = supabase
     .from('clients')
@@ -229,7 +229,7 @@ export type ClientDetail = ClientRow & {
 }
 
 export async function getClientById(id: string): Promise<ClientDetail | null> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   const { data: client, error } = await supabase
     .from('clients')
@@ -342,7 +342,7 @@ export async function updateClient(
     return { success: false, error: 'No valid fields to update.' }
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from('clients')
     .update(fields)
@@ -371,7 +371,7 @@ export async function changePrimaryCsm(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _current_user_team_member_id?: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase.rpc('change_primary_csm', {
     p_client_id: client_id,
     p_new_team_member_id: new_team_member_id,

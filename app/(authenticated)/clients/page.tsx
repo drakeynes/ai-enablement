@@ -1,5 +1,5 @@
 import { getClientsList, type ClientsListFilters, type ClientsListRow } from '@/lib/db/clients'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { FilterBar } from './filter-bar'
 import { ClientsTable } from './clients-table'
 
@@ -83,7 +83,7 @@ export default async function ClientsPage({
   // Build the list of CSMs that have at least one active assignment so
   // the filter dropdown only shows real options. Also fetch the full
   // active team_members list as a fallback.
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { data: teamMembers } = await supabase
     .from('team_members')
     .select('id, full_name')
