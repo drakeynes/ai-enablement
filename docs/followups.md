@@ -221,10 +221,10 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ## RLS revisit trigger for Gregory dashboard
 
-- **What:** Row-Level Security policies for the dashboard. V1 ships with RLS off — app-level auth gate is sufficient for solo dev + Zain. V2 needs per-CSM scoping (CSMs see only their assigned clients).
-- **Why deferred:** premature for current 2-user model.
+- **What:** Row-Level Security policies for the dashboard. Per gregory.md's locked V1 spec, RLS is "off for V1" — meaning V1 ships with RLS *enabled* on every public table but *zero policies*, plus the dashboard's data layer (`lib/db/clients.ts` and the page-entry `team_members` lookup) using the **service role key** to bypass RLS entirely. The auth client (`lib/supabase/server.ts`, anon key + cookies) is used only to verify the user's session in the auth-gate layout. This split was forced into existence mid-M2.3b after the first deploy returned 0 clients despite 134 in cloud — RLS deny-default was the cause; the data-layer-via-service-role pattern was the resolution. V2 needs proper RLS policies on `clients`, `client_team_assignments`, `calls`, `call_action_items`, `client_health_scores`, `nps_submissions` so CSMs see only their assigned clients (joined via `client_team_assignments` where `role='primary_csm'` and `unassigned_at is null`); at that point the dashboard data layer can move back to the anon client (or keep the service-role split where admin operations like merge tooling still need to bypass).
+- **Why deferred:** premature for current 2-user model (Drake + Zain admin). App-level auth gate is sufficient at this scale.
 - **Revisit trigger:** first non-admin CSM gets dashboard access.
-- **Logged:** 2026-04-28.
+- **Logged:** 2026-04-28; expanded with V1 service-role-split detail and V2 implementation specifics 2026-04-28 during M2.3b housekeeping.
 
 ## Doc bugs in CLAUDE.md fathom_webhook section (caught in M2.1)
 
@@ -246,3 +246,64 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Why deferred:** the Gregory dashboard (V1) solves this for call summaries (Section 4 of Calls detail). Course content readability is a separate concern, lower priority.
 - **Revisit trigger:** course content auditing becomes a workflow Drake or someone else needs to do regularly.
 - **Logged:** 2026-04-28.
+
+## `@supabase/ssr` middleware breaks on Vercel Edge runtime in Next 14 — use Server Component gate instead
+
+- **What:** wiring auth via `middleware.ts` with `@supabase/ssr`'s `createServerClient` crashes at runtime on Vercel's Edge runtime with `ReferenceError: __dirname is not defined`. A transitive dep in the bundle references `__dirname` (Node-only), and Vercel's middleware bundler injects it where Next.js' local `next build` doesn't reproduce the issue. Stable Next 14 doesn't support `export const runtime = 'nodejs'` for middleware (experimental in Next 15+). `@supabase/ssr` exposes no Edge-tailored entry point. Resolution: drop middleware, gate auth in a Server Component layout (`app/(authenticated)/layout.tsx` calls `getUser()` and `redirect('/login')` if null). Both are documented Supabase patterns; the Server Component variant is functionally equivalent for our 2-user dashboard. Token refresh happens client-side in `@supabase/supabase-js` when tokens expire.
+- **Why deferred:** resolved in M2.3a — kept here as a constraint to preserve. Future Next.js / Supabase work in this repo must not re-add middleware-based auth without first verifying Vercel Edge bundling.
+- **Revisit trigger:** Next.js 15+ adoption (`runtime = 'nodejs'` for middleware becomes stable, OR `@supabase/ssr` ships an Edge-safe entry).
+- **Logged:** 2026-04-28.
+
+## `@supabase/ssr` cookie API: always use `getAll`/`setAll`, never the deprecated `get`/`set`/`remove`
+
+- **What:** `@supabase/ssr` 0.5+ deprecated the `get`/`set`/`remove` cookie triplet in favor of `getAll`/`setAll`. Both still work in 0.10.x, but the deprecated triplet is fragile under concurrent cookie writes and emits opaque runtime errors (no useful stack trace) when it fails. M2.3a's first auth-wiring iteration used the verbatim triplet from a Supabase tutorial; deploy returned `MIDDLEWARE_INVOCATION_FAILED` with no diagnostic detail. The refactor to `getAll`/`setAll` was correct on the merits but not the actual fix for that deploy (Edge-runtime `__dirname` was the real cause — see above) — kept the refactor anyway since it's the right pattern.
+- **Why deferred:** resolved in M2.3a — kept here as a constraint. Future code (Server Components, Route Handlers, future middleware once Next 15 lands) must use `getAll`/`setAll`.
+- **Revisit trigger:** never, unless `@supabase/ssr` releases a 1.0 with a different API.
+- **Logged:** 2026-04-28.
+
+## Vercel mixed-framework: explicit `framework` declaration is required when `functions` is also explicit
+
+- **What:** Vercel auto-detects Next.js from a repo-root `package.json` with a `next` dependency — *but only if `vercel.json` doesn't have an explicit `functions` block*. Once `functions` is declared (which we need for the Python serverless functions in `api/`), framework auto-detection is suppressed and Vercel treats the project as "static + functions" — Next.js never builds. M2.3a's first push deployed only the Python functions; every dashboard route 404'd. One-line fix: add `"framework": "nextjs"` to `vercel.json`. Verified locally with `vercel build` before pushing — `builds.json` confirmed `@vercel/next package.json` build step appearing alongside the Python builds, and `.vercel/output/functions/` contained the expected Next.js route bundles.
+- **Why deferred:** resolved in M2.3a — kept here as a constraint and a lesson for any future multi-framework Vercel project (e.g., adding a second backend language alongside Python + Next.js). The lesson is non-obvious enough to deserve permanent documentation.
+- **Revisit trigger:** any new framework added to the repo's deploy.
+- **Logged:** 2026-04-28.
+
+## Supabase CLI default routing is broken in this environment
+
+- **What:** `supabase db diff --linked` and `supabase db push` are silently comparing/pushing to local Docker Supabase rather than the linked cloud project. Verified by (a) the diff suggesting drop of a function that doesn't exist in cloud, and (b) M2.2's apparently-successful migrations 0011/0012/0013 never actually landing in cloud's database OR ledger (caught at the start of M2.3b when type-regen returned schema that didn't match expectations). `npx supabase gen types typescript --project-id <ref>` is similarly affected for write operations but works for reads via the API.
+- **Why deferred:** production Python/Vercel services use cloud directly via `SUPABASE_DB_PASSWORD` and the pooler URL (`supabase/.temp/pooler-url`) — completely unaffected. Only CLI-mediated migration workflows are broken, and those have a working workaround (Studio + manual ledger registration; see below).
+- **Revisit trigger:** next migration that needs to be applied (M3.x or later), OR before the team grows beyond Drake (other devs running CLI commands need this fixed). Diagnosis path: inspect `supabase/.temp/` for stale state, possibly re-run `supabase link`, possibly reset the local Docker stack.
+- **Logged:** 2026-04-28.
+
+## Studio + manual ledger registration is the temporary canonical migration pattern
+
+- **What:** until the Supabase CLI default routing is fixed (above), all migration applications go through Supabase Studio SQL Editor with manual ledger registration. Three migrations (0012, 0013, 0014) applied this way during M2.2 / M2.3b recovery. The pattern: (1) run the `CREATE`/`ALTER` SQL in Studio's SQL Editor, (2) `insert into supabase_migrations.schema_migrations (version, name, statements) values (...) on conflict (version) do nothing`, (3) dual-verify (see next entry). Slower than `supabase db push` but reliable.
+- **Why deferred:** workaround for the CLI routing bug. Works reliably; not blocking.
+- **Revisit trigger:** when the CLI routing bug is fixed, this pattern can retire. Worth a one-page update to `docs/runbooks/apply_migrations.md` documenting this as the temporary canonical pattern, ideally before M3.1 in case any new migrations come up there.
+- **Logged:** 2026-04-28.
+
+## Migration application requires dual verification (schema reality AND ledger)
+
+- **What:** M2.2's `supabase db push` reported success but never wrote to cloud's database OR ledger; the failure was silent because the CLI was routing to local Docker Supabase. The class of bug — single-query verification passing against the wrong database — applies to any migration workflow, not just the broken CLI. Process change: every future migration must verify BOTH (a) schema reality against cloud explicitly via `to_regclass('public.<table>')` or `information_schema.columns`/`pg_proc` queried through a connection that's *known* to target cloud (Studio SQL Editor or psycopg2 via the pooler URL), AND (b) ledger registration via `select version from supabase_migrations.schema_migrations where version = '<n>'`. If either returns 0 rows, the migration didn't actually apply — recover before declaring done.
+- **Why deferred:** process discipline, no code work. Embedded in the Studio-pattern entry above; called out separately so the lesson survives even if Studio + manual-ledger goes away.
+- **Revisit trigger:** every migration. This is a permanent practice, not a one-off.
+- **Logged:** 2026-04-28.
+
+## PostgREST stale-cache symptom can mask deeper issues
+
+- **What:** when `npx supabase gen types` returns schema that doesn't match expectations, the first instinct (flush PostgREST cache via `notify pgrst, 'reload schema'` or Studio's "Reload schema cache" button) addresses only one possible cause. Equally likely: the migration didn't actually apply (see CLI routing bug above). M2.3b lost ~30 minutes chasing a "cache lag" that turned out to be three migrations never having landed in cloud. Diagnostic order: (1) verify the schema object actually exists in cloud via `information_schema` / `to_regclass`, (2) verify ledger registration, THEN (3) flush PostgREST if both pass.
+- **Why deferred:** process discipline change, no code work.
+- **Revisit trigger:** next time `gen types` returns unexpected results.
+- **Logged:** 2026-04-28.
+
+## `psql` not available in Drake's WSL — install errored
+
+- **What:** Drake tried `sudo apt install postgresql-client` to get `psql` for ad-hoc queries; the install errored. For now, ad-hoc cloud queries go through Supabase Studio's SQL Editor; any Code-side query needs to use the existing Python connection patterns (`scripts/*.py` via psycopg2 with `SUPABASE_DB_PASSWORD` from `.env.local`). Several housekeeping commands in this session (the `notify pgrst` flush, the dual-verify queries) had to be handed off to Drake to run because Code couldn't run them locally.
+- **Why deferred:** working around it via Studio is fine for now. Install fix isn't blocking any feature work.
+- **Revisit trigger:** when Drake has 10 minutes between sessions to debug the apt errors, OR when a workflow genuinely requires `psql` available in terminal (e.g., a runbook that assumes it).
+- **Logged:** 2026-04-28.
+
+## `gregory.md` "Repo location" section was rewritten in M2.3 housekeeping — RESOLVED 2026-04-28
+
+- **Resolution:** the original spec section showed Next.js nested in `dashboard/` and a "Vercel config gotcha" note that turned out to be wrong (Vercel auto-detection is suppressed by an explicit `functions` block, not the other way around). Rewritten in this housekeeping pass to reflect the actual deployed layout: Next.js at repo root, `vercel.json` declares `"framework": "nextjs"` plus the Python functions block, both build in one Vercel project. The original "Repo location" tree diagram replaced; the new section also captures *why* Next.js had to be at root (single-Vercel-project + Python functions in `api/` + framework auto-detection all combine to constrain the layout).
+- **Logged:** 2026-04-28 (M2.3a deviation surfaced); **resolved:** 2026-04-28 (housekeeping rewrite).
