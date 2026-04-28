@@ -6,7 +6,7 @@ Primary context for any Claude Code instance working on this repo. Read this ful
 
 Internal AI enablement system for a coaching/consulting agency. Replaces and augments human work across customer success, sales, and operations. The consumer business runs on this system first; later, the same system will be deployed to other agencies as a productized consulting offering.
 
-**Immediate focus:** ship Slack Bot V1 (Ella) and CSM Co-Pilot V1 by end of April.
+**Immediate focus:** Ella V1 in pilot (live, awaiting Nabeel feedback before pilot rollout to remaining 6 channels). Gregory V1 (CSM dashboard) being built across M2.3 + M2.4, with Drake-led Aman manual review in M2.5. Gregory's brain (V1.1) deferred.
 
 ## Core Principles (Non-Negotiable)
 
@@ -174,11 +174,11 @@ Both arrays are consulted case-insensitively, whitespace-stripped. When you merg
 
 ## Current Focus
 
-**Phase 0 foundation: complete.** All ingestion pipelines built and applied. See "Table fill (cloud)" below for current counts. Slack history (2,914 messages across 8 channels) exists on **local** only — cloud Slack ingestion deferred per `docs/future-ideas.md`. Shared utilities, validators, and HITL infrastructure in place.
+**Phase 0 foundation: complete.** All ingestion pipelines built and applied. Live counts live in the Gregory dashboard once V1 ships; see `docs/runbooks/fathom_sanity_checks.md` for ad-hoc verification. Slack history (2,914 messages across 8 channels) exists on **local** only — cloud Slack ingestion deferred per `docs/future-ideas.md`. Shared utilities, validators, and HITL infrastructure in place.
 
 **Phase 1: Ella V1 — live and operating, polish in progress.** Agent code in `agents/ella/`. Slack webhook live, smoke-tested, replying with native Slack mrkdwn (M1.3) and posting via `@ella` user token (M1.4.3) so replies render with no APP tag in `#ella-test-drakeonly`. Fathom backlog fully ingested (F1.4); live cron sweep operating daily and ran its first real sweep 2026-04-27 (M1.2.5) producing the first `call_summary` documents and `call_action_items` rows in cloud. **Phase 1 polish remaining:** awaiting Nabeel's read on whether M1.4.3's user-token-reply addresses his "looks unprofessional" feedback before pilot rollout to remaining 6 channels (M1.4.5).
 
-**Phase 2 starting: CSM Co-Pilot V1.** Per Drake's plan, the next agent build. Same data layer, team-side surface. Detail in Next Session Priorities #2 below.
+**Phase 2 starting: Gregory dashboard V1 (CSM-facing web surface for portfolio visibility).** See `docs/agents/gregory.md`. Brain (V1.1) deferred.
 
 **Pilot clients for Ella V1 beta:** Fernando G, Javi Pena, Musa Elmaghrabi, Jenny Burnett, Dhamen Hothi, Trevor Heck, Art Nuno. (Nicholas LoScalzo deferred — see `docs/future-ideas.md`.) Scott has already announced Ella to these channels; she ships Monday.
 
@@ -205,42 +205,26 @@ As of 2026-04-27 (M1 close-out):
 - **Ella:** agent code in `agents/ella/`. Sync handler (Vercel kills threads on return — see `docs/runbooks/slack_webhook.md`). M1.3 (2026-04-27) shipped `shared/slack_format.py` (markdown→mrkdwn converter, wired in `agents/ella/slack_handler.py`); replies now render with native Slack bold/italic. M1.4.3 (2026-04-27) shipped two-token posting in `api/slack_events.py:_post_to_slack` — tries `SLACK_USER_TOKEN` (xoxp-, no APP tag) first, falls back to `SLACK_BOT_TOKEN` (xoxb-, with APP tag) on any failure. **Reply path is APP-tag-free in `#ella-test-drakeonly` as of M1.4.3 deploy.** Known constraint: the inbound `app_mention` event is Slack-app-scoped, so the user-side @-mention still shows the bot as the mention target — the *response* renders as the user. Awaiting Nabeel's read on whether this addresses his ask. M1.4.5 (pilot rollout) holds until that comes back. `agent_runs.duration_ms` still `NULL` — deferred per `docs/followups.md`.
 - **Fathom webhook handler:** `api/fathom_events.py` deployed and registered with Fathom. **Two F2.1 doc-vs-reality bugs caught at deploy and fixed in M1.2.5:** (a) outbound auth uses `X-Api-Key`, not the OpenAPI-documented `Authorization: Bearer`; (b) `default_summary` field is `markdown_formatted`, not the spec-driven `markdown`/`text`/etc. fallback list. Both have unit tests pinning the corrected behavior. **Webhook itself has not yet received an organic Fathom delivery** — `webhook_deliveries.source='fathom_webhook'` is still 0. The cron path has been doing all the catch-up so far (31 cron-sourced rows). When a real coaching call finishes Fathom post-processing while our webhook is reachable, that path activates. Architecture in `docs/architecture/fathom_webhook.md`; ops in `docs/runbooks/fathom_webhook.md`.
 - **Fathom backfill cron:** `api/fathom_backfill.py` deployed (M1.2 / M1.2.5). Daily 08:00 UTC via Vercel Cron. First real sweep ran 2026-04-27: 29 calls ingested (15 client + 14 non-client), 153 action items, 15 summaries (after the `markdown_formatted` adapter fix + targeted backfill via `scripts/backfill_summary_docs_for_fathom_cron.py`). Race-condition pattern observed — concurrent manual triggers can hit `calls_source_external_id_key` collisions. Documented in followups; not a real-world issue at daily cadence.
-- **Table fill (cloud, post-M1 close-out — 2026-04-27):**
-  - `team_members` — 9 (7 with `slack_user_id`)
-  - `clients` — 134 (100 Active++ canonical + 34 auto-created from F1.4/M1.2.5 Fathom ingest, all tagged `needs_review`)
-  - `slack_channels` — 101
-  - `client_team_assignments` — 100
-  - `calls` — 545 (516 from F1.4 backlog + 29 from M1.2.5 cron sweep). All `source='fathom'`. Most-recent `started_at` reflects the latest cron-ingested call.
-  - `call_participants` — 1,503 (1,404 from F1.4 + 99 from M1.2.5)
-  - `call_action_items` — 153 (M1.2.5 — first ingestion of this table)
-  - `documents` — 715 (297 `course_lesson` + 403 `call_transcript_chunk` + **15 `call_summary`** — the call_summary count is new since M1.2.5)
-  - `document_chunks` — 5,150 (651 course + 4,484 transcript + 15 summary chunks; embedded via `text-embedding-3-small`)
-  - `webhook_deliveries` — 31 (29 `processed` + 2 `failed`-via-race; all `source='fathom_cron'`. Zero `source='fathom_webhook'` rows yet — the live webhook handler has been reachable but no delivery has organically arrived through it.)
-  - `slack_messages` — 0 (90-day backfill deferred per `docs/future-ideas.md`)
-  - `agent_runs` — 24 (smoke tests + harness runs)
-  - **Still empty**: `escalations`, `agent_feedback`, `nps_submissions`, `client_health_scores`, `alerts`, `slack_messages`.
+- **Live state (table counts) is mirrored in the Gregory dashboard once V1 ships.** For ingestion health checks, run the queries in `docs/runbooks/fathom_sanity_checks.md` against cloud Supabase. CLAUDE.md captures architecture and decisions; live numbers belong in the dashboard, not here.
 - **Test suite:** 344 passing (270 baseline + 14 M1.4.3 user-token tests + 16 F2.3 webhook-adapter tests + 42 M1.3 slack-format tests + 2 F2.3 markdown_formatted tests).
 
 ## Next Session Priorities
 
 Pick these up in order. **Read this section first** when starting a new session — it's the single source of truth for where to start.
 
-1. **Aman sales-call classification — discovery + design first, then implement.** Drake noticed Aman's prospect/sales calls don't have a clean classifier category. Today they likely land as `external` (per `ingestion/fathom/classifier.py:_classify_by_participants` — non-team participant + no client match → external) which means **no transcript chunks land in the KB** (since `_INDEXABLE_CATEGORIES = {"client"}`). For CSM Co-Pilot V1, this is a prerequisite: if sales-call content surfaces unfiltered to CSMs, the agent reasons over content that isn't its scope. Decisions to make: (a) keep as `external` and document the omission, (b) add a new `sales` category to the classifier and route sales-call content to a dedicated index, (c) use tags on existing `external` rows to flag "Aman-recorded" and filter at retrieval. Each has different schema implications — the classifier change is `ingestion/fathom/classifier.py:_classify_by_participants` + possibly a new entry in `_INDEXABLE_CATEGORIES`; tags would need a `calls.tags` column or use the existing `metadata` jsonb. **Read-only discovery first.** Then design. Then implement. Then backfill any of Aman's existing calls (query: `select count(*) from calls where call_category='external' and primary_client_id is null and id in (select call_id from call_participants where email='aman@theaipartner.io')`). Prerequisite for #2 below.
+1. **M2.3 — Dashboard V1 scaffold + auth + Clients page.** Per `docs/agents/gregory.md`. Includes applying migrations 0012 and 0013, scaffolding the `dashboard/` directory, wiring Supabase Auth, and shipping the Clients list + detail pages with inline-save. Hard-stop before modifying `vercel.json` — that change requires Drake's eyes on the diff.
 
-2. **CSM Co-Pilot V1 scoping.** Second agent on the roadmap (Ella was first). Lives team-side, helps CSMs draft follow-ups, surface insights from their clients' calls, manage their book. Same data layer as Ella (Supabase + kb_query + claude_client + hitl), different surface (Slack agent in CSM team channels, NOT client channels). Per CLAUDE.md project purpose, this is the second pillar of the agency's AI enablement system. **This week's main deliverable per Drake's plan.** Start with the same discovery shape as Ella's V1 — read `docs/agents/ella.md` and `docs/agents/ella-v1-scope.md` to mirror that pattern. Likely needs: new `agents/csm_copilot/` directory, new system prompt grounded in CSM workflows, retrieval scoped to a CSM's assigned clients (via `client_team_assignments`), new `escalations` and `agent_feedback` consumption patterns. **Wait until #1 is done** so sales-call content doesn't accidentally surface to CSMs.
+2. **M2.4 — Dashboard V1 Calls page.** Edit mode + explicit save. `call_classification_history` writes on save. "Needs review" filter for Aman backlog and F1.5 bug surfaces.
 
-3. **Slack history 90-day backfill into cloud + continuous ingestion.** Deferred to next week per Drake's call. Don't start until CSM Co-Pilot V1 is in good shape. Currently cloud has 0 `slack_messages`. Per `docs/future-ideas.md` § "Slack messages as a retrieval surface", needed for CSM Co-Pilot V2 (health signals from pilot-channel conversation patterns) but not for V1.
+3. **M2.5 — Aman manual review (Drake-led, dashboard-driven).** Reclassify ~66 external calls one-at-a-time via the new Calls page. Hand off to Zain after Drake validates the workflow.
 
-4. **Ella V2 conversational behavior items (4 batched).** Per `docs/future-ideas.md` § "Ella V2 — conversational behavior" — out-of-thread replies, prior-thread context, bare-mention handling, speaker identification. **Deferred until after CSM Co-Pilot V1 ships** — these are polish, not blockers.
+4. **(deferred) Gregory's brain (V1.1).** Python agent that reads call summaries, action items, NPS, Slack signals to compute health scores + concerns. Writes to `client_health_scores`. UI is already built against the locked `factors` jsonb shape — brain just produces data in that shape.
 
-5. **M1.4.5 — Pilot rollout of @ella user account to remaining 6 pilot channels.** **PENDING NABEEL'S READ on M1.4.3.** The current state: Ella's *replies* render with no APP tag (user-token path), but the *@-mention to invoke her* still targets the bot (because Slack's app_mention event subscription is bound to the bot user — that's a Slack architectural constraint, not a code choice). This may or may not address Nabeel's "looks unprofessional" feedback. If yes → invite @ella user to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels and ship as-is. If no → workaround design needed (e.g., custom mention pattern, slash command, or accept the constraint and document it).
+5. **(deferred) Aman automated classifier.** Per the original M1 plan. Replaced by manual-via-dashboard for now; revisit when manual review becomes a recurring pain.
 
-**Deferred items not in priorities** (intentionally — see `docs/followups.md` for revisit triggers):
-- F1.5 classifier bug (9 client-category calls with NULL primary_client_id — Drake's call to handle via manual review rather than code fix)
-- 4 minor non-load-bearing Fathom payload fields the adapter drops (`meeting_title`, `created_at`, `calendar_invitees_domains_type`, `recorded_by.team`)
-- Cron sweep race condition (only matters if cadence moves below daily)
-- Fathom webhook secret rotation runbook (needed before first rotation, not urgent)
-- Slack `reply_broadcast=true` behavior change for Ella threaded replies
+6. **(deferred) Slack 90-day backfill.** Per original plan. Unchanged.
+
+7. **(pending Nabeel) M1.4.5 pilot rollout of Ella user-token.** Unchanged.
 
 ## Working With Claude Code — Prompting Tips
 
