@@ -253,6 +253,51 @@ export type Database = {
           },
         ]
       }
+      call_classification_history: {
+        Row: {
+          call_id: string
+          changed_at: string
+          changed_by: string | null
+          field_name: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          call_id: string
+          changed_at?: string
+          changed_by?: string | null
+          field_name: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          call_id?: string
+          changed_at?: string
+          changed_by?: string | null
+          field_name?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_classification_history_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_classification_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_participants: {
         Row: {
           call_id: string
@@ -472,6 +517,7 @@ export type Database = {
           id: string
           journey_stage: string | null
           metadata: Json
+          notes: string | null
           phone: string | null
           program_type: string | null
           slack_user_id: string | null
@@ -489,6 +535,7 @@ export type Database = {
           id?: string
           journey_stage?: string | null
           metadata?: Json
+          notes?: string | null
           phone?: string | null
           program_type?: string | null
           slack_user_id?: string | null
@@ -506,6 +553,7 @@ export type Database = {
           id?: string
           journey_stage?: string | null
           metadata?: Json
+          notes?: string | null
           phone?: string | null
           program_type?: string | null
           slack_user_id?: string | null
