@@ -372,17 +372,7 @@ export async function changePrimaryCsm(
   _current_user_team_member_id?: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
   const supabase = createClient()
-  // The change_primary_csm function is added by migration 0014 (Task 2).
-  // Until that lands and types are regenerated, the RPC name is not in
-  // Database['public']['Functions'] — cast through unknown to keep the
-  // surface working ahead of regen. Remove the cast in the same commit
-  // that picks up 0014's regenerated types.
-  const { error } = await (
-    supabase.rpc as unknown as (
-      name: 'change_primary_csm',
-      args: { p_client_id: string; p_new_team_member_id: string },
-    ) => Promise<{ error: { message: string } | null }>
-  )('change_primary_csm', {
+  const { error } = await supabase.rpc('change_primary_csm', {
     p_client_id: client_id,
     p_new_team_member_id: new_team_member_id,
   })

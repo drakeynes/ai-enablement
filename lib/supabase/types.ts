@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       agent_feedback: {
@@ -931,6 +926,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      change_primary_csm: {
+        Args: { p_client_id: string; p_new_team_member_id: string }
+        Returns: undefined
+      }
       match_document_chunks: {
         Args: {
           client_id?: string
@@ -1085,3 +1084,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
