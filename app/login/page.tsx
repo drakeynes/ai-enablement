@@ -1,83 +1,18 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { LoginForm } from './login-form'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-
-export default function LoginPage() {
-  const router = useRouter()
+export default async function LoginPage() {
+  // Bounce already-authenticated users to /clients before rendering
+  // the form, mirroring the middleware behavior the M2.3a spec asked
+  // for. Server Component variant of the auth gate (the middleware
+  // version was dropped due to Vercel Edge runtime incompatibility).
   const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setSubmitting(true)
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (signInError) {
-      setError(signInError.message)
-      setSubmitting(false)
-      return
-    }
-    router.push('/clients')
-    router.refresh()
+  if (user) {
+    redirect('/clients')
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm space-y-4 rounded border p-6"
-      >
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Sign in</h1>
-          <p className="text-sm text-muted-foreground">Gregory dashboard.</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
-
-        {error ? (
-          <p className="text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </Button>
-      </form>
-    </div>
-  )
+  return <LoginForm />
 }

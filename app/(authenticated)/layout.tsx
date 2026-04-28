@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { TopNav } from '@/components/top-nav'
 
@@ -6,17 +7,21 @@ export default async function AuthenticatedLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Auth gate: this resolves BEFORE any child Server Component starts
+  // rendering, so unauthenticated requests never trigger downstream
+  // data fetches. Replaces the middleware-based gate dropped in M2.3a
+  // because Vercel's Edge runtime can't bundle @supabase/ssr's
+  // transitive deps (`__dirname` Node-only reference).
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Middleware already redirects unauthenticated users to /login, but if the
-  // session expires between the middleware check and this render, fall back
-  // to a sensible empty string rather than crashing.
-  const userEmail = user?.email ?? ''
+  if (!user) {
+    redirect('/login')
+  }
 
   return (
     <div className="min-h-screen">
-      <TopNav userEmail={userEmail} />
+      <TopNav userEmail={user.email ?? ''} />
       <main>{children}</main>
     </div>
   )
