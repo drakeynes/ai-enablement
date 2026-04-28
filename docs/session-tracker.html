@@ -230,12 +230,12 @@
 
   <header class="session-head">
     <div class="id">Session M2</div>
-    <h1>Fathom verification + Gregory dashboard scoping + scaffold prep</h1>
+    <h1>Fathom verification + Gregory dashboard scaffold + Clients pages live (smoke test pending)</h1>
     <div class="goal">
-      Verify the M1.2.5 cron sweep landed cleanly, scope Gregory (CSM dashboard) V1 and prep migrations for M2.3 scaffold. Aman classifier work pivoted to manual review via the dashboard in M2.5.
+      Verify Fathom ingest, scope and ship Gregory V1 — dashboard scaffold + auth + Clients list and detail pages live in production. Behavior smoke test (steps 2–10 of M2.3b) runs first thing in M3.1 tomorrow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> 2026-04-28 (M2.2 done)</span>
+      <span><strong>Last updated:</strong> 2026-04-28 (M2.3a + M2.3b shipped, smoke test pending)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -249,22 +249,21 @@
       </header>
 
       <div class="card">
-        <div class="id">M2.3</div>
-        <div class="title">Dashboard V1 scaffold + auth + Clients page</div>
-        <div class="subtitle">Apply 0012 + 0013 migrations, scaffold dashboard/, wire Supabase Auth, ship Clients list + detail with inline-save. vercel.json edit needs Drake's eyes.</div>
+        <div class="id">M3.1</div>
+        <div class="title">M2.3b smoke test (steps 2–10) + Calls page</div>
+        <div class="subtitle">First task: walk inline edits, CSM swap (verify two rows in client_team_assignments), filter chips, debounced search, sortable columns. Then ship Calls list + detail + edit-mode-save + call_classification_history writes.</div>
       </div>
 
       <div class="card">
-        <div class="id">M2.4</div>
-        <div class="title">Dashboard V1 Calls page + edit flow</div>
-        <div class="subtitle">List + detail + edit mode + classification_history writes on save. "Needs review" filter for Aman backlog and F1.5 bug surfaces.</div>
+        <div class="id">M3.2</div>
+        <div class="title">Gregory brain V1.1</div>
+        <div class="subtitle">Python agent reading call summaries, action items, NPS, Slack signals → computes health scores + concerns → writes to client_health_scores. UI is already built against the locked factors jsonb shape. After M3.1 if time and bugs allow.</div>
       </div>
 
       <div class="card">
-        <div class="id">M2.5</div>
-        <div class="title">Aman manual review (Drake-led, dashboard-driven)</div>
-        <div class="subtitle">Reclassify ~66 external calls one-at-a-time via the new Calls page. Hand off to Zain after Drake validates the workflow.</div>
-        <div class="pills"><span class="pill">drake-led</span></div>
+        <div class="id">M2.3c</div>
+        <div class="title">Merge feature for auto-created clients</div>
+        <div class="subtitle">Wraps scripts/merge_client_duplicates.py in api/merge_clients.py + dashboard "Merge into…" button + dialog on the detail page. Visual hooks already shipped in M2.3b (needs_review pill, filter chip). Deferred until after M3.1 + M3.2 to give Zain a working merge surface in one go.</div>
       </div>
     </div>
 
@@ -274,13 +273,13 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing in flight — handing off to M2.3.</div>
+      <div class="empty">Session closing. M3.1 starts tomorrow with the M2.3b smoke test.</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">3</span>
+        <span class="count">5</span>
       </header>
 
       <div class="card">
@@ -301,6 +300,19 @@
         <div class="title">Gregory scoping doc + 0012/0013 migration files + CLAUDE.md cleanup</div>
         <div class="subtitle">Documentation only — gregory.md, 0012 + 0013 written (not applied), CLAUDE.md Live State / Next Priorities / Current Focus updated, fathom_sanity_checks runbook saved, 5 new followups logged.</div>
       </div>
+
+      <div class="card">
+        <div class="id">M2.3a</div>
+        <div class="title">Dashboard scaffold + Supabase Auth + deployed</div>
+        <div class="subtitle">Next.js 14 + TypeScript + Tailwind + shadcn at repo root. Supabase Auth (email/password). /login + auth-gated /(authenticated) route group + top nav. Migrations 0012 + 0013 applied to cloud (recovered via Studio after CLI silently routed to local). Live at ai-enablement-sigma.vercel.app.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.3b</div>
+        <div class="title">Clients list + detail pages — shipped, deployed, list view visually confirmed</div>
+        <div class="subtitle">Data layer in lib/db/clients.ts, migration 0014 (change_primary_csm RPC), Clients list with filters/search/sort, Clients detail with all 7 sections + inline-save + CSM-swap dialog. Step 1 (page loads with 134 clients) confirmed; steps 2–10 (inline edits persist, CSM swap creates two rows, filters narrow, search debounces, sort toggles) PENDING — first task in M3.1.</div>
+        <div class="pills"><span class="pill warn">smoke test pending</span></div>
+      </div>
     </div>
 
   </section>
@@ -311,6 +323,24 @@
       <li>
         <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice.
         <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="blockers">
+    <h2>Bugs resolved this session</h2>
+    <ul>
+      <li>
+        <strong>@supabase/ssr middleware crashed on Vercel Edge runtime</strong> — transitive dep used Node-only <span class="ref">__dirname</span>. Fixed by dropping middleware, gating auth in a Server Component layout.
+      </li>
+      <li>
+        <strong>vercel.json with explicit functions block suppressed Next.js auto-detection</strong> — every dashboard route 404'd because Vercel only built Python functions. Fixed by adding <span class="ref">"framework": "nextjs"</span> to vercel.json.
+      </li>
+      <li>
+        <strong>Supabase CLI silently routed migrations to local Docker instead of cloud</strong> during M2.2 and M2.3b — three migrations (<span class="ref">0012, 0013, 0014</span>) recovered via Supabase Studio + manual ledger registration. Production unaffected (Python services bypass CLI); CLI workflows broken pending diagnosis.
+      </li>
+      <li>
+        <strong>Dashboard returned 0 clients despite 134 in cloud</strong> — RLS deny-default with no policies, dashboard data layer was using anon key and getting blocked at the gate. Fixed by separating the data-layer client (service role, server-side only) from the auth client (anon key for user session).
       </li>
     </ul>
   </section>
