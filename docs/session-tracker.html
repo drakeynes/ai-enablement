@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session M2 — tracker</title>
+<style>
+  :root {
+    --bg: #f6f6f4;
+    --panel: #ffffff;
+    --border: #d8d8d4;
+    --border-strong: #b8b8b2;
+    --text: #1c1c1a;
+    --text-dim: #6a6a66;
+    --text-muted: #8c8c88;
+    --accent: #2b2b28;
+    --pill-bg: #ececea;
+    --pill-text: #3a3a36;
+    --pill-warn-bg: #f3e6cf;
+    --pill-warn-text: #6a4a14;
+    --pill-stretch-bg: #e6ecf3;
+    --pill-stretch-text: #1f3a5a;
+    --col-planned: #ececea;
+    --col-progress: #e7eee4;
+    --col-done: #e4e4e2;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px 32px 48px;
+  }
+
+  header.session-head {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+
+  header.session-head .id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  header.session-head h1 {
+    font-size: 24px;
+    margin: 4px 0 6px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  header.session-head .goal {
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 920px;
+  }
+
+  header.session-head .meta {
+    margin-top: 12px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  header.session-head .meta span strong {
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+
+  .col {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 14px 18px;
+    min-height: 240px;
+  }
+
+  .col header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .col header h2 {
+    margin: 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .col header .count {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .col.planned header { border-bottom-color: var(--col-planned); }
+  .col.progress header { border-bottom-color: var(--col-progress); }
+  .col.done header { border-bottom-color: var(--col-done); }
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 12px 11px;
+    margin-bottom: 10px;
+    background: #fdfdfc;
+  }
+
+  .card:last-child { margin-bottom: 0; }
+
+  .card .id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  .card .title {
+    font-size: 14.5px;
+    font-weight: 500;
+    margin-top: 2px;
+    color: var(--text);
+  }
+
+  .card .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .card .pills {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--pill-bg);
+    color: var(--pill-text);
+    letter-spacing: 0.01em;
+  }
+
+  .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn-text); }
+  .pill.stretch { background: var(--pill-stretch-bg); color: var(--pill-stretch-text); }
+
+  .empty {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 8px 4px;
+  }
+
+  .blockers {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px 18px;
+  }
+
+  .blockers h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .blockers ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text);
+  }
+
+  .blockers li { margin-bottom: 8px; }
+  .blockers li:last-child { margin-bottom: 0; }
+  .blockers li .ref {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+
+  .footer {
+    margin-top: 24px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="session-head">
+    <div class="id">Session M2</div>
+    <h1>Fathom verification, Aman classifier, Co-Pilot V1 scoping</h1>
+    <div class="goal">
+      Verify the M1.2.5 cron sweep landed cleanly, decide and implement how Aman's sales calls are classified, scope CSM Co-Pilot V1.
+    </div>
+    <div class="meta">
+      <span><strong>Last updated:</strong> 2026-04-28 (M2.0 ship)</span>
+      <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
+    </div>
+  </header>
+
+  <section class="columns">
+
+    <div class="col planned">
+      <header>
+        <h2>Planned</h2>
+        <span class="count">4</span>
+      </header>
+
+      <div class="card">
+        <div class="id">M2.2</div>
+        <div class="title">Aman classifier — discovery (read-only)</div>
+        <div class="subtitle">Audit how Aman's prospect calls are landing today and quantify scope.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.3</div>
+        <div class="title">Aman classifier — recommendation, approval, implement, backfill, tests</div>
+        <div class="subtitle">Pick option (a/b/c) → Drake approval → ship classifier change + backfill Aman's existing calls.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.4</div>
+        <div class="title">CSM Co-Pilot V1 scoping doc</div>
+        <div class="subtitle">Mirror Ella V1 scope shape; Drake-in-the-loop on key decisions.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.5</div>
+        <div class="title">CSM Co-Pilot skeleton</div>
+        <div class="subtitle">Folder + entry points only, no agent logic yet.</div>
+        <div class="pills"><span class="pill stretch">stretch</span></div>
+      </div>
+    </div>
+
+    <div class="col progress">
+      <header>
+        <h2>In Progress</h2>
+        <span class="count">2</span>
+      </header>
+
+      <div class="card">
+        <div class="id">M2.0</div>
+        <div class="title">Spin up docs/session-tracker.html</div>
+        <div class="subtitle">Single-page visual tracker for SOD/EOD recordings.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M2.1</div>
+        <div class="title">Fathom data sanity checks</div>
+        <div class="subtitle">Drake running queries with Claude.ai outside Code; will brief Code if drift surfaces.</div>
+        <div class="pills"><span class="pill">drake-led</span></div>
+      </div>
+    </div>
+
+    <div class="col done">
+      <header>
+        <h2>Done</h2>
+        <span class="count">0</span>
+      </header>
+
+      <div class="empty">Nothing yet.</div>
+    </div>
+
+  </section>
+
+  <section class="blockers">
+    <h2>Blockers / Needs from Nabeel</h2>
+    <ul>
+      <li>
+        <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice.
+        <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
+      </li>
+    </ul>
+  </section>
+
+  <div class="footer">
+    Tracker is a view, not a source of truth. If this drifts from CLAUDE.md, CLAUDE.md wins.
+    Updated by hand as work moves through the session.
+  </div>
+
+</div>
+</body>
+</html>
