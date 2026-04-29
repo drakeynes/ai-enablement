@@ -328,3 +328,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Why deferred:** not blocking, no behavior bug. Both fields are correctly populated by the M3.2 merge RPC (verified live during the three-Vid consolidation — both source emails accumulated cleanly into the gmail canonical's `alternate_emails`, dedup-aware across sequential merges into the same target). The data is correct; only the dashboard's read-back is missing. M3.3 (Calls page) is higher-priority forward motion.
 - **Revisit triggers:** (a) next Clients detail page polish pass, (b) a reviewer asks "what merged into this client?" and Studio is the only answer, (c) audit needs surface for understanding why a given client matched a participant by an alt-email.
 - **Logged:** 2026-04-29 (M3.2 live verification).
+
+## `calls.summary` column is unused — cron path writes to `documents` instead
+
+- **What:** the `calls.summary` text column (migration 0003) is empty for all 560 cloud rows. Fathom cron-ingested summaries land as `documents` rows of `document_type='call_summary'` keyed on `metadata.call_id` (22 such rows in cloud). The Calls detail page Section 4 (M3.3) was originally spec'd to read `calls.summary`; it now reads from `documents` instead, matching reality.
+- **Why deferred:** no behavior bug. The dashboard renders the right content; the redundancy is just a column that's never written. Two clean fixes exist; neither is urgent.
+- **Resolution options:**
+  - **(a) Backfill `calls.summary` at ingest time.** When the Fathom pipeline writes a `call_summary` document, also UPDATE the `calls.summary` column with the same content. Reads then have one source. Costs: write amplification, drift risk if the document is regenerated and the column isn't.
+  - **(b) Drop `calls.summary` in a small migration.** Acknowledge that summaries are documents, not call attributes. Costs: nothing — no live reader of the column.
+- **Revisit triggers:** (a) we add a query that wants `calls.summary` indexed (rare — summaries are read-once-per-detail-view, not bulk-queried), (b) someone is surprised by the empty column during schema review and wants the redundancy resolved. Until then: status quo, dashboard reads from `documents`.
+- **Logged:** 2026-04-29 (M3.3 build).
