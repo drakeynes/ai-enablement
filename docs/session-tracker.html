@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Session M2 — tracker</title>
+<title>Session M3 — tracker</title>
 <style>
   :root {
     --bg: #f6f6f4;
@@ -229,13 +229,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M2</div>
-    <h1>Fathom verification + Gregory dashboard scaffold + Clients pages live (smoke test pending)</h1>
+    <div class="id">Session M3</div>
+    <h1>Clients smoke test + merge feature + Calls page (+ Gregory brain stretch)</h1>
     <div class="goal">
-      Verify Fathom ingest, scope and ship Gregory V1 — dashboard scaffold + auth + Clients list and detail pages live in production. Behavior smoke test (steps 2–10 of M2.3b) runs first thing in M3.1 tomorrow.
+      Complete behavior verification of M2.3b (steps 2–10 of the Clients smoke test), pull the merge feature for auto-created clients forward from deferred and ship it, then ship the Calls page (list + detail + edit-mode-save + call_classification_history writes). Gregory brain V1.1 sits as a stretch goal if the first three land cleanly.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> 2026-04-28 (M2.3a + M2.3b shipped, smoke test pending)</span>
+      <span><strong>Last updated:</strong> Session M3 — start of day</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -245,25 +245,32 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">3</span>
+        <span class="count">4</span>
       </header>
 
       <div class="card">
         <div class="id">M3.1</div>
-        <div class="title">M2.3b smoke test (steps 2–10) + Calls page</div>
-        <div class="subtitle">First task: walk inline edits, CSM swap (verify two rows in client_team_assignments), filter chips, debounced search, sortable columns. Then ship Calls list + detail + edit-mode-save + call_classification_history writes.</div>
+        <div class="title">M2.3b behavior smoke test (steps 2–10)</div>
+        <div class="subtitle">Step 1 (page loads, 134 clients populating) already confirmed. Walk: inline edits in Identity persist across refresh, tag and Notes saves persist, primary CSM swap creates two rows in client_team_assignments (old with unassigned_at set, new without), needs-review filter narrows the list, debounced search narrows by name, sortable columns toggle order, amber needs-review pill renders on auto-created client detail header. Any failure fixed before moving on.</div>
       </div>
 
       <div class="card">
         <div class="id">M3.2</div>
-        <div class="title">Gregory brain V1.1</div>
-        <div class="subtitle">Python agent reading call summaries, action items, NPS, Slack signals → computes health scores + concerns → writes to client_health_scores. UI is already built against the locked factors jsonb shape. After M3.1 if time and bugs allow.</div>
+        <div class="title">Merge feature for auto-created clients</div>
+        <div class="subtitle">Wraps scripts/merge_client_duplicates.py in api/merge_clients.py (Vercel Python function) + "Merge into…" button and dialog on the Clients detail page. Visual hooks (needs_review pill, "Auto-created (needs review)" filter chip) already shipped in M2.3b. Pulled forward from the deferred slot to clear auto-created clutter before moving into Calls.</div>
       </div>
 
       <div class="card">
-        <div class="id">M2.3c</div>
-        <div class="title">Merge feature for auto-created clients</div>
-        <div class="subtitle">Wraps scripts/merge_client_duplicates.py in api/merge_clients.py + dashboard "Merge into…" button + dialog on the detail page. Visual hooks already shipped in M2.3b (needs_review pill, filter chip). Deferred until after M3.1 + M3.2 to give Zain a working merge surface in one go.</div>
+        <div class="id">M3.3</div>
+        <div class="title">Calls page (list + detail + edit-mode-save)</div>
+        <div class="subtitle">Per gregory.md § Calls page spec. Explicit Save / Cancel edit mode (not inline-save) because category and primary_client_id directly affect Ella retrieval. Writes call_classification_history rows on save. Includes the needs-review filter (low confidence OR unclassified OR primary_client_id null when category=client) — that filter is the M2.5 manual review surface.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M3.4</div>
+        <div class="title">Gregory brain V1.1</div>
+        <div class="subtitle">Python agent reading call summaries, action items, NPS, Slack signals → computes health scores + concerns → writes to client_health_scores. UI already built against the locked factors jsonb shape, so the brain just needs to produce data in that shape. Drops if M3.1–M3.3 fill the session.</div>
+        <div class="pills"><span class="pill stretch">stretch</span></div>
       </div>
     </div>
 
@@ -273,7 +280,7 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Session closing. M3.1 starts tomorrow with the M2.3b smoke test.</div>
+      <div class="empty">Session M3 — start of day. Beginning with the M2.3b smoke test.</div>
     </div>
 
     <div class="col done">
@@ -310,8 +317,8 @@
       <div class="card">
         <div class="id">M2.3b</div>
         <div class="title">Clients list + detail pages — shipped, deployed, list view visually confirmed</div>
-        <div class="subtitle">Data layer in lib/db/clients.ts, migration 0014 (change_primary_csm RPC), Clients list with filters/search/sort, Clients detail with all 7 sections + inline-save + CSM-swap dialog. Step 1 (page loads with 134 clients) confirmed; steps 2–10 (inline edits persist, CSM swap creates two rows, filters narrow, search debounces, sort toggles) PENDING — first task in M3.1.</div>
-        <div class="pills"><span class="pill warn">smoke test pending</span></div>
+        <div class="subtitle">Data layer in lib/db/clients.ts, migration 0014 (change_primary_csm RPC), Clients list with filters/search/sort, Clients detail with all 7 sections + inline-save + CSM-swap dialog. Step 1 (page loads with 134 clients) confirmed; steps 2–10 (inline edits persist, CSM swap creates two rows, filters narrow, search debounces, sort toggles) tracked as M3.1.</div>
+        <div class="pills"><span class="pill">behavior verification → M3.1</span></div>
       </div>
     </div>
 
@@ -328,7 +335,7 @@
   </section>
 
   <section class="blockers">
-    <h2>Bugs resolved this session</h2>
+    <h2>Bugs resolved last session (M2)</h2>
     <ul>
       <li>
         <strong>@supabase/ssr middleware crashed on Vercel Edge runtime</strong> — transitive dep used Node-only <span class="ref">__dirname</span>. Fixed by dropping middleware, gating auth in a Server Component layout.
