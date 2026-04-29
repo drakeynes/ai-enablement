@@ -12,9 +12,14 @@
     "api/fathom_backfill.py": {
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 300
+    },
+    "api/gregory_brain_cron.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 300
     }
   },
   "crons": [
-    { "path": "/api/fathom_backfill", "schedule": "0 8 * * *" }
+    { "path": "/api/fathom_backfill", "schedule": "0 8 * * *" },
+    { "path": "/api/gregory_brain_cron", "schedule": "0 9 * * 1" }
   ]
 }
