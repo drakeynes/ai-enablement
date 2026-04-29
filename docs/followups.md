@@ -11,6 +11,17 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Fathom realtime webhook silent for 7+ days; cron-only ingest in cloud
+
+- **What:** `webhook_deliveries` shows zero rows from the realtime path (`source='fathom_webhook'`) over the last 7+ days; only `fathom_cron`-prefixed deliveries are landing (46 in the same window). The daily Fathom backfill cron at 08:55 UTC has been the sole ingest path. All cron deliveries processed successfully (`status='processed'`, no errors). Realtime webhook is silent — possible causes: (a) webhook subscription dropped at Fathom's side, (b) signature mismatch causing silent 401s before the handler reaches the `webhook_deliveries` insert, (c) webhook never registered against the current Vercel URL after some deploy, (d) Fathom's edge dropping requests.
+- **Why it matters:** dashboard call cadence systematically lags by up to 24 hours. Gregory health scores reflect yesterday's data, not today's. Ella can't answer questions about today's calls until next morning's cron sweeps them in. Tolerable for V1; a real issue for any future "respond to today's call" use case (Ella V1.1, Gregory daily cron if we ever switch from weekly).
+- **Diagnosis steps (next session, ~15 min):**
+  1. Log into Fathom → API/webhook settings → check whether a webhook subscription against `https://ai-enablement-sigma.vercel.app/api/fathom_events` is registered and active.
+  2. **If MISSING** — re-register per `docs/runbooks/fathom_webhook.md` § "Register the webhook against the Vercel URL". Capture the new `whsec_` secret and update Vercel env var `FATHOM_WEBHOOK_SECRET`. Redeploy to pick up the new secret.
+  3. **If PRESENT** — check Vercel function logs for `/api/fathom_events`. Look for 401 responses (signature mismatch) or absence of any inbound requests at all (Fathom's edge dropping).
+  4. Test by recording a short Fathom meeting (≥90 sec to clear the short-file heuristic) and watching `webhook_deliveries` for the new row.
+- **Logged:** session M3 close-out (2026-04-29).
+
 ## Aman sales-call classification — needed before CSM Co-Pilot V1
 
 - **Status update (2026-04-28):** superseded by the "Aman automated classifier — deferred" entry below. The decision landed on manual reclassification via the Gregory dashboard (M2.5) rather than an automated classifier change for V1. The original "next action" below is no longer the live plan — kept for history.
@@ -367,3 +378,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Why deferred:** the rubric is iterative — V1.1 is starting points, not locked. Building golden cases against numbers we expect to change wastes effort. Once the rubric stabilizes (~3-6 cron runs in, Drake reviews and tunes), build a 20-case golden dataset that covers the four signal-availability matrix corners (everything-known / cadence-only / action-items-only / nothing-known) plus tier-boundary cases.
 - **Revisit triggers:** (a) Drake tunes the rubric in scoring.py and wants regression coverage on the change, (b) a brain run produces a tier that's clearly wrong (a green client who should be red, or vice versa) and we want a fixture to pin that case forever.
 - **Logged:** 2026-04-29 (M3.4 ship).
+
+## Gregory rubric quirk — never-called clients land green via the "0 action items = clean docket" interpretation
+
+- **What:** the M3.4 first all-active sweep produced 93 green / 40 yellow / 0 red. The 93-green count overstates actual health because the rubric treats "0 action items" as 100 (clean docket, not "missing"), and combined with neutral cadence (50, when no calls exist) + neutral NPS (50), the math lands at `0.4×50 + 0.2×100 + 0.2×100 + 0.2×50 = 70 → green`. So a client who has never been called gets graded green.
+- **Why it matters:** the score is communicating "this client is fine" for clients we've never spoken to. The dashboard's Health Score indicator is honest about the underlying signals (the "Why this score" expand shows the cadence note "No calls on record for this client"), but the headline number + green pill misleads at a glance.
+- **Resolution options:**
+  - **(a)** When `call_cadence` returns the no-calls-on-record case, force `insufficient_data=true` regardless of other signals' contributions. The "I have no real signals about this client" stance from `scoring.py` already exists for the all-neutral case; extend it to "if cadence is unknown, the rest of the rubric isn't trustworthy either."
+  - **(b)** Change the `0 action items` interpretation from "100 = clean docket" to "neutral 50 when no calls have occurred." Cleaner semantics: action items are evidence of follow-through, and zero items on a client we've never talked to is no evidence either way.
+- **Revisit triggers:** (a) when Drake tunes the rubric for the next iteration, (b) if a never-called client's green pill gets called out by a CSM as misleading. Lean: option (a) — scoping the insufficient-data trigger to "no cadence" is the smaller change and matches how a CSM thinks about the question.
+- **Logged:** 2026-04-29 (M3.4 first all-active sweep, EOD review).
