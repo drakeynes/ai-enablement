@@ -6,6 +6,7 @@ import {
   updateClient,
   type UpdatableField,
 } from '@/lib/db/clients'
+import { mergeClient, type MergeResult } from '@/lib/db/merge'
 
 const UPDATABLE_FIELDS: readonly UpdatableField[] = [
   'full_name',
@@ -66,6 +67,22 @@ export async function changeClientPrimaryCsm(
   const result = await changePrimaryCsm(client_id, new_team_member_id)
   if (result.success) {
     revalidatePath(`/clients/${client_id}`)
+    revalidatePath('/clients')
+  }
+  return result
+}
+
+export async function mergeClientAction(
+  source_client_id: string,
+  target_client_id: string,
+): Promise<
+  | { success: true; result: MergeResult }
+  | { success: false; error: string }
+> {
+  const result = await mergeClient(source_client_id, target_client_id)
+  if (result.success) {
+    revalidatePath(`/clients/${target_client_id}`)
+    revalidatePath(`/clients/${source_client_id}`)
     revalidatePath('/clients')
   }
   return result
