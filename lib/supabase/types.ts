@@ -934,6 +934,14 @@ export type Database = {
         Args: { p_source_id: string; p_target_id: string }
         Returns: Json
       }
+      update_call_classification: {
+        Args: {
+          p_call_id: string
+          p_changes: Json
+          p_changed_by: string | null
+        }
+        Returns: Json
+      }
       match_document_chunks: {
         Args: {
           client_id?: string
