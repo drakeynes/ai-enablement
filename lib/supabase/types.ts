@@ -930,6 +930,10 @@ export type Database = {
         Args: { p_client_id: string; p_new_team_member_id: string }
         Returns: undefined
       }
+      merge_clients: {
+        Args: { p_source_id: string; p_target_id: string }
+        Returns: Json
+      }
       match_document_chunks: {
         Args: {
           client_id?: string
