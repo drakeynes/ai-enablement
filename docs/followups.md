@@ -307,3 +307,17 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 - **Resolution:** the original spec section showed Next.js nested in `dashboard/` and a "Vercel config gotcha" note that turned out to be wrong (Vercel auto-detection is suppressed by an explicit `functions` block, not the other way around). Rewritten in this housekeeping pass to reflect the actual deployed layout: Next.js at repo root, `vercel.json` declares `"framework": "nextjs"` plus the Python functions block, both build in one Vercel project. The original "Repo location" tree diagram replaced; the new section also captures *why* Next.js had to be at root (single-Vercel-project + Python functions in `api/` + framework auto-detection all combine to constrain the layout).
 - **Logged:** 2026-04-28 (M2.3a deviation surfaced); **resolved:** 2026-04-28 (housekeeping rewrite).
+
+## SearchableClientSelect fetch-all-on-mount — fine for V1, watch growth
+
+- **What:** the merge dialog (M3.2) and the upcoming Calls page primary-client-id picker (M3.3) both render a client dropdown by fetching the full eligible-client list server-side on mount and filtering client-side as the user types. ~134 clients today; the round trip is one cheap PostgREST query and the rendered list fits comfortably in a 64-row scroll container. No keystroke-driven DB calls.
+- **Why it matters:** the pattern has a soft ceiling. At ~500–800 clients the dialog open will start to feel sluggish (network + client-side initial-render cost); at ~5000+ rows the JS-side filter cost on every keystroke becomes visible. Neither limit is anywhere near today's scale.
+- **Revisit triggers:** (a) `select count(*) from clients where archived_at is null` crosses ~800, (b) anyone reports the merge dialog or the Calls primary-client picker feeling slow on dialog open. Resolution path: server-filtered query bound to debounced search input — ~30 lines of refactor, no API change at the consumer level. Until then: the current implementation is correct for V1 scale.
+- **Logged:** 2026-04-29 (M3.2 build).
+
+## `merge_clients` transcript-doc query is whole-table filter — fine at current scale
+
+- **What:** the `merge_clients` plpgsql function (migration 0015) reactivates transcript_chunk documents by querying `documents where document_type = 'call_transcript_chunk' and metadata->>'call_id' = any(<source's call ids as text[])`. Mirrors the Python script's "fetch all transcript chunks, filter on metadata.call_id in Python" approach, but server-side via the PostgREST equivalent. There's no index on `documents.metadata->>'call_id'` because that filter has only ever been used by the merge path.
+- **Why it matters:** scan cost is proportional to total transcript_chunk doc count. Today: ~3000 documents in cloud, scan is fast. As ingestion grows past ~50k transcript_chunk docs the scan starts to become the merge bottleneck; a partial index `on (metadata->>'call_id') where document_type='call_transcript_chunk'` would fix it cleanly. Not a correctness issue — just a perf one.
+- **Revisit triggers:** (a) `select count(*) from documents where document_type='call_transcript_chunk'` crosses ~50k, OR (b) merge dialog spinner ever takes more than ~2s on submit. Resolution: add the partial index in a small migration. Until then: status quo.
+- **Logged:** 2026-04-29 (M3.2 build).
