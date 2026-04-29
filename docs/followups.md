@@ -22,6 +22,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
   4. Test by recording a short Fathom meeting (≥90 sec to clear the short-file heuristic) and watching `webhook_deliveries` for the new row.
 - **Logged:** session M3 close-out (2026-04-29).
 
+## Repo cleanup pass — broader sweep beyond `scripts/`
+
+- **What:** the `scripts/` archive cleanup landed mid-M3 (`scripts/archive/` + 3 historical scripts moved + doc references updated). Other parts of the repo likely have similar one-shot or stale artifacts that visually compete with active tooling: candidate areas to sweep include `data/` (one-shot ingestion logs and intermediate files from Fathom backlog runs), `supabase/seed/` (verify each seed file is still in use), `tests/` (any test files for archived scripts or removed features), root-level files (any orphaned config or scratch files). Scope is "make the repo less visually cluttered for human eyes" — not refactoring or deleting working code.
+- **Why deferred:** `scripts/` was the highest-friction area and got handled. Broader cleanup is nice-to-have, not blocking. The repo is still navigable.
+- **Revisit trigger:** (a) onboarding a new contributor (Zain or future hire) and noticing repo orientation is harder than it should be, (b) Drake catches himself looking past the same stale file for the third time, (c) any future session has spare capacity and Drake wants to ship a small win.
+- **Logged:** session M3 close-out.
+
 ## Aman sales-call classification — needed before CSM Co-Pilot V1
 
 - **Status update (2026-04-28):** superseded by the "Aman automated classifier — deferred" entry below. The decision landed on manual reclassification via the Gregory dashboard (M2.5) rather than an automated classifier change for V1. The original "next action" below is no longer the live plan — kept for history.
