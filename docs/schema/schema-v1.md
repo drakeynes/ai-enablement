@@ -9,7 +9,7 @@ First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co
 | Table | Count | Source |
 |---|---:|---|
 | `team_members` | 9 | Manual seed (`supabase/seed/team_members.sql`); 7 have `slack_user_id` backfilled |
-| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`); 4 of the auto-created rows merged into pilot clients via `scripts/merge_client_duplicates.py` |
+| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`); 4 of the auto-created rows merged into pilot clients via the one-shot `scripts/archive/merge_client_duplicates.py` (now superseded by the Gregory dashboard merge flow) |
 | `clients` (archived) | 68 | Soft-archived by the Active++ re-import cascade |
 | `slack_channels` (active) | 101 | 100 client channels + `ella-test` |
 | `slack_channels` (archived) | 21 | Cascaded from archived clients |

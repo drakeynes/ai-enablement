@@ -78,10 +78,16 @@ ai-enablement/
 │   └── ingestion/
 │       └── validate.py         # documents / document_chunks metadata validator — REQUIRED for new pipelines
 ├── evals/                      # Golden datasets + eval runner (empty for now; Ella V1 ships without)
-├── scripts/                    # One-off scripts, data imports, admin tasks
+├── scripts/                    # Active tooling — re-runnable seeds, local test harnesses, admin tasks
 │   ├── seed_clients.py         # Load Active++ view into clients + client_team_assignments
-│   ├── backfill_team_slack_ids.py
-│   └── merge_client_duplicates.py   # One-shot merge of auto-created client rows into canonical
+│   ├── test_ella_locally.py    # Reusable Ella-handler driver (pre-launch + bug repro)
+│   ├── test_fathom_backfill_locally.py  # Local harness for the Fathom cron path
+│   ├── test_fathom_webhook_locally.py   # Local 5-path test loop for the Fathom webhook
+│   └── archive/                # One-shot historical scripts — kept for reference, not re-run
+│       ├── README.md
+│       ├── merge_client_duplicates.py        # Replaced by Gregory dashboard merge (M3.2)
+│       ├── backfill_summary_docs_for_fathom_cron.py  # M1.2.5 in-flight repair
+│       └── backfill_team_slack_ids.py        # One-shot post-seed Slack ID resolver
 ├── tests/                      # pytest suite — see Live System State for count
 └── data/                       # GITIGNORED. Source files for ingestion live here:
                                 #   data/client_seed/       (Active++ CSV export)
@@ -143,7 +149,7 @@ The Fathom classifier resolves call participants to `clients` rows by email firs
 - `metadata.alternate_emails` — emails the client has used historically (e.g., the email on their Fathom account vs. the one on their Active++ record).
 - `metadata.alternate_names` — display names the client has used historically (e.g., "King Musa" on Fathom vs. "Musa Elmaghrabi" on the roster).
 
-Both arrays are consulted case-insensitively, whitespace-stripped. When you merge an auto-created duplicate client row into a canonical row (see `scripts/merge_client_duplicates.py`), write the auto row's email and full_name into these arrays on the real row so future ingestion resolves cleanly without re-creating the duplicate. Any new ingestion path that resolves humans-to-clients should consult these fields before creating a new row.
+Both arrays are consulted case-insensitively, whitespace-stripped. When you merge an auto-created duplicate client row into a canonical row, the auto row's email and full_name must be written into these arrays on the real row so future ingestion resolves cleanly without re-creating the duplicate. The canonical merge surface is the Gregory dashboard's "Merge into…" flow on the Clients detail page (migration `0015_merge_clients_function.sql` handles the alternates sync atomically as part of the merge). The historical `scripts/archive/merge_client_duplicates.py` did the same thing for the four pilot pairs already merged and remains as reference. Any new ingestion path that resolves humans-to-clients should consult these fields before creating a new row.
 
 ### Error Handling
 
@@ -205,7 +211,7 @@ As of 2026-04-27 (M1 close-out):
 - **Slack app:** configured, installed in `#ella-test-drakeonly` (Drake-only test, mapped to Javi Pena's `client_id` as a temporary fixture), `#ella-test`, and the 7 pilot client channels. Event Subscriptions enabled; `app_mention` subscribed; signing-secret-verified. Bot scopes + new `chat:write` user scope (M1.4.1). The `@ella` Slack user account exists, was added as an app Collaborator to enable the OAuth flow, ran the install as Ella, and produced the `xoxp-` user token now in Vercel as `SLACK_USER_TOKEN`. Ella the user is currently invited to `#ella-test-drakeonly` only — pilot channels still pending (M1.4.5).
 - **Ella:** agent code in `agents/ella/`. Sync handler (Vercel kills threads on return — see `docs/runbooks/slack_webhook.md`). M1.3 (2026-04-27) shipped `shared/slack_format.py` (markdown→mrkdwn converter, wired in `agents/ella/slack_handler.py`); replies now render with native Slack bold/italic. M1.4.3 (2026-04-27) shipped two-token posting in `api/slack_events.py:_post_to_slack` — tries `SLACK_USER_TOKEN` (xoxp-, no APP tag) first, falls back to `SLACK_BOT_TOKEN` (xoxb-, with APP tag) on any failure. **Reply path is APP-tag-free in `#ella-test-drakeonly` as of M1.4.3 deploy.** Known constraint: the inbound `app_mention` event is Slack-app-scoped, so the user-side @-mention still shows the bot as the mention target — the *response* renders as the user. Awaiting Nabeel's read on whether this addresses his ask. M1.4.5 (pilot rollout) holds until that comes back. `agent_runs.duration_ms` still `NULL` — deferred per `docs/followups.md`.
 - **Fathom webhook handler:** `api/fathom_events.py` deployed and registered with Fathom. **Two F2.1 doc-vs-reality bugs caught at deploy and fixed in M1.2.5:** (a) outbound auth uses `X-Api-Key`, not the OpenAPI-documented `Authorization: Bearer`; (b) `default_summary` field is `markdown_formatted`, not the spec-driven `markdown`/`text`/etc. fallback list. Both have unit tests pinning the corrected behavior. **Webhook itself has not yet received an organic Fathom delivery** — `webhook_deliveries.source='fathom_webhook'` is still 0. The cron path has been doing all the catch-up so far (31 cron-sourced rows). When a real coaching call finishes Fathom post-processing while our webhook is reachable, that path activates. Architecture in `docs/architecture/fathom_webhook.md`; ops in `docs/runbooks/fathom_webhook.md`.
-- **Fathom backfill cron:** `api/fathom_backfill.py` deployed (M1.2 / M1.2.5). Daily 08:00 UTC via Vercel Cron. First real sweep ran 2026-04-27: 29 calls ingested (15 client + 14 non-client), 153 action items, 15 summaries (after the `markdown_formatted` adapter fix + targeted backfill via `scripts/backfill_summary_docs_for_fathom_cron.py`). Race-condition pattern observed — concurrent manual triggers can hit `calls_source_external_id_key` collisions. Documented in followups; not a real-world issue at daily cadence.
+- **Fathom backfill cron:** `api/fathom_backfill.py` deployed (M1.2 / M1.2.5). Daily 08:00 UTC via Vercel Cron. First real sweep ran 2026-04-27: 29 calls ingested (15 client + 14 non-client), 153 action items, 15 summaries (after the `markdown_formatted` adapter fix + targeted backfill via `scripts/archive/backfill_summary_docs_for_fathom_cron.py`). Race-condition pattern observed — concurrent manual triggers can hit `calls_source_external_id_key` collisions. Documented in followups; not a real-world issue at daily cadence.
 - **Live state (table counts) is mirrored in the Gregory dashboard once V1 ships.** For ingestion health checks, run the queries in `docs/runbooks/fathom_sanity_checks.md` against cloud Supabase. CLAUDE.md captures architecture and decisions; live numbers belong in the dashboard, not here.
 - **Test suite:** 344 passing (270 baseline + 14 M1.4.3 user-token tests + 16 F2.3 webhook-adapter tests + 42 M1.3 slack-format tests + 2 F2.3 markdown_formatted tests).
 

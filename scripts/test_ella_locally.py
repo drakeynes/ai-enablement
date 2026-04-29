@@ -218,7 +218,10 @@ def pick_pilot_setup() -> dict[str, Any]:
     if not team_members:
         raise RuntimeError(
             "No active team_members row has a slack_user_id. "
-            "Run scripts/backfill_team_slack_ids.py first."
+            "Backfill the slack_user_id column on team_members "
+            "(see scripts/archive/backfill_team_slack_ids.py for the original "
+            "one-shot resolver — re-run by copying back to scripts/ if the gap "
+            "is real, or fix at the seed-time source)."
         )
 
     return {

@@ -53,7 +53,7 @@ If header shape has drifted from the above, stop — the parser may need updatin
 
 ### 4. Preload alternates on the roster (if a first-time cloud push or a new merge happened)
 
-The pipeline's `ClientResolver` consults `clients.metadata.alternate_emails` and `alternate_names`. If a merge (`scripts/merge_client_duplicates.py`) has run and its output didn't propagate to cloud — or if new canonical rows were recently added that have alternate identifiers — preload those before `--apply` or the pipeline will produce auto-create duplicates that then need a cleanup merge pass.
+The pipeline's `ClientResolver` consults `clients.metadata.alternate_emails` and `alternate_names`. If a dashboard merge has run and its output didn't propagate to cloud — or if new canonical rows were recently added that have alternate identifiers — preload those before `--apply` or the pipeline will produce auto-create duplicates that then need a cleanup merge pass. (Merges today happen via the Gregory dashboard's "Merge into…" flow; the historical one-shot at `scripts/archive/merge_client_duplicates.py` covered the original four pilot pairs.)
 
 F1.2 did this by jsonb-merging the alternates onto the 4 pilot rows. For the next re-run, check whether the `alternate_emails` / `alternate_names` on cloud reflect the current state of the merge pairs:
 
@@ -216,4 +216,4 @@ If you see a large `calls updated` count on what was supposed to be a first run,
 - Live webhook ingestion — different payload shape, different entry point, documented in `docs/future-ideas.md`.
 - `call_summary` document creation — TXT exports don't carry summaries; the webhook path will. Until then `call_summary` stays empty.
 - `call_action_items` rows — same deferral reason.
-- Fuzzy / cross-name client matching for the `needs_review` queue — hand-merge via `scripts/merge_client_duplicates.py` today.
+- Fuzzy / cross-name client matching for the `needs_review` queue — manual review via the Gregory dashboard ("Merge into…" on each `needs_review` client's detail page) today.

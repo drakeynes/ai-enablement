@@ -44,7 +44,7 @@ ai-enablement/
 ├── frontend/            # Next.js dashboards
 ├── shared/              # Shared Python utilities
 ├── evals/               # Golden datasets and eval runner
-└── scripts/             # One-off scripts
+└── scripts/             # Active tooling (seeds, local test harnesses) + archive/ for one-shots
 ```
 
 ## Contact

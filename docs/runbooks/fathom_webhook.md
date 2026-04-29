@@ -398,7 +398,7 @@ time; raise `maxDuration` or investigate the latency source.
 | All deliveries 401 | Secret mismatch between Fathom and Vercel env var | Rotate the secret — see "Rotate Secret" below. |
 | All deliveries 500 | OpenAI or Supabase outage | Check status pages. Cron backfill catches up once service restored. |
 | Some deliveries `malformed` | Fathom payload shape drift | Inspect `webhook_deliveries.payload` — compare to adapter's expectations in `ingestion/fathom/webhook_adapter.py`. |
-| `needs_review` queue growing fast | New client roster — resolver doesn't match | Expected; hand-merge via `scripts/merge_client_duplicates.py` when queue reaches actionable size. See `docs/followups.md` § "Auto-created client review workflow". |
+| `needs_review` queue growing fast | New client roster — resolver doesn't match | Expected; merge via the Gregory dashboard's "Merge into…" button on the Clients detail page (visible only on `needs_review`-tagged clients). See `docs/followups.md` § "Auto-created client review workflow". |
 | Duplicate calls in DB | Shouldn't happen — pipeline idempotency covers this | File a bug; worth investigating the classifier / upsert paths. |
 | `calls` row but no `call_summary` document | Summary was empty in the webhook payload | Normal — older calls or calls Fathom didn't summarize. Not a bug. |
 | `calls` row but no `call_action_items` | Same — not all calls have action items | Normal. |

@@ -60,7 +60,7 @@ The diagram above is the architectural shape. What's actually shipped as of 2026
 
 - **Ingestion — three pipelines live, all applied against local Supabase:**
   - `ingestion/fathom/` — 389-call backlog ingested (Feb–Apr 2026). Chunks + embeddings for client calls; action items and summaries deferred (Fathom `.txt` exports don't carry them; see `docs/future-ideas.md`).
-  - `ingestion/slack/` — 90-day history backfill for 8 pilot channels via Slack Web API. Plus `scripts/backfill_team_slack_ids.py` to resolve team emails to Slack user IDs.
+  - `ingestion/slack/` — 90-day history backfill for 8 pilot channels via Slack Web API. The one-shot post-seed `team_members.email → slack_user_id` resolver lives at `scripts/archive/backfill_team_slack_ids.py` (already run; archived).
   - `ingestion/content/` — filesystem-sourced HTML lessons (297 files). Drive API integration is deferred; today the pipeline reads `data/course_content/` directly.
   - `ingestion/crm/` — not started; data flows through the clients importer (`scripts/seed_clients.py`) instead for V1.
 - **Knowledge base — Supabase local stack populated.** See `docs/schema/schema-v1.md` for the per-table row counts.
