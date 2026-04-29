@@ -65,8 +65,12 @@ The diagram above is the architectural shape. What's actually shipped as of 2026
   - `ingestion/crm/` — not started; data flows through the clients importer (`scripts/seed_clients.py`) instead for V1.
 - **Knowledge base — Supabase local stack populated.** See `docs/schema/schema-v1.md` for the per-table row counts.
 - **Shared utilities — all shipped:** `shared/db.py`, `shared/claude_client.py`, `shared/kb_query.py`, `shared/hitl.py`, `shared/logging.py`, `shared/ingestion/validate.py`.
-- **Agents — not built yet.** Ella (Slack Bot V1) and CSM Co-Pilot V1 are next.
-- **Interfaces — not built yet.** Slack app installation, Next.js dashboard both pending the agent builds.
+- **Agents — three live:**
+  - `agents/ella/` — Slack Bot V1, live in `#ella-test-drakeonly`, awaiting pilot rollout (M1.4.5).
+  - Fathom ingestion path (`ingestion/fathom/` + `api/fathom_events.py` webhook + `api/fathom_backfill.py` daily cron) — not a "thinking" agent but functions as the calls-data agent end-to-end.
+  - `agents/gregory/` — Gregory brain V1.1 (M3.4). Computes per-client health scores + tier + concerns and writes to `client_health_scores`. Weekly cron at `api/gregory_brain_cron.py`; manual trigger at `scripts/run_gregory_brain.py`. Concerns generation gated behind `GREGORY_CONCERNS_ENABLED` env var.
+  - CSM Co-Pilot is the next planned agent; not yet started.
+- **Interfaces — Gregory dashboard live; Slack live for Ella.** Next.js 14 dashboard at repo root, deployed to `ai-enablement-sigma.vercel.app` — Clients list/detail, Calls list/detail with edit-mode classification, "Merge into…" flow for auto-created client review. Slack app live for Ella.
 
 ## The Four Layers in Detail
 

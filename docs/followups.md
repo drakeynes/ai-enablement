@@ -346,3 +346,24 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Pattern recurrence:** observed at least once during M3.3 (2026-04-29). If it happens again in close succession or starts taking multiple redeploys to land, escalate to investigation.
 - **Revisit triggers:** (a) the same failure mode hits twice in a row on the same commit, (b) a deploy lands in a broken state instead of failing visibly (alias flips to a non-functional deployment), (c) it starts happening multiple times per deploy session. Resolution path: check Vercel status page first; then dig into deployment Events via the dashboard UI (CLI doesn't surface those messages); then open a Vercel support ticket if pattern persists.
 - **Logged:** 2026-04-29 (M3.3 deploy).
+
+## NPS ingestion not built — Gregory brain reads it as neutral for every client
+
+- **What:** the M3.4 brain treats the `latest_nps` signal as neutral (50, weight 0.20) for every client because `nps_submissions` is empty in cloud (no ingestion path exists). One of four V1.1 signals is doing nothing. Brain handles missing data gracefully — score is the weighted average over signals that DO have data, and the `factors.signals[].note` for `latest_nps` explicitly says "no NPS submissions on record (NPS ingestion not yet built)" — but the score is more meaningful with NPS than without.
+- **Why deferred:** NPS ingestion is its own design conversation (where do scores come from? Survey tool integration? Manual entry via dashboard?). Not blocking V1.1 ship; brain reports honestly.
+- **Revisit triggers:** (a) Drake adopts a survey tool and wants to wire it in, (b) someone manually enters a few NPS scores via Studio and the dashboard's NPS indicator starts surfacing them, (c) a CSM asks "why isn't NPS counted in this score?" and the answer "no data" stops being acceptable.
+- **Logged:** 2026-04-29 (M3.4 ship).
+
+## Slack signal ingestion to cloud — same gap as NPS for the brain
+
+- **What:** `slack_messages` cloud table is empty (local-only ingestion per `docs/future-ideas.md`). The M3.4 brain V1.1 intentionally omits a Slack-engagement signal because the data doesn't exist server-side; adding the signal in code would just be neutral-for-everyone, no behavior win. Once cloud Slack ingestion lands, add a fifth signal to `agents/gregory/signals.py` (e.g. messages-in-last-14-days, sentiment trend) and re-balance weights.
+- **Why deferred:** cloud Slack ingestion has its own followup (`docs/future-ideas.md`); not driven by Gregory.
+- **Revisit triggers:** (a) cloud Slack ingestion goes live, (b) a CSM asks for "engagement" as a health signal explicitly. Resolution path: add `compute_slack_engagement(db, client_id)` to `signals.py`, add a weight constant, plumb into `compute_all_signals`, re-balance other weights to keep total at 1.0.
+- **Logged:** 2026-04-29 (M3.4 ship).
+
+## Gregory brain golden eval harness deferred — same V1 carve-out as Ella
+
+- **What:** M3.4 ships without a formal eval harness. The unit tests cover signal math, scoring rubric, JSON parsing, and end-to-end wiring (37 tests), but there's no golden dataset of "client X should land in tier Y because of reasons Z" that gates rubric changes. Same V1 carve-out the M1 prompt established for Ella.
+- **Why deferred:** the rubric is iterative — V1.1 is starting points, not locked. Building golden cases against numbers we expect to change wastes effort. Once the rubric stabilizes (~3-6 cron runs in, Drake reviews and tunes), build a 20-case golden dataset that covers the four signal-availability matrix corners (everything-known / cadence-only / action-items-only / nothing-known) plus tier-boundary cases.
+- **Revisit triggers:** (a) Drake tunes the rubric in scoring.py and wants regression coverage on the change, (b) a brain run produces a tier that's clearly wrong (a green client who should be red, or vice versa) and we want a fixture to pin that case forever.
+- **Logged:** 2026-04-29 (M3.4 ship).

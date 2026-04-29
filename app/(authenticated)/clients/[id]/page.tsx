@@ -70,7 +70,8 @@ function HealthScoreIndicator({
   if (!health) {
     return (
       <p className="text-sm text-muted-foreground">
-        No score yet — Gregory will populate this in V1.1.
+        No score yet — Gregory writes scores on the weekly cron run; new
+        clients land here after their first sweep.
       </p>
     )
   }
@@ -141,7 +142,8 @@ function ConcernsIndicator({
   if (concerns.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No concerns surfaced — Gregory will populate this in V1.1.
+        No concerns surfaced — concerns generation activates as call summary
+        coverage grows.
       </p>
     )
   }

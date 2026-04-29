@@ -38,6 +38,65 @@ Top nav only. Two items: **Clients** | **Calls**. User avatar + logout on the ri
 - `/calls/[id]` — detail view
 - `/settings` — placeholder for V1 (auth profile)
 
+## Brain V1.1
+
+The "brain" is the agent that computes per-client health scores and writes them to `client_health_scores`. Lives at `agents/gregory/`. Mirrors Ella's layout: `agent.py` (entry), `signals.py` (deterministic signal computations), `scoring.py` (rubric → score + tier), `concerns.py` (Claude-driven qualitative watchpoints), `prompts.py` (concerns prompt). Each invocation opens an `agent_runs` row, runs, writes one `client_health_scores` row per client, closes the run with telemetry.
+
+### Signals (V1.1)
+
+Four deterministic signals, each emitting a `Signal` dict written verbatim into `factors.signals[]`:
+
+| Signal | Source | Bands / scale | Weight | Missing-data behavior |
+|---|---|---|---|---|
+| `call_cadence` | days since most recent `calls.started_at` where `primary_client_id = client` | <14d → 100; 14-30d → 50; >30d → 0 | 0.40 | "no calls" → neutral 50, note explains |
+| `open_action_items` | count of `call_action_items` where `owner_client_id=client AND status='open'` | 100 baseline, −5 per item, floor 0 | 0.20 | 0 items → 100 (clean docket; not "missing") |
+| `overdue_action_items` | as above, plus `due_date < today` | 100 baseline, −15 per item, floor 0 | 0.20 | 0 items → 100 |
+| `latest_nps` | most recent `nps_submissions.score` for the client | raw 0-10 scaled to 0-100 | 0.20 | "no NPS" → neutral 50 (V1.1 reality: nps_submissions is empty) |
+
+**Slack engagement** is intentionally absent in V1.1 — `slack_messages` cloud table is empty (local-only ingestion per `docs/future-ideas.md`). Add it as a fifth signal once cloud Slack ingestion lands; re-balance weights at that time.
+
+### Scoring rubric
+
+```
+final_score = sum(signal.weight * signal.contribution) / sum(weights)
+            clamped to 0-100, rounded to int.
+
+tier:  >=70 → green
+       40-69 → yellow
+       <40  → red
+```
+
+**Insufficient-data default.** When every signal returned the neutral contribution (i.e. nothing is known about the client), the brain ships `score=50, tier=yellow, factors.overall_reasoning='Insufficient signal data; defaulting to yellow.'`. Never green by accident on no data.
+
+Thresholds and band cutoffs are V1.1 starting points. The math is fully transparent in `factors.signals[]` — a reviewer reading the dashboard's "Why this score" expand can recompute the score by hand. Iterate as miscalibration surfaces.
+
+### Concerns generation (gated)
+
+Concerns are Claude-driven qualitative watchpoints — short text + severity (low/medium/high) + `source_call_ids[]`. Lands in `factors.concerns[]`, which the dashboard's `ConcernsIndicator` reads and renders.
+
+The Claude call is gated behind the `GREGORY_CONCERNS_ENABLED` env var (deploy-flippable, no commit needed). **Default OFF for V1.1.0.** Reasoning: the input to the concerns prompt is recent `call_summary` documents — and at the time of M3.4 ship, there are ~22 such documents across 132 active clients. Roughly 85% of clients would have empty input; paying for the LLM call to hand Claude nothing is wasteful. The flag flips to `true` in Vercel env vars once summary coverage densifies (Fathom webhook + cron continue ingesting; this should resolve organically over weeks).
+
+When the flag is on but a particular client has no summaries AND no open action items, the brain still skips the Claude call — same "don't burn tokens for empty input" stance, applied per-client.
+
+Sonnet by default (`shared.claude_client.DEFAULT_MODEL`). Swap to Opus by passing `model='claude-opus-4-7'` if review shows shallow reasoning.
+
+### Cron schedule
+
+Weekly, Mondays 09:00 UTC, via `vercel.json` cron declaration → `api/gregory_brain_cron.py` → `compute_health_for_all_active()`. Reasoning for weekly (not daily): signal change rate is slow (call cadence moves day-to-day for ~5 clients; action-item churn is gradual), and at scale the LLM cost compounds. Re-eval cadence once dashboard usage tells us something. Manual sweeps via `scripts/run_gregory_brain.py --all` between cron runs are fine.
+
+The cron lands an hour after the daily Fathom backfill (08:00 UTC) so any calls / action items ingested overnight are visible to the brain.
+
+### Public entry points
+
+- `compute_health_for_client(client_id)` — single client. Used by `scripts/run_gregory_brain.py` and tests.
+- `compute_health_for_all_active()` — sweep every active client. Per-client failures isolated; one bad client doesn't halt the sweep. Each per-client run gets its own `agent_runs` row (clean per-client cost / duration accounting).
+
+### Operational notes
+
+- **No locking.** Concurrent runs (cron + manual overlap) write duplicate rows per client. Dashboard reads "latest per client", so dups are noise not corruption.
+- **History preserved by design.** `client_health_scores` is append-only; every run produces one row per client. Reviewing trend over time is just `select score, tier, computed_at from client_health_scores where client_id=? order by computed_at desc`.
+- **Traceability.** `client_health_scores.computed_by_run_id` FK → `agent_runs.id`. Every score row points back to the run that produced it; cost / duration / errors live there.
+
 ## Pages
 
 ### Clients page — list view
@@ -303,3 +362,25 @@ Deviations from the M3.3 spec:
 **Migration 0016 not yet applied.** Drake applies via Studio + manual ledger registration before deploy.
 
 **Verified live 2026-04-29.** Migration 0016 applied to cloud via Studio + ledger registration; dual-verified (function exists with three-arg signature `(p_call_id uuid, p_changes jsonb, p_changed_by uuid) returns jsonb`, `security definer = true`, ledger row landed). No-op smoke test (passing `'{}'::jsonb` for `p_changes`) returned the expected shape `{fields_changed: 0, history_rows_written: 0, auto_cleared_primary_client_id: false}`. Deploy hit one transient build failure that resolved on redeploy (logged separately in followups). Live UI smoke test on the cloud-deployed dashboard: edited a low-confidence call (Fathom external_id `137772208`) by changing its `call_type` via the detail page Save button. Outcome: exactly one row landed in `call_classification_history` with the correct `field_name='call_type'`, the prior value as `old_value`, the new value as `new_value`, and `changed_at` set to the save moment. `changed_by` is null per the V1 stance. Detail-page Section 2 reflected the new state on reload, `classification_method` showing `manual`. End-to-end verified.
+
+### M3.4 — Gregory brain V1.1 (built 2026-04-29, deploy pending)
+
+Shipped: end-to-end brain agent that computes per-client health scores + tier + (gated) concerns, plus weekly Vercel cron, manual-trigger script, and 37 unit tests. Architecture is complete; concerns generation is gated off until summary coverage densifies.
+
+Pieces:
+
+- **`agents/gregory/` package.** `signals.py` (4 deterministic signals — call cadence, open/overdue action items, latest NPS), `scoring.py` (rubric → 0-100 score + green/yellow/red tier, with insufficient-data default = yellow/50), `concerns.py` (Claude-driven, env-var-gated), `prompts.py` (concerns system prompt + user-message builder), `agent.py` (entry: `compute_health_for_client` + `compute_health_for_all_active`, agent_runs lifecycle wired with `duration_ms` populated — closes the duration-never-written gap for this agent).
+- **Cron at `api/gregory_brain_cron.py`.** Weekly Mondays 09:00 UTC via `vercel.json`. BaseHTTPRequestHandler matching the `fathom_backfill` pattern. Bearer-token auth via `GREGORY_BRAIN_CRON_AUTH_TOKEN` (per-source namespaced env var, same convention as `FATHOM_BACKFILL_AUTH_TOKEN`).
+- **Manual trigger at `scripts/run_gregory_brain.py`.** Three modes: `--client-id <uuid>`, `--email <addr>`, `--all`. Single-client mode is the M3.4 hard-stop verification path (Drake reviews one row in Studio before the all-active sweep lands).
+- **Dashboard empty-state copy updated.** `ConcernsIndicator` and `HealthScoreIndicator` no longer say "Gregory will populate this in V1.1" — they now reflect the actual V1.1.0 state ("activates as call summary coverage grows" / "writes scores on the weekly cron run").
+
+Spec deviations:
+
+- **Concerns generation gated behind `GREGORY_CONCERNS_ENABLED` env var, default false.** Cloud reality at ship time: 22 `call_summary` documents across 132 active clients (~85% would have empty input). Paying the LLM cost to hand Claude nothing was the deciding factor. Architecture is complete; flag flips on without a code change once data densifies. Documented in this section's "Concerns generation (gated)" subsection above.
+- **Cron weekly, not daily.** Signal change rate is slow (call cadence shifts day-to-day for ~5 clients tops; action items churn gradually). Weekly cadence is enough; daily would compound LLM cost when concerns flag flips on.
+- **Slack engagement signal omitted.** `slack_messages` cloud table is empty (local-only ingestion). Add as a fifth signal once cloud Slack ingestion lands — re-balance weights at that time. Logged in followups.
+- **No formal eval harness.** Same V1 carve-out as Ella. The 37 unit tests cover signal math, rubric, JSON parsing, and end-to-end wiring; golden-dataset eval is deferred until the rubric stabilizes.
+
+**Migration count: 0.** No new migration required — `client_health_scores` and `agent_runs` already exist (migrations 0005, 0006).
+
+**Not yet deployed.** Per M3.4 hard stops, Drake reviews `vercel.json` diff and confirms `GREGORY_BRAIN_CRON_AUTH_TOKEN` is set in Vercel before push + deploy. First cloud run is single-client (Drake-reviewed in Studio) before the all-active sweep lands.
