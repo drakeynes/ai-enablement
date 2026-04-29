@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getClientById, type ClientDetail } from '@/lib/db/clients'
+import { listMergeCandidates } from '@/lib/db/merge'
 import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import {
@@ -16,6 +17,7 @@ import {
   TagsField,
 } from './inline-fields'
 import { PrimaryCsmField } from './primary-csm-field'
+import { MergeClientButton } from './merge-client-button'
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
@@ -288,6 +290,9 @@ export default async function ClientDetailPage({
   }))
 
   const hasNeedsReview = client.tags.includes('needs_review')
+  const mergeCandidates = hasNeedsReview
+    ? await listMergeCandidates(client.id)
+    : []
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -302,7 +307,16 @@ export default async function ClientDetailPage({
         <div className="flex flex-wrap gap-2 items-center">
           <StatusPill status={client.status} />
           <JourneyStagePill stage={client.journey_stage} />
-          {hasNeedsReview ? <NeedsReviewPill /> : null}
+          {hasNeedsReview ? (
+            <>
+              <NeedsReviewPill />
+              <MergeClientButton
+                sourceId={client.id}
+                sourceFullName={client.full_name}
+                candidates={mergeCandidates}
+              />
+            </>
+          ) : null}
         </div>
       </div>
 
