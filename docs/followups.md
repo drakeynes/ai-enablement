@@ -321,3 +321,10 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Why it matters:** scan cost is proportional to total transcript_chunk doc count. Today: ~3000 documents in cloud, scan is fast. As ingestion grows past ~50k transcript_chunk docs the scan starts to become the merge bottleneck; a partial index `on (metadata->>'call_id') where document_type='call_transcript_chunk'` would fix it cleanly. Not a correctness issue — just a perf one.
 - **Revisit triggers:** (a) `select count(*) from documents where document_type='call_transcript_chunk'` crosses ~50k, OR (b) merge dialog spinner ever takes more than ~2s on submit. Resolution: add the partial index in a small migration. Until then: status quo.
 - **Logged:** 2026-04-29 (M3.2 build).
+
+## Surface `alternate_emails` / `alternate_names` on Clients detail page
+
+- **What:** Section 1 (Identity) on the Clients detail page renders `email` and `full_name`, but not `metadata.alternate_emails` / `metadata.alternate_names`. After a merge, the absorbed identities live in those fields and are invisible to dashboard reviewers without opening Studio. Fix: display them as a read-only "Also known as: x@y.com, foo@bar.com" line below the email field, and "Display name variants: Name A, Name B" below the full_name field. Source data is on the client row itself; no new query needed — the page entry already pulls full `metadata` via `getClientById`.
+- **Why deferred:** not blocking, no behavior bug. Both fields are correctly populated by the M3.2 merge RPC (verified live during the three-Vid consolidation — both source emails accumulated cleanly into the gmail canonical's `alternate_emails`, dedup-aware across sequential merges into the same target). The data is correct; only the dashboard's read-back is missing. M3.3 (Calls page) is higher-priority forward motion.
+- **Revisit triggers:** (a) next Clients detail page polish pass, (b) a reviewer asks "what merged into this client?" and Studio is the only answer, (c) audit needs surface for understanding why a given client matched a participant by an alt-email.
+- **Logged:** 2026-04-29 (M3.2 live verification).
