@@ -338,3 +338,11 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
   - **(b) Drop `calls.summary` in a small migration.** Acknowledge that summaries are documents, not call attributes. Costs: nothing — no live reader of the column.
 - **Revisit triggers:** (a) we add a query that wants `calls.summary` indexed (rare — summaries are read-once-per-detail-view, not bulk-queried), (b) someone is surprised by the empty column during schema review and wants the redundancy resolved. Until then: status quo, dashboard reads from `documents`.
 - **Logged:** 2026-04-29 (M3.3 build).
+
+## Vercel deploys hit intermittent transient build/deploy failures that resolve on redeploy
+
+- **What:** the M3.3 push to production failed at the Vercel deploy step despite a clean build (Next.js detected, all routes emitted, build completed in ~1m). The failure pattern: `status ● Error` with an empty Builds tree (`. [0ms]` and no `λ` function entries underneath); no error message in the build log or `vercel inspect`; production alias kept pointing at the previous good deploy. A redeploy of the same commit (no code change) succeeded.
+- **Why it matters:** the failure mode is "loud" — the deploy doesn't silently land in a broken state, the alias doesn't flip, no users see the half-deploy. The blast radius is operator time + deploy minute consumption on the redeploy. Not blocking, but worth tracking so it doesn't become invisible noise.
+- **Pattern recurrence:** observed at least once during M3.3 (2026-04-29). If it happens again in close succession or starts taking multiple redeploys to land, escalate to investigation.
+- **Revisit triggers:** (a) the same failure mode hits twice in a row on the same commit, (b) a deploy lands in a broken state instead of failing visibly (alias flips to a non-functional deployment), (c) it starts happening multiple times per deploy session. Resolution path: check Vercel status page first; then dig into deployment Events via the dashboard UI (CLI doesn't surface those messages); then open a Vercel support ticket if pattern persists.
+- **Logged:** 2026-04-29 (M3.3 deploy).
