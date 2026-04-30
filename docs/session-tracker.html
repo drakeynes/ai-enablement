@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Session M3 — tracker</title>
+<title>Session M4 — tracker</title>
 <style>
   :root {
     --bg: #f6f6f4;
@@ -229,13 +229,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M3</div>
-    <h1>All four M3 deliverables shipped + verified live</h1>
+    <div class="id">Session M4</div>
+    <h1>Fathom webhook + summary backfill, activate Gregory concerns, CSM-editable client metadata</h1>
     <div class="goal">
-      M2.3b behavior smoke test passed; merge feature for auto-created clients shipped (TypeScript-native via the merge_clients RPC, not the originally-planned Python wrapper); Calls page shipped with edit-mode classification + call_classification_history writes; Gregory brain V1.1 shipped (architecture complete) — 133 health-score rows live for 132 clients (1 single-client verification + 132 all-active sweep), concerns generation gated behind GREGORY_CONCERNS_ENABLED env var pending Nabeel decision on LLM cost.
+      M4.1 diagnoses the silent Fathom realtime webhook (cron-only ingest in cloud for 7+ days). M4.2 backfills missing call_summary documents so Gregory's concerns generation has real input, then M4.4 flips GREGORY_CONCERNS_ENABLED and verifies on a single client before the next Monday cron runs concerns across all 132 active clients. M4.3 (parallel, not in the chain) ships NPS + Financial status as CSM-editable static fields on clients — empty-by-default, not yet plumbed into Gregory's rubric.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M3 — end of day, all M3 deliverables shipped</span>
+      <span><strong>Last updated:</strong> Session M4 — start of day</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -245,10 +245,42 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">0</span>
+        <span class="count">5</span>
       </header>
 
-      <div class="empty">Session M3 closed — next session priorities live in CLAUDE.md § Next Session Priorities.</div>
+      <div class="card">
+        <div class="id">M4.1</div>
+        <div class="title">Fathom webhook diagnosis</div>
+        <div class="subtitle">Realtime webhook silent for 7+ days; cron-only ingest in cloud. Diagnosis steps in docs/followups.md § "Fathom realtime webhook silent for 7+ days". Most likely the subscription dropped at Fathom's side; possible signature mismatch or unregistered URL. ~15 min check, possibly +30 min for re-register + secret rotation.</div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.2</div>
+        <div class="title">Summary backfill from Fathom API</div>
+        <div class="subtitle">~22 call_summary documents currently exist across 132 active clients because the F1.5 backlog ingest was transcripts-only. Walk calls.external_id for rows missing a paired summary document, fetch summaries via Fathom API (default_summary.markdown_formatted), write documents rows of type call_summary. Reuse extraction logic from ingestion/fathom/webhook_adapter.py.</div>
+        <div class="pills"><span class="pill">discovery before build</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.3</div>
+        <div class="title">NPS + Financial static fields on clients (CSM-editable)</div>
+        <div class="subtitle">Two new fields on clients table (NPS score numeric, financial status text — empty-by-default, no history table, no integration). Surface as new sections on the Clients detail page with inline-save (mirror existing Section 1–7 pattern). Add filters on Clients list page. Not yet plumbed into Gregory signals — that's a future re-balance.</div>
+        <div class="pills"><span class="pill">csm-editable metadata</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.4</div>
+        <div class="title">Flip GREGORY_CONCERNS_ENABLED + verify</div>
+        <div class="subtitle">Gated on M4.2 landing summary data. Single-client manual run on Vid Velayutham (known-shape test target with summary coverage post-backfill) to verify concerns shape and quality, then flip the Vercel env var so the next Monday cron runs concerns across all 132 active clients.</div>
+        <div class="pills"><span class="pill warn">gated on M4.2</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.5</div>
+        <div class="title">(stretch) Repo cleanup pass</div>
+        <div class="subtitle">Scope TBD; broader sweep beyond scripts/archive/ per the followup logged at M3 close-out. Drake will scope specifics if/when this slot opens.</div>
+        <div class="pills"><span class="pill stretch">stretch</span></div>
+      </div>
     </div>
 
     <div class="col progress">
@@ -257,74 +289,16 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing in flight — session closed.</div>
+      <div class="empty">Nothing started yet — M4.1 picks up first.</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">9</span>
+        <span class="count">0</span>
       </header>
 
-      <div class="card">
-        <div class="id">M2.0</div>
-        <div class="title">Spin up docs/session-tracker.html</div>
-        <div class="subtitle">Single-page visual tracker for SOD/EOD recordings.</div>
-      </div>
-
-      <div class="card">
-        <div class="id">M2.1</div>
-        <div class="title">Fathom data sanity checks</div>
-        <div class="subtitle">Clean — no drift, 146 missing-transcript calls all explained by category, F1.5 bug count stable at 9. Queries saved to docs/runbooks/fathom_sanity_checks.md.</div>
-        <div class="pills"><span class="pill">drake-led</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M2.2</div>
-        <div class="title">Gregory scoping doc + 0012/0013 migration files + CLAUDE.md cleanup</div>
-        <div class="subtitle">Documentation only — gregory.md, 0012 + 0013 written (not applied), CLAUDE.md Live State / Next Priorities / Current Focus updated, fathom_sanity_checks runbook saved, 5 new followups logged.</div>
-      </div>
-
-      <div class="card">
-        <div class="id">M2.3a</div>
-        <div class="title">Dashboard scaffold + Supabase Auth + deployed</div>
-        <div class="subtitle">Next.js 14 + TypeScript + Tailwind + shadcn at repo root. Supabase Auth (email/password). /login + auth-gated /(authenticated) route group + top nav. Migrations 0012 + 0013 applied to cloud (recovered via Studio after CLI silently routed to local). Live at ai-enablement-sigma.vercel.app.</div>
-      </div>
-
-      <div class="card">
-        <div class="id">M2.3b</div>
-        <div class="title">Clients list + detail pages — shipped, deployed, list view visually confirmed</div>
-        <div class="subtitle">Data layer in lib/db/clients.ts, migration 0014 (change_primary_csm RPC), Clients list with filters/search/sort, Clients detail with all 7 sections + inline-save + CSM-swap dialog. Step 1 (page loads with 134 clients) confirmed; steps 2–10 (inline edits persist, CSM swap creates two rows, filters narrow, search debounces, sort toggles) tracked as M3.1.</div>
-        <div class="pills"><span class="pill">behavior verification → M3.1</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M3.1</div>
-        <div class="title">M2.3b behavior smoke test — verified live</div>
-        <div class="subtitle">Six checks against cloud deploy: list loads + 134 clients render, debounced search narrows by name, sortable columns toggle, needs-review filter narrows to auto-created rows, inline edit (phone) persists across refresh, primary CSM swap creates two client_team_assignments rows (old with unassigned_at set, new without). All passed. M2.3b is now behavior-verified, not just visually rendered.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M3.2</div>
-        <div class="title">Merge feature for auto-created clients — verified live</div>
-        <div class="subtitle">TypeScript-native via migration 0015 (merge_clients RPC: atomic 5-step merge in plpgsql, security definer, idempotent on metadata.merged_into). Server Action + reusable SearchableClientSelect component. Architecture pivoted from the originally-proposed Python wrapper. Live test: three Vid Velayutham rows merged into the gmail canonical via two sequential merges — both source emails accumulated into target.metadata.alternate_emails (dedup-aware accumulator stress-tested), 5 calls re-pointed with is_retrievable_by_client_agents=true, transcript chunks reactivated, zero orphan participants.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M3.3</div>
-        <div class="title">Calls page (list + detail + edit-mode-save) — verified live</div>
-        <div class="subtitle">List view (8 columns, category chips, "Filter by client…" via SearchableClientSelect dialog, debounced search, default sort started_at desc, secondary needs-review toggle re-sorts by confidence asc). Detail view (6 sections; Section 2 Classification has explicit Save/Cancel edit mode). Migration 0016 update_call_classification RPC: server-side primary_client_id auto-clear on non-client category, is_retrievable auto-derived, classification_method auto-set to manual, no-op silently when no diff. Live test on Fathom call 137772208 produced exactly one call_classification_history row with correct old/new/changed_at.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M3.4</div>
-        <div class="title">Gregory brain V1.1 — architecture complete, verified live</div>
-        <div class="subtitle">agents/gregory/ package (signals.py with 4 deterministic signals, scoring.py with rubric + insufficient-data default, concerns.py Claude-driven + env-var-gated, agent.py with agent_runs lifecycle). Weekly cron at api/gregory_brain_cron.py (Mondays 09:00 UTC). 37 unit tests. No new migration — client_health_scores + agent_runs already exist. Single-client verification on Vid Velayutham produced score=70/green (cadence 16d→50, items 0/0→100/100, NPS missing→50, weighted 70). All-active sweep landed 132 client_health_scores rows + 132 agent_runs rows (per-client wiring, 1:1 traceability). Tier distribution: 93 green / 40 yellow / 0 red. Concerns generation gated behind GREGORY_CONCERNS_ENABLED env var (default false) pending Nabeel decision on LLM cost.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
+      <div class="empty">Nothing shipped yet — session just started.</div>
     </div>
 
   </section>
@@ -344,13 +318,10 @@
   </section>
 
   <section class="blockers">
-    <h2>Issues surfaced this session (M3)</h2>
+    <h2>Carry-over blockers</h2>
     <ul>
       <li>
-        <strong>Vercel transient build/deploy failures resolve on redeploy.</strong> Hit twice this session (M3.3 push, M3.4 push). Pattern: build succeeds (Next.js detected, all routes emitted), deploy step fails with empty Builds tree (<span class="ref">. [0ms]</span> with no λ entries), no error message in build log or <span class="ref">vercel inspect</span>; production alias keeps pointing at the previous good deploy. Redeploy of the same commit succeeds. Failure mode is loud (no silent half-deploy), root cause not investigated. Followup logged with escalation triggers.
-      </li>
-      <li>
-        <strong>Fathom realtime webhook silent for 7+ days; cron-only ingest in cloud.</strong> Discovered while verifying Gregory scores — today's calls weren't reflected. <span class="ref">webhook_deliveries</span> shows zero <span class="ref">source='fathom_webhook'</span> rows over the last 7 days; 46 <span class="ref">fathom_cron</span> deliveries in the same window all processed cleanly. Cron is the backstop and is reliable — no data loss, just a freshness gap of up to 24h. Possible causes: webhook subscription dropped at Fathom, signature mismatch causing silent 401s, or webhook never registered against current Vercel URL. Diagnosis steps in <span class="ref">docs/followups.md</span>; ~15 min check next session.
+        <strong>Supabase local/cloud confusion — CLI silently routes to local instead of cloud.</strong> Hit acutely during M2.3a (migrations <span class="ref">0012</span>/<span class="ref">0013</span> went local first, recovered via Studio). Working norm: all migration work goes through Supabase Studio + manual <span class="ref">supabase_migrations.schema_migrations</span> ledger registration + dual-verification (schema reality AND ledger). Workaround is fragile — easy to forget the ledger step, dual-verification overhead every migration. Real fix: figure out why the CLI misroutes (WSL2 networking? config? auth?) and restore CLI as the migration path, OR formalize the Studio workflow into a tighter runbook with unmissable manual steps. Logged as standing blocker, not session-bound.
       </li>
     </ul>
   </section>
