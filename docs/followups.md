@@ -11,16 +11,12 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
-## Fathom realtime webhook silent for 7+ days; cron-only ingest in cloud
+## Fathom realtime webhook silent for 7+ days; cron-only ingest in cloud — RESOLVED 2026-04-30 via M4.1
 
-- **What:** `webhook_deliveries` shows zero rows from the realtime path (`source='fathom_webhook'`) over the last 7+ days; only `fathom_cron`-prefixed deliveries are landing (46 in the same window). The daily Fathom backfill cron at 08:55 UTC has been the sole ingest path. All cron deliveries processed successfully (`status='processed'`, no errors). Realtime webhook is silent — possible causes: (a) webhook subscription dropped at Fathom's side, (b) signature mismatch causing silent 401s before the handler reaches the `webhook_deliveries` insert, (c) webhook never registered against the current Vercel URL after some deploy, (d) Fathom's edge dropping requests.
-- **Why it matters:** dashboard call cadence systematically lags by up to 24 hours. Gregory health scores reflect yesterday's data, not today's. Ella can't answer questions about today's calls until next morning's cron sweeps them in. Tolerable for V1; a real issue for any future "respond to today's call" use case (Ella V1.1, Gregory daily cron if we ever switch from weekly).
-- **Diagnosis steps (next session, ~15 min):**
-  1. Log into Fathom → API/webhook settings → check whether a webhook subscription against `https://ai-enablement-sigma.vercel.app/api/fathom_events` is registered and active.
-  2. **If MISSING** — re-register per `docs/runbooks/fathom_webhook.md` § "Register the webhook against the Vercel URL". Capture the new `whsec_` secret and update Vercel env var `FATHOM_WEBHOOK_SECRET`. Redeploy to pick up the new secret.
-  3. **If PRESENT** — check Vercel function logs for `/api/fathom_events`. Look for 401 responses (signature mismatch) or absence of any inbound requests at all (Fathom's edge dropping).
-  4. Test by recording a short Fathom meeting (≥90 sec to clear the short-file heuristic) and watching `webhook_deliveries` for the new row.
-- **Logged:** session M3 close-out (2026-04-29).
+- **Resolution:** M4.1 re-registered the webhook fresh via `POST /external/v1/webhooks` against `https://ai-enablement-sigma.vercel.app/api/fathom_events`, captured a new id (`FTVBjD_JqTfjEzVA`) and new `whsec_` secret, rotated the secret into Vercel `FATHOM_WEBHOOK_SECRET` (Production scope), redeployed, and verified the handler reads the new secret via the bad-signature → 401 probe. End-to-end smoke test (real Fathom recording) is the remaining hand-off step before declaring full restoration.
+- **Root cause:** the F2.5 (2026-04-24) UI-based registration was silent from the moment it was created. `webhook_deliveries.source='fathom_webhook'` count over **all time** was zero (not just the 7-day window the original entry framed it as), and Vercel function logs showed zero inbound POSTs to `/api/fathom_events` over the same window. No 401 traffic either, ruling out signature mismatch — Fathom simply wasn't sending. Either the F2.5 UI registration silently failed to register, or Fathom's side dropped it shortly after. The runbook's diagnostic guidance was also wrong — the documented `GET /external/v1/webhooks` endpoint **does not exist** at Fathom (OpenAPI confirms only `POST /webhooks` and `DELETE /webhooks/{id}`); fixed in `docs/runbooks/fathom_webhook.md` § "Resume from F2.5 pause" in the same session.
+- **Cleanup gap (intentional):** no `GET /webhooks` API means we couldn't verify whether the F2.5 subscription was still alive at Fathom's side, and we don't have its id to `DELETE`. Re-registered without cleanup. If the F2.5 subscription is still alive, its deliveries now 401 silently at our handler (signature verify fails before any DB write) — harmless but invisible. Acceptable; no action.
+- **Logged:** session M3 close-out (2026-04-29); **resolved:** 2026-04-30 (M4.1 diagnose + re-register + redeploy + handler-probe verify).
 
 ## Repo cleanup pass — broader sweep beyond `scripts/`
 
