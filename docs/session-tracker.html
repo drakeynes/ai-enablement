@@ -245,14 +245,8 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">5</span>
+        <span class="count">4</span>
       </header>
-
-      <div class="card">
-        <div class="id">M4.1</div>
-        <div class="title">Fathom webhook diagnosis</div>
-        <div class="subtitle">Realtime webhook silent for 7+ days; cron-only ingest in cloud. Diagnosis steps in docs/followups.md § "Fathom realtime webhook silent for 7+ days". Most likely the subscription dropped at Fathom's side; possible signature mismatch or unregistered URL. ~15 min check, possibly +30 min for re-register + secret rotation.</div>
-      </div>
 
       <div class="card">
         <div class="id">M4.2</div>
@@ -289,16 +283,21 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing started yet — M4.1 picks up first.</div>
+      <div class="empty">Nothing in flight — M4.1 done (smoke test pending), M4.2 next.</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">0</span>
+        <span class="count">1</span>
       </header>
 
-      <div class="empty">Nothing shipped yet — session just started.</div>
+      <div class="card">
+        <div class="id">M4.1</div>
+        <div class="title">Fathom webhook diagnosis + autonomous re-registration</div>
+        <div class="subtitle">Diagnosis confirmed Fathom wasn't sending: 0 fathom_webhook rows in webhook_deliveries over all time (not just 7 days), 0 inbound POSTs to /api/fathom_events in Vercel logs over 7 days, no 401 traffic ruling out signature mismatch. Re-registered via POST /external/v1/webhooks (new id FTVBjD_JqTfjEzVA), rotated whsec_ secret into Vercel FATHOM_WEBHOOK_SECRET (Production scope only — Preview cleaned up), redeployed (3m, aliased to ai-enablement-sigma.vercel.app), verified handler reads new secret via bad-signature → 401 probe. Surprise findings: Fathom API has NO GET /webhooks endpoint (runbook diagnostic curl was based on a fabricated path; OpenAPI confirms only POST + DELETE/{id}); the F2.5 UI registration on 2026-04-24 never produced a single signature-verified row. End-to-end smoke test (real Fathom recording) pending Drake.</div>
+        <div class="pills"><span class="pill warn">smoke test pending</span></div>
+      </div>
     </div>
 
   </section>
