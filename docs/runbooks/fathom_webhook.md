@@ -4,43 +4,97 @@ Operational runbook for `api/fathom_events.py` — the Vercel serverless
 endpoint that ingests Fathom `new-meeting-content-ready` deliveries. Full
 design in `docs/architecture/fathom_webhook.md`.
 
-**Status as of 2026-04-24 (F2.5 paused):** handler deployed, secret set,
-webhook registered with Fathom via UI. End-to-end live-delivery
-verification is **pending** — no real coaching call has finished Fathom's
-post-processing since registration, so no delivery has been observed yet.
-Nothing is wrong; just waiting for organic team-call traffic or a
-deliberate test recording to exercise the path. See "Resume from F2.5
-pause" below.
+**Status as of 2026-04-30 (M4.1 re-registration):** handler deployed,
+secret rotated, webhook **re-registered via API** (not UI this time).
+The original UI-based F2.5 registration was silent: zero `fathom_webhook`
+deliveries landed in `webhook_deliveries` from 2026-04-24 → 2026-04-30,
+zero inbound POSTs to `/api/fathom_events` in Vercel logs over the same
+window. M4.1 diagnosis confirmed Fathom wasn't sending — the F2.5
+subscription either dropped at Fathom's side or never started delivering.
+Re-registered fresh against `https://ai-enablement-sigma.vercel.app/api/fathom_events`
+on 2026-04-30; new webhook id captured (see § "Resume from F2.5 pause").
+**End-to-end live-delivery verification is still pending** — needs a
+real test recording. The cron path stayed reliable throughout (54
+processed `fathom_cron` deliveries in the silent window).
 
 ---
 
 ## Resume from F2.5 pause
 
-**What's done (2026-04-24):**
+**Update 2026-04-30 (M4.1):** the F2.5 UI-based registration never
+produced a single signature-verified row in `webhook_deliveries` (zero
+`source='fathom_webhook'` rows over all time, not just the 7-day window
+the followup originally framed it as). Re-registered fresh via API on
+2026-04-30 with new id and new secret rotated into Vercel.
+
+**Important correction to the F2.5-era guidance below:** Fathom's API
+has **no `GET /external/v1/webhooks` endpoint**. The OpenAPI spec
+(https://developers.fathom.ai/api-reference/openapi.yaml) exposes only
+`POST /webhooks` (create) and `DELETE /webhooks/{id}` (delete). The
+diagnostic curl command originally documented here was based on a
+wrong assumption and would 404. To verify a registration is alive,
+use indirect signals: Vercel function logs for inbound POSTs to
+`/api/fathom_events`, and the `webhook_deliveries` table.
+
+**What's done (2026-04-30 — the active registration):**
+- Webhook re-registered via `POST /external/v1/webhooks` against
+  `https://ai-enablement-sigma.vercel.app/api/fathom_events` with
+  `triggered_for=["my_recordings","shared_team_recordings"]` and all
+  three `include_*` flags on (transcript, summary, action items).
+- **Active webhook id (captured this time):** `FTVBjD_JqTfjEzVA`. Use
+  this for any future rotation or teardown via `DELETE
+  /external/v1/webhooks/FTVBjD_JqTfjEzVA`.
+- Fresh `whsec_<base64>` secret captured from the registration response
+  and written to Vercel env `FATHOM_WEBHOOK_SECRET` (Production scope
+  only — the prior Preview scope value was cleaned up at the same
+  time). Production redeployed; verified via 401 on a deliberately-bad
+  POST signature.
+
+**What's done (2026-04-24 — historical, F2.5 era):**
 - 7 commits pushed (`bc4cbbb..e9431da`) — the entire Fathom webhook stack,
   from architecture spec through handler + tests.
 - Vercel build completed; `GET https://ai-enablement-sigma.vercel.app/api/fathom_events`
   returns `200 {"status":"ok","endpoint":"fathom_events","accepts":"POST"}`.
-- Webhook registered with Fathom via the Fathom Settings UI (not via the
-  `POST /webhooks` curl). Because Fathom UI registration doesn't surface
-  the webhook `id` back to the user, **we don't have the webhook id
-  captured**. This matters only for teardown — the id can be fetched via
-  Fathom's list-webhooks API later if rotation or deletion is needed:
-  `curl -sS -H "X-Api-Key: $FATHOM_API_KEY" https://api.fathom.ai/external/v1/webhooks`.
-- `FATHOM_WEBHOOK_SECRET` set in Vercel env vars (Production scope),
-  redeploy done.
+- Webhook registered with Fathom via the Fathom Settings UI. Fathom UI
+  registration doesn't surface the webhook `id` back to the user, so
+  the F2.5 webhook id was never captured. The M4.1 re-registration
+  superseded that registration without explicit cleanup (no `GET` to
+  list it; no `id` to `DELETE` it). If the F2.5 subscription is still
+  alive on Fathom's side, its deliveries 401 silently at our handler
+  (signature verify fails before any DB write) — harmless but invisible.
 
-**What's NOT yet verified:**
-- No `webhook_deliveries` rows have appeared since registration — cloud
-  state at pause is exactly F1.4 baseline (516 calls, 685 documents,
-  4,980 chunks, 134 clients, 0 webhook_deliveries, 0 call_action_items).
-- Therefore: signature verification against Fathom's real signing hasn't
-  been exercised live; the adapter hasn't seen a real payload shape;
-  the full end-to-end chain hasn't reported a successful `processed` row.
+**What's NOT yet verified (M4.1 re-registration):**
+- No real-meeting delivery has landed in `webhook_deliveries` against
+  the new secret yet. Hard-stop smoke test pending — see § "Smoke test
+  for the re-registered webhook" below.
 - All four F2.1 open unknowns (webhook-id stability across retries,
   retry schedule, duplicate deliveries on summary regen, plan-tier
-  gating) remain formally open, though plan-tier is effectively resolved
-  since UI registration succeeded.
+  gating) remain formally open. Plan-tier is effectively resolved
+  twice over now (both UI and API registration succeeded).
+
+## Smoke test for the re-registered webhook (M4.1, 2026-04-30)
+
+After A.5 verification (GET=200, bad-POST=401) the handler is provably
+healthy. Confirming end-to-end requires a real Fathom delivery.
+
+1. Record a Fathom meeting ≥90 seconds (talk to yourself, leave a
+   voicemail-style note — anything over the short-file heuristic).
+2. Wait 2–5 minutes for Fathom's post-processing.
+3. Run:
+
+```sql
+select webhook_id, processing_status, received_at, processed_at,
+       call_external_id, processing_error
+from webhook_deliveries
+where source = 'fathom_webhook'
+order by received_at desc
+limit 5;
+```
+
+Expect at least one fresh row with `processing_status='processed'`
+and a `call_external_id` matching the recording. If nothing lands
+within ~15 minutes of the meeting ending, escalate per the F2.5-era
+"Option B" diagnostic checklist below.
 
 **How to resume — two options:**
 
