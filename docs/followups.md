@@ -11,6 +11,16 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Master sheet importer — three carry-overs from M4 Chunk C apply
+
+These three are byproducts of Drake's M4 Chunk C triage decisions on the master sheet importer. None blocks the dashboard's daily use; all want a manual touch when there's spare capacity.
+
+- **(a) 21 auto-created non-churn clients need cross-check against existing-cloud-data-in-other-forms.** The first dry-run surfaced 21 paused/active rows in the master sheet that had no match in cloud (verified 0/20 sampled emails found anywhere — primary, alternate, or by name). Drake amended the spec's auto-create rule to cover non-churn unmatched rows too (was: churn only). All 21 land as new clients with sheet-side data and primary CSM assignments. **Risk:** any of them might already be in cloud under a different identity (e.g. a personal-email variant that's stored under a work-email primary, or a slightly-spelled-different name). When time permits, walk the 21 names and check for existing duplicates that should be merged. List captured in `data/master_sheet/import_report_*.txt` after apply.
+- **(b) 4 Aleks-orphaned clients need primary_csm reassigned.** Aleks is no longer at the company per Drake. The importer sees `Aleks` in the Owner (KHO!) column on 4 rows (Colin Hill — churn auto-create; Ming-Shih Wang, Jose Trejo, Alex Crosby — non-churn auto-creates after Drake's amendment) and skips the assignment per spec. These 4 clients will land in cloud with `primary_csm = NULL`. Drake handles reassignment manually via the dashboard's Primary CSM dropdown.
+- **(c) Some auto-creates have placeholder emails.** Rows in the master sheet without an email value get `<slug>+import@placeholder.invalid` synthesized so the migration 0001 NOT NULL email constraint holds. From the first dry-run: 6 churned (Jarrett Fortune, Chris Ferrente, Robert Haskell, Lenrico Williams, Charles Biller, roula deraz) plus Andy V (paused, post-amendment). If real emails surface later for any of them, edit via the dashboard's Email field — `placeholder.invalid` TLD is RFC-reserved so no risk of accidentally emailing the address.
+- **Why deferred:** Drake's call: getting these 21 + 4 + 7 visible in the dashboard NOW (so the CSM team can onboard against real data tomorrow) outweighs the cleanup tax. Manual review + reassignment is a ~30 min batch when convenient.
+- **Logged:** 2026-05-01 (M4 Chunk C apply triage).
+
 ## Auth context not threaded through Server Actions — `changed_by` is always null in B2 history rows
 
 - **What:** the four history-writing flows shipped in M4 Chunk B2 (status, journey_stage, csm_standing, nps_submissions.recorded_by) all accept a `p_changed_by` / `p_recorded_by` argument but the dashboard Server Actions pass null. The Supabase auth user is available via `@supabase/ssr` cookies, but there's no `auth.users.id → team_members.id` resolution layer yet, and Server Actions don't currently read the auth cookie. Every history row in B2 records `changed_by = null`.
