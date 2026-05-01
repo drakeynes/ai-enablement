@@ -135,7 +135,7 @@ create table client_standing_history (
 
 ## Part 5 — Master sheet import transformations
 
-The Chunk C import script consumes `data/master_sheet/Financial_MasterSheet__Nabeel_-_Jan_26__-_USA_TOTALS.csv` and produces DB writes per the rules below.
+The Chunk C import script consumes `data/master_sheet/Financial MasterSheet (Nabeel - Jan 26) - USA TOTALS.csv` and produces DB writes per the rules below.
 
 ### Pre-import filter
 
