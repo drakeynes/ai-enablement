@@ -11,6 +11,20 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Notes attribution / history on `clients.notes` — single-author free-text in V1
+
+- **What:** Section 7 of the client detail page uses a single `clients.notes` text column for V1 — single open free-form text field, no per-author attribution, no history. Drake collapsed the originally-specced four-author-split (Scott / Nabeel / Owner / General) and the alternate per-entry-with-attribution model in favor of simplicity.
+- **Why it matters:** low-stakes for V1 with the team-of-six editing pattern, but "who wrote this and when" surfaces as a real need once the dashboard sees broader CSM use. Likely 3-session timeframe before this becomes pressing.
+- **Next action:** when usage demands it, either (a) introduce a `client_notes` table with `(id, client_id, body, author_id, created_at)` rendered as an attributed feed in Section 7, or (b) extend `clients.notes` to jsonb with structured entries. Sub-table is cleaner long-term and matches the history-table pattern from 0017.
+- **Logged:** 2026-05-01 (M4 EOD — design call captured for the M4 client-page schema scope).
+
+## `alerts` vs. `client_health_scores.factors.concerns[]` — two-table redundancy
+
+- **What:** the original V1 schema designed `alerts` as the table for actionable CSM-facing signals (churn risk, upsell, etc.). The M3 concerns generation work landed inside `client_health_scores.factors.concerns[]` jsonb instead — concerns are tied to the health score computation, the dashboard reads them from the same row, and one jsonb write was simpler than coordinating two-table writes. Functionally these overlap: concerns ARE alerts.
+- **Why it matters:** low-stakes today (`alerts` is empty; concerns are the only live signal source), but the fork becomes a real annoyance when CSM Co-Pilot needs a single read source for "things CSMs should care about." Two write paths, two read paths, two staleness questions.
+- **Next action:** resolve when CSM Co-Pilot writes to the unified surface. Two paths: (a) promote concerns out of jsonb into rows on `alerts` (or a renamed `client_concerns` table) with a back-reference to the originating health-score run, or (b) retire `alerts` and let `client_health_scores.factors` be the single source. Defer until CSM Co-Pilot needs the unified surface.
+- **Logged:** 2026-05-01 (M4 EOD — known design seam captured before CSM Co-Pilot work starts).
+
 ## Master sheet importer — three carry-overs from M4 Chunk C apply
 
 These three are byproducts of Drake's M4 Chunk C triage decisions on the master sheet importer. None blocks the dashboard's daily use; all want a manual touch when there's spare capacity.
