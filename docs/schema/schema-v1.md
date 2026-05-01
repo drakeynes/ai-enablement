@@ -2,7 +2,7 @@
 
 First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co-Pilot V1 need, with room to grow into CRM, marketing, and team-scoring data later without restructuring.
 
-**Status:** Implemented by migrations 0001–0010. All 10 migrations applied against local Supabase; cloud project not linked yet.
+**Status:** Implemented by migrations 0001–0017. Cloud project (`sjjovsjcfffrftnraocu`) is the production target; all migrations applied + ledger-registered. Migration 0017 (`client_page_schema_v1`) added 14 columns to `clients`, 1 column to `nps_submissions`, and 4 new tables for the Gregory client detail page V1 — see `docs/client-page-schema-spec.md` for the design.
 
 **DB population (as of 2026-04-23):**
 
@@ -44,6 +44,10 @@ First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co
 | `team_members` | CSMs, leadership, anyone on the agency side |
 | `clients` | Customers of the agency (people in the $9K program) |
 | `client_team_assignments` | Which team members serve which clients |
+| `client_upsells` | Upsell sales per client (added in 0017) |
+| `client_status_history` | Append-only audit trail for `clients.status` changes (added in 0017) |
+| `client_journey_stage_history` | Append-only audit trail for `clients.journey_stage` changes (added in 0017) |
+| `client_standing_history` | Append-only audit trail for `clients.csm_standing` changes (added in 0017) |
 
 ### Slack ingestion
 
@@ -139,6 +143,11 @@ archived_at       timestamptz
 **Read by:** every agent that needs client context.
 
 **Note:** we're keeping this deliberately lightweight for V1. The `metadata` jsonb field absorbs the long tail of "goals, SWOT, profession, age" etc. that would otherwise bloat the columns. When specific fields start getting queried often, we promote them to real columns.
+
+**Columns added since the V1 baseline (see Changelog for the per-migration story):**
+
+- `notes text` (0012) — free-text notes per client, edited by team members via the Gregory dashboard.
+- 14 columns added in 0017 for the Gregory client detail page V1 — `country`, `birth_year`, `location`, `occupation`, `csm_standing`, `archetype`, `contracted_revenue`, `upfront_cash_collected`, `arrears` (not null, default 0), `arrears_note`, `trustpilot_status`, `ghl_adoption`, `sales_group_candidate`, `dfy_setting`. Three carry inline check constraints (`csm_standing`, `trustpilot_status`, `ghl_adoption`) limiting them to small enum sets; `birth_year` carries a 1900..current_year range check. Three carry partial indexes filtered on `archived_at is null` (`csm_standing`, `trustpilot_status`, `ghl_adoption`). Full design lives in `docs/client-page-schema-spec.md`; companion history tables (`client_status_history`, `client_journey_stage_history`, `client_standing_history`) record changes to `status` / `journey_stage` / `csm_standing` over time.
 
 ---
 
@@ -441,7 +450,10 @@ feedback          text
 survey_source     text
 submitted_at      timestamptz NOT NULL
 ingested_at       timestamptz NOT NULL DEFAULT now()
+recorded_by       uuid REFERENCES team_members(id)  -- added 0017
 ```
+
+**Note on `recorded_by`:** added in 0017. Identifies which team member entered an NPS score manually via the Gregory dashboard. Null for entries from automated sources (Slack workflow, future Airtable webhook).
 
 ---
 
@@ -485,6 +497,93 @@ created_at        timestamptz NOT NULL DEFAULT now()
 
 ---
 
+### client_upsells
+
+Added in `0017_client_page_schema_v1.sql` for the Gregory client detail page Financials section.
+
+```
+id                uuid PK
+client_id         uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE
+amount            numeric(10, 2)
+product           text
+sold_at           date
+notes             text
+recorded_by       uuid REFERENCES team_members(id)
+created_at        timestamptz NOT NULL DEFAULT now()
+updated_at        timestamptz NOT NULL DEFAULT now()
+```
+
+**Populated by:** master sheet importer (legacy upsells from the Active++ sheet) and the Gregory dashboard (going forward — `recorded_by` set to the acting team member).
+
+**Read by:** Gregory dashboard's Financials section on `/clients/[id]`. Future CSM Co-Pilot for revenue-aware reasoning.
+
+**Note on cascade-delete:** `client_id` cascades because upsells are owned by their client (same pattern as `call_participants` / `call_action_items`). `amount` and `sold_at` are nullable to accommodate legacy master sheet rows that have free-text descriptions without parseable amounts. Per-table doc: `docs/schema/client_upsells.md`.
+
+---
+
+### client_status_history
+
+Added in `0017_client_page_schema_v1.sql`. Append-only audit trail for `clients.status` changes.
+
+```
+id          uuid PK
+client_id   uuid NOT NULL REFERENCES clients(id)
+status      text NOT NULL
+changed_at  timestamptz NOT NULL DEFAULT now()
+changed_by  uuid REFERENCES team_members(id)
+note        text
+```
+
+**Populated by:** migration seed at apply time (one row per non-archived client with non-null status; 128 rows on first apply against cloud) + the Gregory dashboard's status-edit endpoint. Application-layer writes — pattern mirrors `client_team_assignments`, NOT trigger-based, so the audit logic stays visible in dashboard code.
+
+**Read by:** Gregory dashboard's Lifecycle & Standing section on `/clients/[id]` (status timeline). Future churn analysis.
+
+**Note on no-cascade:** `client_id` does not cascade — preserves history if a client is ever hard-deleted (which the project doesn't do today; soft-delete via `archived_at` is the convention). Mirrors `client_team_assignments`. Per-table doc: `docs/schema/client_status_history.md`.
+
+---
+
+### client_journey_stage_history
+
+Added in `0017_client_page_schema_v1.sql`. Same shape and write pattern as `client_status_history` but for `clients.journey_stage`.
+
+```
+id              uuid PK
+client_id       uuid NOT NULL REFERENCES clients(id)
+journey_stage   text                                          -- nullable, mirrors clients.journey_stage
+changed_at      timestamptz NOT NULL DEFAULT now()
+changed_by      uuid REFERENCES team_members(id)
+note            text
+```
+
+**Populated by:** migration seed at apply time (one row per non-archived client with non-null journey_stage; 0 rows on first apply because no current non-archived client has a non-null journey_stage) + Gregory dashboard's journey-stage-edit endpoint.
+
+**Read by:** Gregory dashboard's Lifecycle & Standing section. Future cohort reporting (e.g. time spent in onboarding).
+
+Per-table doc: `docs/schema/client_journey_stage_history.md`.
+
+---
+
+### client_standing_history
+
+Added in `0017_client_page_schema_v1.sql`. Same shape and write pattern as `client_status_history` but for `clients.csm_standing`. Carries the same 4-value check constraint as the `clients` column it mirrors.
+
+```
+id              uuid PK
+client_id       uuid NOT NULL REFERENCES clients(id)
+csm_standing    text NOT NULL CHECK (csm_standing IN ('happy', 'content', 'at_risk', 'problem'))
+changed_at      timestamptz NOT NULL DEFAULT now()
+changed_by      uuid REFERENCES team_members(id)
+note            text
+```
+
+**Populated by:** **NOT seeded at migration time** — `clients.csm_standing` has no values when 0017 applies. First rows land via the master sheet importer (Chunk C, `scripts/import_master_sheet.py`) which writes one history row per non-null `csm_standing` it sets. Going forward, the Gregory dashboard's standing-edit endpoint also writes here.
+
+**Read by:** Gregory dashboard's Lifecycle & Standing section (standing timeline). Future CSM Co-Pilot for trajectory-aware reasoning.
+
+Per-table doc: `docs/schema/client_standing_history.md`.
+
+---
+
 ## What's Deliberately NOT in V1
 
 - **`companies` table.** If/when we need to group clients by company (for B2B), we add this. For the consumer $9K program, clients are individuals.
@@ -523,3 +622,4 @@ Post-review constraint tweaks applied after the initial implementation, before m
 - **`match_document_chunks` Postgres function.** Retrieval primitive wrapping filtered vector search, with the hard safety property that `call_summary` documents are excluded in global mode and scoped to a single client in client mode. Captured in migration `0008_kb_search.sql`; full contract documented in `document_chunks.md`.
 - **`client_team_assignments.metadata` column.** Added to preserve provenance when assignment rows come from heuristic parsing — primarily the clients importer's `raw_owner` string for messy Owner values. `not null default '{}'::jsonb`; no new index. Captured in migration `0009_add_assignments_metadata.sql`; documented in `client_team_assignments.md`.
 - **`match_document_chunks` global-mode exclusion extended.** Previously only `call_summary` was excluded in global mode; `call_transcript_chunk` (which also carries `metadata.client_id`) is now covered by the same gate. Safety invariant is now "no client-scoped call content in global results," with both types enforced inside the Postgres function. Captured in migration `0010_kb_search_exclude_transcript_chunks.sql`; documented in `document_chunks.md` and `docs/ingestion/metadata-conventions.md` §7.
+- **Client page schema V1 — 14 columns + 4 tables (M4 Chunk A).** Captured in migration `0017_client_page_schema_v1.sql`. 14 nullable columns added to `clients` (the only `not null` is `arrears` with `default 0`); three carry small enum check constraints (`csm_standing`, `trustpilot_status`, `ghl_adoption`), one carries a year-range check (`birth_year`); three carry partial indexes filtered on `archived_at is null`. `nps_submissions.recorded_by` added (FK → `team_members(id)`, nullable for automated sources). Four new tables: `client_upsells` (cascade-delete on client_id, mirroring owned-by-parent precedent), and three append-only history tables (`client_status_history`, `client_journey_stage_history`, `client_standing_history`) with no-cascade FK to clients (mirroring `client_team_assignments`). History writes are application-layer, not trigger-based — pattern keeps audit logic visible in dashboard code. Migration seeds `client_status_history` (128 rows from non-archived clients with non-null status) and `client_journey_stage_history` (0 rows — no non-archived client currently has a non-null `journey_stage`). `client_standing_history` is seeded later by the master sheet importer (Chunk C). Full design lives in `docs/client-page-schema-spec.md`.
