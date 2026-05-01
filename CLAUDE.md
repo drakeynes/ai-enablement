@@ -198,7 +198,7 @@ Wrapping M4 (V1 client page schema). All four chunks shipped: 0017 schema migrat
 
 Documented in `docs/future-ideas.md` and `docs/followups.md` with explicit revisit triggers:
 
-- Fathom webhook subscription registration (realtime path silent for 7+ days; cron is the sole working ingest path — followup logged for ~15 min next-session diagnostic).
+- Fathom realtime webhook smoke test (M4.1 restored the subscription via re-registration + secret rotation + redeploy; bad-signature 401 path verified. End-to-end smoke test against a real Fathom recording still pending — exercised passively whenever any team member records).
 - NPS ingestion pipeline (no signals in cloud; Gregory's `latest_nps` reads as neutral for every client).
 - Cloud Slack ingestion (slack_messages cloud table empty; Gregory's Slack engagement signal intentionally absent in V1.1).
 - Drive-sourced content ingestion (today's pipeline reads from `data/course_content/`; Drive API + version-awareness comes later).
