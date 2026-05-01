@@ -34,6 +34,7 @@ function readFilters(searchParams: Record<string, string | string[] | undefined>
     has_open_action_items: get('has_open_action_items') === '1',
     needs_review_only: get('needs_review') === '1',
     search: get('q'),
+    show_archived: get('show_archived') === '1',
   }
 }
 

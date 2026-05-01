@@ -22,6 +22,7 @@ const STATUS_CHIPS: ChipDef[] = [
   { paramKey: 'status', paramValue: 'active', label: 'Active' },
   { paramKey: 'status', paramValue: 'paused', label: 'Paused' },
   { paramKey: 'status', paramValue: 'ghost', label: 'Ghost' },
+  { paramKey: 'status', paramValue: 'leave', label: 'Leave' },
   { paramKey: 'status', paramValue: 'churned', label: 'Churned' },
 ]
 
@@ -44,6 +45,11 @@ const BOOLEAN_CHIPS: ChipDef[] = [
     paramValue: '1',
     label: 'Auto-created (needs review)',
     className: 'bg-amber-100 text-amber-900 border-amber-200',
+  },
+  {
+    paramKey: 'show_archived',
+    paramValue: '1',
+    label: 'Show churned & leave',
   },
 ]
 

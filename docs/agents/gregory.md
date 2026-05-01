@@ -108,7 +108,7 @@ Columns:
 | Column | Source | Notes |
 |--------|--------|-------|
 | Full name | `clients.full_name` | Click → detail view |
-| Status | `clients.status` | Color pill (active / paused / ghost / churned) |
+| Status | `clients.status` | Color pill (active / paused / ghost / leave / churned). List page default-hides `churned` + `leave`; "Show churned & leave" toggle chip reveals them. Explicit status filter (e.g. `?status=churned`) wins over the default-hide. |
 | Journey stage | `clients.journey_stage` | onboarding / active / churning / churned / alumni |
 | Primary CSM | `client_team_assignments` where role='primary_csm' | Latest active assignment |
 | Health score | `client_health_scores` (latest) | Numeric + tier pill; empty for V1 |

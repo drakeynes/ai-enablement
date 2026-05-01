@@ -9,6 +9,7 @@ const STATUS_CLASSES: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-900 border-emerald-200',
   paused: 'bg-amber-100 text-amber-900 border-amber-200',
   ghost: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+  leave: 'bg-slate-200 text-slate-800 border-slate-300',
   churned: 'bg-rose-100 text-rose-900 border-rose-200',
 }
 

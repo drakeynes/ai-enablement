@@ -17,7 +17,7 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 | `phone` | `text` | Optional |
 | `timezone` | `text` | IANA tz name. Used for scheduling and display |
 | `journey_stage` | `text` | `onboarding`, `active`, `churning`, `churned`, `alumni` |
-| `status` | `text` | Operational status: `active`, `paused`, `ghost`, `churned`. Default `active` |
+| `status` | `text` | Operational status: `active`, `paused`, `ghost`, `leave`, `churned`. Default `active`. CHECK constraint `clients_status_check` added in 0019; `leave` is a CSM decision to let a client go without chasing (distinct from `churned`, which is post-program) |
 | `start_date` | `date` | When the client entered the program |
 | `program_type` | `text` | `9k_consumer`, `b2b_enterprise`, etc. |
 | `tags` | `text[]` | Ad-hoc labels; GIN-indexed |

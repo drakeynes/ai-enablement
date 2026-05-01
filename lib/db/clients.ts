@@ -106,6 +106,7 @@ export type ClientsListFilters = {
   has_open_action_items?: boolean
   needs_review_only?: boolean
   search?: string
+  show_archived?: boolean
 }
 
 export type ClientsListRow = ClientRow & {
@@ -157,7 +158,16 @@ export async function getClientsList(
     .is('archived_at', null)
 
   if (filters.status) {
+    // Explicit status filter wins — show that status regardless of
+    // show_archived. Lets users land on "churned only" or "leave only"
+    // without first toggling the archived view.
     query = query.eq('status', filters.status)
+  } else if (!filters.show_archived) {
+    // Default-hide: when no explicit filter and the toggle is off, the
+    // list excludes 'churned' and 'leave' so CSMs see only the live
+    // book by default. Negative form is forward-compat — new statuses
+    // added later will appear by default unless explicitly excluded here.
+    query = query.not('status', 'in', '(churned,leave)')
   }
   if (filters.journey_stage) {
     query = query.eq('journey_stage', filters.journey_stage)

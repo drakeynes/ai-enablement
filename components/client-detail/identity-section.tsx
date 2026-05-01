@@ -28,6 +28,7 @@ const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'paused', label: 'Paused' },
   { value: 'ghost', label: 'Ghost' },
+  { value: 'leave', label: 'Leave' },
   { value: 'churned', label: 'Churned' },
 ]
 
