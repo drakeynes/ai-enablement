@@ -283,13 +283,13 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing in flight — M4 Chunk B1 (read paths + read-only UI) just landed. M4 Chunk B2 (inline-edit write paths + history-table writes) next; Chunk C (master sheet importer) follows.</div>
+      <div class="empty">Nothing in flight — M4 Chunk B2 (inline-edit + history-table writes + NPS-entry) just landed. Chunk C (master sheet CSV importer) is the remaining M4 work; deploy + visual eyeball before C.</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">3</span>
+        <span class="count">4</span>
       </header>
 
       <div class="card">
@@ -311,6 +311,13 @@
         <div class="title">Client detail page v3 — read paths + 7-section UI (read-only)</div>
         <div class="subtitle">Types regenerated from cloud via --db-url fallback (--project-id path failed on IPv6 unreachable; --db-url worked first try). 1099 → 1352 lines, all 0017 columns + 4 new tables present. lib/db/clients.ts extended: ClientDetail gains all_calls / total_calls / all_action_items / total_nps_submissions / total_slack_messages / upsells / slack_channel_id; round-trip count holds at 7-8 (1 main client query with slack_channels + client_upsells embeds, 6 parallel + 1 conditional slack_messages count when slack_user_id is non-null). Page rewritten to 7 collapsible sections via native &lt;details&gt;/&lt;summary&gt; (Identity & Contact / Lifecycle & Standing / Financials / Activity & Action Items / Profile & Background / Adoption & Programs / Notes); every editable field renders read-only with hover-affordance, B2 wires inline edit. HealthScoreIndicator + ConcernsIndicator preserved verbatim, moved into Lifecycle. Concerns has three distinct empty states (no health row → "not yet evaluated"; health exists, empty concerns → "no concerns currently surfaced"; non-empty → list). Profile & Background reads from clients.metadata.profile jsonb (per spec; not promoted to columns yet). Action Items show all statuses grouped (open → done → cancelled); collapsible when &gt; 10. tsc clean, ESLint clean, next build clean (8/8 static pages, /clients/[id] = 3.68 kB). Side-effect: getClientsList row-builder switched to spread + delete-embeds so future column additions don't require touching it; bridged a regenerated-types nullability quirk on update_call_classification's p_changed_by arg. inline-fields.tsx + primary-csm-field.tsx + actions.ts left in place untouched for B2 to extend.</div>
         <div class="pills"><span class="pill warn">B2 inline-edit pending</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.B2</div>
+        <div class="title">Client detail page v3 — inline-edit + history writes + NPS entry</div>
+        <div class="subtitle">Migration 0018_client_history_rpcs.sql adds four security-definer Postgres functions with explicit grants to service_role: update_client_status_with_history, update_client_journey_stage_with_history, update_client_csm_standing_with_history (each atomic update + history-row insert; idempotent no-op when value unchanged; csm_standing clear-to-null skips history because client_standing_history.csm_standing is NOT NULL by design), and insert_nps_submission (manual NPS entry with 0-10 validation, stamps survey_source='manual_dashboard_entry'). Drake applied via Studio; ledger registered ('0018', 'client_history_rpcs'); 4/4 functions present FUNCTION + DEFINER. End-to-end smoke test against cloud verified all four paths (real change → history row → revert; csm_standing clear-to-null wrote 0 history rows as designed; score=11 raised). UPDATABLE_FIELDS grew from 10 to 21 columns with type-narrowing for integer (birth_year 1900..currentYear), numeric (money fields, arrears non-negative), enum (trustpilot_status, ghl_adoption), three-state boolean (sales_group_candidate, dfy_setting), and array dedup-trim-cap for tags. Status / journey_stage / csm_standing removed from the whitelist — they go through dedicated RPC actions to enforce the history-write invariant. Five new Server Actions: updateClientStatusAction, updateClientJourneyStageAction, updateClientCsmStandingAction, addNpsScoreAction, updateClientProfileFieldAction (read-modify-write on metadata; preserves alternate_emails). New components: EditableField (text / textarea / integer / numeric_money / enum / three_state_bool / date variants; click-to-edit, blur-or-Enter saves, Escape cancels), EditableTagsField (chip input with comma-or-Enter add, backspace-on-empty remove), NpsEntryForm (collapsed-by-default inline form). All 7 sections converted to client components and wired. PrimaryCsmField (dialog-confirm) preserved unchanged. Alternate emails kept read-only by design (no UI write path; merge_clients RPC + Fathom resolver are canonical writers; direct edit corrupts identity resolution — flagged for Drake decision). Dead inline-fields.tsx deleted. tsc clean, ESLint clean, next build clean (/clients/[id] = 10.1 kB, +6.4kB for client islands). Three followups logged: changed_by always null until auth context wires through; metadata.profile read-modify-write race; NPS-entry no duplicate protection.</div>
+        <div class="pills"><span class="pill warn">push pending</span></div>
       </div>
     </div>
 

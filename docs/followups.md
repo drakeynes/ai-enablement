@@ -11,6 +11,27 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Auth context not threaded through Server Actions — `changed_by` is always null in B2 history rows
+
+- **What:** the four history-writing flows shipped in M4 Chunk B2 (status, journey_stage, csm_standing, nps_submissions.recorded_by) all accept a `p_changed_by` / `p_recorded_by` argument but the dashboard Server Actions pass null. The Supabase auth user is available via `@supabase/ssr` cookies, but there's no `auth.users.id → team_members.id` resolution layer yet, and Server Actions don't currently read the auth cookie. Every history row in B2 records `changed_by = null`.
+- **Why it matters:** the audit trail tells you what changed and when, but not who. Acceptable for a single-CSM V1 (Drake is the only editor today). Becomes a problem the moment Lou / Nico / Scott / others edit alongside each other in the dashboard — the timeline goes anonymous.
+- **Next action:** wire a small helper (`getCurrentTeamMemberId()` or similar) that reads the Supabase auth cookie in a Server Action context, looks up `team_members` by email, and threads the resolved id through the existing nullable `p_changed_by` argument. Exists as a hook in `app/(authenticated)/clients/[id]/actions.ts` — replace the literal `null` passed today. ~30 min plus testing.
+- **Logged:** 2026-05-01 (M4 Chunk B2 — wired the RPCs, didn't wire auth).
+
+## metadata.profile read-modify-write race — concurrent edits clobber each other
+
+- **What:** Section 5 (Profile & Background) writes go through `updateClientProfileFieldAction` → `updateClientProfileField` (lib/db/clients.ts), which performs a read-modify-write on `clients.metadata`: SELECT current metadata, build a new object with the updated `metadata.profile.<path>`, UPDATE the row. If two CSMs save different `metadata.profile.*` fields concurrently, the later UPDATE wins and clobbers the earlier write. Top-level `metadata.alternate_emails` / `alternate_names` / etc. are preserved by spreading the existing object (so the merge_clients RPC's writes won't be clobbered — that flow modifies different keys), but two concurrent profile edits collide.
+- **Why it matters:** fine for V1 (single-CSM-at-a-time editing pattern). Becomes a real issue once concurrent CSM editing is normal — you save the niche, your colleague saves the offer, your save wins, their offer disappears.
+- **Next action:** when concurrent editing becomes real, migrate `updateClientProfileField` to a Postgres function using `jsonb_set` so the read-modify-write happens server-side under a row lock. Or add an `xmin`-based optimistic-concurrency check at the application layer. ~1 hour plus testing. No urgency in V1.
+- **Logged:** 2026-05-01 (M4 Chunk B2 — design call: simpler-now, debt-later).
+
+## NPS-entry has no duplicate-submission protection
+
+- **What:** the Section 2 "Add NPS score" form invokes `insert_nps_submission` which always inserts a fresh row. A CSM who clicks Save twice (network blip, double-tap, browser back-then-forward) creates two `nps_submissions` rows for the same client at near-identical timestamps. The dashboard then displays the more recent one as "Latest NPS" and ignores the duplicate; total count becomes inflated.
+- **Why it matters:** low-stakes for V1 — duplicate NPS rows are easy to spot in the table and easy to delete via Studio. But "the duplicate count drifts the more clients you have" is a slow-growing data-hygiene tax.
+- **Next action:** options when usage scales: (a) optimistic UI lock — disable the Save button between submit and revalidation; (b) server-side dedup — reject inserts where a row exists for `(client_id, score)` within the last 30 seconds; (c) a uniqueness check by (client_id, submitted_at::date) when manual entries dominate. (a) is the cheapest and probably enough.
+- **Logged:** 2026-05-01 (M4 Chunk B2 — known design gap, deferred).
+
 ## Fathom realtime webhook silent for 7+ days; cron-only ingest in cloud — RESOLVED 2026-04-30 via M4.1
 
 - **Resolution:** M4.1 re-registered the webhook fresh via `POST /external/v1/webhooks` against `https://ai-enablement-sigma.vercel.app/api/fathom_events`, captured a new id (`FTVBjD_JqTfjEzVA`) and new `whsec_` secret, rotated the secret into Vercel `FATHOM_WEBHOOK_SECRET` (Production scope), redeployed, and verified the handler reads the new secret via the bad-signature → 401 probe. End-to-end smoke test (real Fathom recording) is the remaining hand-off step before declaring full restoration.
