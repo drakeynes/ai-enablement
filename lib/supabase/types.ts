@@ -1184,6 +1184,30 @@ export type Database = {
         Args: { p_client_id: string; p_new_team_member_id: string }
         Returns: undefined
       }
+      insert_nps_submission: {
+        Args: {
+          p_client_id: string
+          p_feedback?: string
+          p_recorded_by?: string
+          p_score: number
+        }
+        Returns: {
+          client_id: string
+          feedback: string | null
+          id: string
+          ingested_at: string
+          recorded_by: string | null
+          score: number
+          submitted_at: string
+          survey_source: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "nps_submissions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       match_document_chunks: {
         Args: {
           client_id?: string
@@ -1213,6 +1237,144 @@ export type Database = {
       update_call_classification: {
         Args: { p_call_id: string; p_changed_by: string; p_changes: Json }
         Returns: Json
+      }
+      update_client_csm_standing_with_history: {
+        Args: {
+          p_changed_by?: string
+          p_client_id: string
+          p_new_csm_standing: string
+          p_note?: string
+        }
+        Returns: {
+          archetype: string | null
+          archived_at: string | null
+          arrears: number
+          arrears_note: string | null
+          birth_year: number | null
+          contracted_revenue: number | null
+          country: string | null
+          created_at: string
+          csm_standing: string | null
+          dfy_setting: boolean | null
+          email: string
+          full_name: string
+          ghl_adoption: string | null
+          id: string
+          journey_stage: string | null
+          location: string | null
+          metadata: Json
+          notes: string | null
+          occupation: string | null
+          phone: string | null
+          program_type: string | null
+          sales_group_candidate: boolean | null
+          slack_user_id: string | null
+          start_date: string | null
+          status: string
+          tags: string[]
+          timezone: string | null
+          trustpilot_status: string | null
+          updated_at: string
+          upfront_cash_collected: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "clients"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_client_journey_stage_with_history: {
+        Args: {
+          p_changed_by?: string
+          p_client_id: string
+          p_new_journey_stage: string
+          p_note?: string
+        }
+        Returns: {
+          archetype: string | null
+          archived_at: string | null
+          arrears: number
+          arrears_note: string | null
+          birth_year: number | null
+          contracted_revenue: number | null
+          country: string | null
+          created_at: string
+          csm_standing: string | null
+          dfy_setting: boolean | null
+          email: string
+          full_name: string
+          ghl_adoption: string | null
+          id: string
+          journey_stage: string | null
+          location: string | null
+          metadata: Json
+          notes: string | null
+          occupation: string | null
+          phone: string | null
+          program_type: string | null
+          sales_group_candidate: boolean | null
+          slack_user_id: string | null
+          start_date: string | null
+          status: string
+          tags: string[]
+          timezone: string | null
+          trustpilot_status: string | null
+          updated_at: string
+          upfront_cash_collected: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "clients"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_client_status_with_history: {
+        Args: {
+          p_changed_by?: string
+          p_client_id: string
+          p_new_status: string
+          p_note?: string
+        }
+        Returns: {
+          archetype: string | null
+          archived_at: string | null
+          arrears: number
+          arrears_note: string | null
+          birth_year: number | null
+          contracted_revenue: number | null
+          country: string | null
+          created_at: string
+          csm_standing: string | null
+          dfy_setting: boolean | null
+          email: string
+          full_name: string
+          ghl_adoption: string | null
+          id: string
+          journey_stage: string | null
+          location: string | null
+          metadata: Json
+          notes: string | null
+          occupation: string | null
+          phone: string | null
+          program_type: string | null
+          sales_group_candidate: boolean | null
+          slack_user_id: string | null
+          start_date: string | null
+          status: string
+          tags: string[]
+          timezone: string | null
+          trustpilot_status: string | null
+          updated_at: string
+          upfront_cash_collected: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "clients"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {

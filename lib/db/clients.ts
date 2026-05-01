@@ -6,24 +6,98 @@ import type { Database } from '@/lib/supabase/types'
 type ClientRow = Database['public']['Tables']['clients']['Row']
 
 // Allowed fields for inline-save on the Clients detail page. The
-// dashboard's Identity / Status / Notes sections funnel through
-// updateClient; anything outside this list is rejected to keep the
-// editing surface tight (no accidental writes to metadata, slack_user_id,
-// archived_at, etc.).
+// dashboard sections funnel through updateClient; anything outside this
+// list is rejected to keep the editing surface tight (no accidental
+// writes to metadata, slack_user_id, archived_at, etc.).
+//
+// Three columns are deliberately NOT in this list because they're
+// edited via dedicated history-writing RPCs (M4 Chunk B2):
+//   - status                → update_client_status_with_history
+//   - journey_stage         → update_client_journey_stage_with_history
+//   - csm_standing          → update_client_csm_standing_with_history
+// Routing those edits through this function would skip the history-row
+// insert. The whitelist enforces the invariant.
 const UPDATABLE_FIELDS = [
+  // Plain text
   'full_name',
   'email',
   'phone',
   'timezone',
-  'status',
-  'journey_stage',
+  'country',
+  'location',
+  'occupation',
+  'archetype',
+  'arrears_note',
   'program_type',
-  'start_date',
-  'tags',
   'notes',
+  // Dates
+  'start_date',
+  // Numerics
+  'birth_year',
+  'contracted_revenue',
+  'upfront_cash_collected',
+  'arrears',
+  // Enums
+  'trustpilot_status',
+  'ghl_adoption',
+  // Three-state booleans
+  'sales_group_candidate',
+  'dfy_setting',
+  // Arrays
+  'tags',
 ] as const
 
 export type UpdatableField = (typeof UPDATABLE_FIELDS)[number]
+
+// Field-type metadata for value narrowing in updateClientField. Tells
+// the Server Action what shape to validate before passing to updateClient.
+export const FIELD_TYPES: Record<UpdatableField, FieldType> = {
+  full_name: 'text',
+  email: 'text',
+  phone: 'text',
+  timezone: 'text',
+  country: 'text',
+  location: 'text',
+  occupation: 'text',
+  archetype: 'text',
+  arrears_note: 'text',
+  program_type: 'text',
+  notes: 'text',
+  start_date: 'date',
+  birth_year: 'integer',
+  contracted_revenue: 'numeric',
+  upfront_cash_collected: 'numeric',
+  arrears: 'numeric_nonneg',
+  trustpilot_status: 'enum_trustpilot',
+  ghl_adoption: 'enum_ghl_adoption',
+  sales_group_candidate: 'three_state_bool',
+  dfy_setting: 'three_state_bool',
+  tags: 'string_array',
+}
+
+export type FieldType =
+  | 'text'
+  | 'date'
+  | 'integer'
+  | 'numeric'
+  | 'numeric_nonneg'
+  | 'enum_trustpilot'
+  | 'enum_ghl_adoption'
+  | 'three_state_bool'
+  | 'string_array'
+
+export const TRUSTPILOT_VALUES = [
+  'not_asked',
+  'pending',
+  'given',
+  'declined',
+] as const
+export const GHL_ADOPTION_VALUES = [
+  'never_adopted',
+  'affiliate',
+  'saas',
+  'inactive',
+] as const
 
 export type ClientsListFilters = {
   status?: string
@@ -482,5 +556,183 @@ export async function changePrimaryCsm(
     p_new_team_member_id: new_team_member_id,
   })
   if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+// ----------------------------------------------------------------------
+// History-writing edits (M4 Chunk B2)
+// ----------------------------------------------------------------------
+//
+// Three thin wrappers around the migration 0018 RPCs. Each performs an
+// atomic update + history-row insert in a single transaction (or a
+// no-op when the value is unchanged). changed_by is null in V1 — auth
+// context isn't wired through to Server Actions yet (followup logged).
+
+export async function updateClientStatusWithHistory(
+  client_id: string,
+  new_status: string,
+  changed_by: string | null = null,
+  note: string | null = null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+  // Type-gen mints p_changed_by / p_note as required strings even though
+  // the SQL declares default null — same quirk as update_call_classification
+  // (lib/db/calls.ts). Cast through unknown.
+  const { error } = await supabase.rpc('update_client_status_with_history', {
+    p_client_id: client_id,
+    p_new_status: new_status,
+    p_changed_by: changed_by as unknown as string,
+    p_note: note as unknown as string,
+  })
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+export async function updateClientJourneyStageWithHistory(
+  client_id: string,
+  new_journey_stage: string | null,
+  changed_by: string | null = null,
+  note: string | null = null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.rpc(
+    'update_client_journey_stage_with_history',
+    {
+      p_client_id: client_id,
+      p_new_journey_stage: new_journey_stage as unknown as string,
+      p_changed_by: changed_by as unknown as string,
+      p_note: note as unknown as string,
+    },
+  )
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+export async function updateClientCsmStandingWithHistory(
+  client_id: string,
+  new_csm_standing: 'happy' | 'content' | 'at_risk' | 'problem' | null,
+  changed_by: string | null = null,
+  note: string | null = null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.rpc(
+    'update_client_csm_standing_with_history',
+    {
+      p_client_id: client_id,
+      p_new_csm_standing: new_csm_standing as unknown as string,
+      p_changed_by: changed_by as unknown as string,
+      p_note: note as unknown as string,
+    },
+  )
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+// ----------------------------------------------------------------------
+// insertNpsSubmission — manual NPS-score entry from Section 2
+// ----------------------------------------------------------------------
+export async function insertNpsSubmission(
+  client_id: string,
+  score: number,
+  feedback: string | null = null,
+  recorded_by: string | null = null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.rpc('insert_nps_submission', {
+    p_client_id: client_id,
+    p_score: score,
+    p_feedback: feedback as unknown as string,
+    p_recorded_by: recorded_by as unknown as string,
+  })
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+// ----------------------------------------------------------------------
+// updateClientProfileField — read-modify-write on clients.metadata
+// ----------------------------------------------------------------------
+//
+// Section 5 (Profile & Background) fields live in
+// clients.metadata.profile.* (jsonb sub-object), not as columns. V1
+// uses application-layer read-modify-write rather than jsonb_set so the
+// merge logic stays visible in TypeScript. Race risk: concurrent
+// edits to different metadata.profile.* fields can clobber each other
+// (followup logged). Top-level metadata keys (alternate_emails,
+// alternate_names, etc.) are preserved by spreading the existing object.
+//
+// Allowed paths: 'niche', 'offer', 'traffic_strategy', and the four
+// nested SWOT paths under profile.swot.*. Anything else is rejected.
+const ALLOWED_PROFILE_PATHS = [
+  'niche',
+  'offer',
+  'traffic_strategy',
+  'swot.strengths',
+  'swot.weaknesses',
+  'swot.opportunities',
+  'swot.threats',
+] as const
+
+export type ProfilePath = (typeof ALLOWED_PROFILE_PATHS)[number]
+
+export function isProfilePath(value: string): value is ProfilePath {
+  return (ALLOWED_PROFILE_PATHS as readonly string[]).includes(value)
+}
+
+export async function updateClientProfileField(
+  client_id: string,
+  path: ProfilePath,
+  value: string | null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+
+  const { data: row, error: readErr } = await supabase
+    .from('clients')
+    .select('metadata')
+    .eq('id', client_id)
+    .maybeSingle()
+  if (readErr) return { success: false, error: readErr.message }
+  if (!row) return { success: false, error: 'Client not found.' }
+
+  const metadata =
+    (row.metadata as Record<string, unknown> | null) ?? {}
+  const profile =
+    typeof metadata.profile === 'object' && metadata.profile !== null
+      ? { ...(metadata.profile as Record<string, unknown>) }
+      : {}
+
+  const cleanValue = value === null || value.trim() === '' ? null : value
+
+  if (path.startsWith('swot.')) {
+    const swotKey = path.slice('swot.'.length)
+    const swot =
+      typeof profile.swot === 'object' && profile.swot !== null
+        ? { ...(profile.swot as Record<string, unknown>) }
+        : {}
+    if (cleanValue === null) {
+      delete swot[swotKey]
+    } else {
+      swot[swotKey] = cleanValue
+    }
+    profile.swot = swot
+  } else {
+    if (cleanValue === null) {
+      delete profile[path]
+    } else {
+      profile[path] = cleanValue
+    }
+  }
+
+  // Spread existing metadata first so we don't clobber alternate_emails,
+  // alternate_names, or any other top-level keys. Cast through unknown
+  // because metadata is typed as Json (a recursive union) but our
+  // dynamic-key intermediate object widens to Record<string, unknown>;
+  // shape is structurally fine — just satisfying the typer.
+  const newMetadata = { ...metadata, profile } as unknown as ClientRow['metadata']
+
+  const { error: writeErr } = await supabase
+    .from('clients')
+    .update({ metadata: newMetadata })
+    .eq('id', client_id)
+  if (writeErr) return { success: false, error: writeErr.message }
   return { success: true }
 }
