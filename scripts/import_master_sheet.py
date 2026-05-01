@@ -108,11 +108,16 @@ PURE_FINANCIAL_STANDINGS = {
 }
 
 TRUSTPILOT_MAP = {
-    "yes": "given",
-    "no": "declined",
-    "ask": "not_asked",
-    "asked": "pending",
+    "yes": "yes",
+    "no": "no",
+    "ask": "ask",
+    "asked": "asked",
 }
+# Identity map post-0020 (was master-sheet → old-DB translation;
+# now the DB vocab matches Scott's column verbatim per the V1
+# adoption path). Keeping the dict over a set lets the parser
+# normalize-then-passthrough in one .get() call and stays a
+# single point of edit if the master sheet vocab ever diverges.
 
 
 # ---------------------------------------------------------------------------

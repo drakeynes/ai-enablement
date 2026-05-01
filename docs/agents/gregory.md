@@ -132,7 +132,7 @@ Vertical layout, 7 collapsible sections (default expanded) via native `<details>
 
 **Section 5 — Profile & Background:** All five fields live in `clients.metadata.profile` (jsonb sub-object), NOT as columns on `clients` — the schema spec deliberately keeps these in jsonb until query patterns justify promotion. Editable in B2: niche, offer, traffic_strategy, and SWOT split into 4 sub-fields (strengths, weaknesses, opportunities, threats). Empty by default.
 
-**Section 6 — Adoption & Programs:** Editable in B2: trustpilot_status (enum: not_asked/pending/given/declined — new), ghl_adoption (enum: never_adopted/affiliate/saas/inactive — new), sales_group_candidate (boolean three-state: yes/no/not assessed — new), dfy_setting (boolean three-state — new). Plus an Upsells sub-section listing rows from the new `client_upsells` table (sorted sold_at desc nulls last) — amount, product, sold_at, notes per row.
+**Section 6 — Adoption & Programs:** Editable in B2: trustpilot_status (enum: yes/no/ask/asked — vocab matches Scott's master sheet, renamed in 0020 from not_asked/pending/given/declined), ghl_adoption (enum: never_adopted/affiliate/saas/inactive — new), sales_group_candidate (boolean three-state: yes/no/not assessed — new), dfy_setting (boolean three-state — new). Plus an Upsells sub-section listing rows from the new `client_upsells` table (sorted sold_at desc nulls last) — amount, product, sold_at, notes per row.
 
 **Section 7 — Notes:** Editable in B2: single text area rendering `clients.notes` (column added in 0012). Empty state shows "No notes yet — click to add" with a dashed-border affordance. Markdown rendering deferred to V1.1 polish.
 

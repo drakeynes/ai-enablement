@@ -37,7 +37,7 @@ All 14 columns are nullable except where noted, no default except where noted. A
 | `upfront_cash_collected` | `numeric(10, 2)` | yes | — | — | Dollars. Upfront payment captured at signup. |
 | `arrears` | `numeric(10, 2)` | no | `0` | — | Dollars. Amount owed. Negative master-sheet values normalize to 0. |
 | `arrears_note` | `text` | yes | — | — | Operational note explaining arrears state. |
-| `trustpilot_status` | `text` | yes | — | `trustpilot_status is null or trustpilot_status in ('not_asked', 'pending', 'given', 'declined')` | Workflow state for the Trustpilot review ask. |
+| `trustpilot_status` | `text` | yes | — | `trustpilot_status is null or trustpilot_status in ('yes', 'no', 'ask', 'asked')` | Workflow state for the Trustpilot review ask. Vocabulary matches the Financial Master Sheet column Scott uses; renamed from `('not_asked', 'pending', 'given', 'declined')` in 0020 (V1 adoption path). `'ask'` is imperative ("you should ask"), distinct from the old descriptive `'not_asked'`. |
 | `ghl_adoption` | `text` | yes | — | `ghl_adoption is null or ghl_adoption in ('never_adopted', 'affiliate', 'saas', 'inactive')` | GHL product adoption state. Enum subject to Nabeel review; widen if needed. |
 | `sales_group_candidate` | `boolean` | yes | — | — | Three-state: true / false / null (not assessed). |
 | `dfy_setting` | `boolean` | yes | — | — | Three-state: true / false / null (not assessed). |
@@ -182,7 +182,7 @@ If no match AND status is not churn: log to unmatched-rows report. Do NOT auto-c
 | 32 | Client Work (Scott) | Drop | — | Editorial notes start fresh. |
 | 33 | Stage | Drop | — | Mostly empty + about to be replaced by Nabeel/Scott journey-stage taxonomy. |
 | 34 | GHL Adoption | Drop | — | Stale data; CSMs refresh per-client in dashboard. |
-| 35 | Trustpilot | Transform | `clients.trustpilot_status` | Mapping: `Yes`→`given`, `No`→`declined`, `Ask`→`not_asked`, `Asked`→`pending`, empty→null. |
+| 35 | Trustpilot | Transform | `clients.trustpilot_status` | Mapping (post-0020): `Yes`→`yes`, `No`→`no`, `Ask`→`ask`, `Asked`→`asked`, empty→null. Identity mapping after the M5.3b vocab rename — DB column now matches the master sheet vocab verbatim. |
 | 36 | Nabeel Notes | Drop | — | Editorial notes start fresh. |
 | 37 | (unnamed empty column) | Drop | — | Junk. |
 | 38 | Sales Group Candidate | Drop | — | Stale; CSMs refresh per-client. |

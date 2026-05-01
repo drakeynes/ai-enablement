@@ -87,10 +87,10 @@ export type FieldType =
   | 'string_array'
 
 export const TRUSTPILOT_VALUES = [
-  'not_asked',
-  'pending',
-  'given',
-  'declined',
+  'yes',
+  'no',
+  'ask',
+  'asked',
 ] as const
 export const GHL_ADOPTION_VALUES = [
   'never_adopted',

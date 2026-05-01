@@ -13,10 +13,10 @@ import { EditableField } from './editable-field'
 import { updateClientField } from '@/app/(authenticated)/clients/[id]/actions'
 
 const TRUSTPILOT_OPTIONS = [
-  { value: 'not_asked', label: 'Not asked' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'given', label: 'Given' },
-  { value: 'declined', label: 'Declined' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+  { value: 'ask', label: 'Ask' },
+  { value: 'asked', label: 'Asked' },
 ]
 
 const GHL_OPTIONS = [
