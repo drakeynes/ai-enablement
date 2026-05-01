@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Session M5 — tracker</title>
-<!-- M5 SOD: clean data day. Active block before 11am EST is manual client cleanup; sync at 11am; engineering chunks queued post-sync. -->
+<!-- M5 mid-day reframe: post-Scott 1:1, V1 scope reset to "match the Financial Master Sheet so Scott adopts Gregory daily." Pre-pivot engineering chunks deferred to V2. -->
 
 <style>
   :root {
@@ -231,13 +231,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M5</div>
-    <h1>Clean data day — every client up to date, classifier extended, dashboard becomes the source of truth.</h1>
+    <div class="id">Session M5 — mid-day reframe</div>
+    <h1>V1 scope reset — match the Financial Master Sheet so Gregory gets adopted.</h1>
     <div class="goal">
-      Active block before 11am EST: walk all 197 active clients via the dashboard and resolve the three M4 Chunk C carry-overs (21 non-churn cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails) plus any field gaps the master sheet didn't cover. 11am EST: CSM sync — onboard the team to the new dashboard, roll out the call titling convention per <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">docs/conventions/call_titling.md</span>; passive smoke test for the M4.1-restored Fathom webhook bakes in for free if anyone records. Post-sync engineering: summary backfill from Fathom API (~367 calls), then extend the classifier to read the new title prefixes, then walk every call and reclassify against the new ruleset. Stretch: Gregory concerns + health-score deep-dive, possibly flipping <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">GREGORY_CONCERNS_ENABLED</span>.
+      Scott's 1:1 (post-CSM-sync) reframed V1: the failure mode is "a fancier fulfillment master sheet" — i.e. shipping features Scott doesn't adopt. Adoption is the only metric that matters; the V2 vision (action item HITL, classifier extensions, summary backfill, Gregory concerns, archetypes) sits on top of an adopted V1, not underneath an unadopted one. New V1 scope is therefore "Gregory replaces the Financial Master Sheet, including the workflow automations Scott does between columns today" — not just matching the sheet's columns. Confirmed-in-V1: status vocab expansion (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">active/ghost/paused/leave/churn</span>) + default-hide churn/leave, status→accountability/NPS auto-toggle (depends on Zain+Nabeel's Airtable webhook), V1 filter set (Loom-driven, scope-pending), one-time owner+status final sync to trigger Scott's transition off the master sheet. Pre-pivot engineering chunks (summary backfill, classifier extension, manual reclassification, Gregory concerns deep-dive) defer to V2.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — start of day, manual cleanup active</span>
+      <span><strong>Last updated:</strong> Session M5 — mid-day pivot, V1 scope reset post-Scott 1:1</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -247,42 +247,35 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">5</span>
+        <span class="count">4</span>
       </header>
 
       <div class="card">
-        <div class="id">M5.2</div>
-        <div class="title">11am EST CSM sync — dashboard onboarding + call titling rollout</div>
-        <div class="subtitle">Drake-led. Walk the team through the V1 client page (7 sections, inline-edit, NPS-entry form), the Calls pages (list + detail + edit-mode classification), and the merge feature. Roll out the three call-title prefixes (<span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span>) per <span style="font-family: var(--mono); font-size: 12.5px;">docs/conventions/call_titling.md</span>. No engineering. Passive verification: after the sync, query <span style="font-family: var(--mono); font-size: 12.5px;">webhook_deliveries</span> for any <span style="font-family: var(--mono); font-size: 12.5px;">source='fathom_webhook'</span> rows — naturally exercises the M4.1-restored realtime webhook smoke test if any CSM records during/after the sync.</div>
-        <div class="pills"><span class="pill">fixed time</span><span class="pill">passive smoke test</span></div>
-      </div>
-
-      <div class="card">
         <div class="id">M5.3</div>
-        <div class="title">Summary backfill from Fathom API (~367 calls)</div>
-        <div class="subtitle">Walk <span style="font-family: var(--mono); font-size: 12.5px;">calls.external_id</span> for rows missing a paired <span style="font-family: var(--mono); font-size: 12.5px;">documents</span> row of type <span style="font-family: var(--mono); font-size: 12.5px;">call_summary</span>. Fetch via Fathom API (<span style="font-family: var(--mono); font-size: 12.5px;">default_summary.markdown_formatted</span>), reuse the extraction logic from <span style="font-family: var(--mono); font-size: 12.5px;">ingestion/fathom/webhook_adapter.py</span>, write through the validator. ~367 to backfill (389 total minus the ~22 already covered). One-shot script in <span style="font-family: var(--mono); font-size: 12.5px;">scripts/</span> — not re-runnable infrastructure, the realtime webhook is the long-term path. Lifts the original gate on <span style="font-family: var(--mono); font-size: 12.5px;">GREGORY_CONCERNS_ENABLED</span> by populating summary input across the active client base.</div>
-        <div class="pills"><span class="pill">discovery before build</span><span class="pill">one-shot</span></div>
+        <div class="title">Status vocabulary expansion + default-hide churn/leave</div>
+        <div class="subtitle">Scott wants the status vocab to be <span style="font-family: var(--mono); font-size: 12.5px;">active / ghost / paused / leave / churn</span>. Two changes vs. today: rename <span style="font-family: var(--mono); font-size: 12.5px;">churned</span> → <span style="font-family: var(--mono); font-size: 12.5px;">churn</span> (data migration: <span style="font-family: var(--mono); font-size: 12.5px;">UPDATE clients SET status = 'churn' WHERE status = 'churned'</span> + same on <span style="font-family: var(--mono); font-size: 12.5px;">client_status_history</span> for consistency, though that table's status column is unconstrained), and add <span style="font-family: var(--mono); font-size: 12.5px;">leave</span> as a new value (clients we've decided to let go ghost without chasing). Migration drops the existing check constraint on <span style="font-family: var(--mono); font-size: 12.5px;">clients.status</span>, updates data, adds new check constraint. Plus UI: <span style="font-family: var(--mono); font-size: 12.5px;">/clients</span> list page defaults to hiding <span style="font-family: var(--mono); font-size: 12.5px;">churn</span> + <span style="font-family: var(--mono); font-size: 12.5px;">leave</span>, with a toggle to reveal. Hard-stop at the migration boundary — Drake applies via Studio + ledger registration + dual-verification per the standing migration norm.</div>
+        <div class="pills"><span class="pill">schema-touch</span><span class="pill warn">migration boundary</span></div>
       </div>
 
       <div class="card">
         <div class="id">M5.4</div>
-        <div class="title">Classifier extension — read new title prefixes</div>
-        <div class="subtitle">The classifier today reads participant emails and call content but not title prefixes. Extend <span style="font-family: var(--mono); font-size: 12.5px;">ingestion/fathom/classifier.py</span> to recognize <span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span> (existing client-call handling), <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span> (likely a new <span style="font-family: var(--mono); font-size: 12.5px;">call_type='sales'</span> on the existing path that already has the Aman+no-CSM heuristic), and <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span> (genuinely new — needs scoping when picked up). Tests in <span style="font-family: var(--mono); font-size: 12.5px;">tests/ingestion/fathom/</span> alongside the existing classifier tests.</div>
-        <div class="pills"><span class="pill warn">[Client x Prospect] needs scoping</span></div>
+        <div class="title">Status → accountability/NPS auto-toggle wiring</div>
+        <div class="subtitle">The headliner workflow Scott called out. Today on the master sheet, when he changes a client's status he then has to manually update accountability + NPS toggles in Airtable. Gregory should do step two automatically. Rules: accountability auto-on for <span style="font-family: var(--mono); font-size: 12.5px;">active</span>, auto-off for <span style="font-family: var(--mono); font-size: 12.5px;">paused</span>, manual toggle available, off for Rick + Nate explicitly; NPS auto-off for <span style="font-family: var(--mono); font-size: 12.5px;">paused</span>, manual toggle available, same pattern as accountability for <span style="font-family: var(--mono); font-size: 12.5px;">ghost</span>. Two-part build: (1) receiver work for the Airtable webhook from Zain + Nabeel — a small Vercel serverless function in <span style="font-family: var(--mono); font-size: 12.5px;">api/</span> that validates payload + updates the client row; (2) toggle-automation logic on status change in the dashboard's status update path. Gated on Airtable webhook landing first; Drake working with Zain on the Airtable side at today's 3:30 sync.</div>
+        <div class="pills"><span class="pill warn">gated on Airtable webhook</span><span class="pill">two-part</span></div>
       </div>
 
       <div class="card">
         <div class="id">M5.5</div>
-        <div class="title">Manual call reclassification — full walk-through</div>
-        <div class="subtitle">After M5.4 ships, Drake walks every call in the dashboard and verifies category against the new ruleset. Fixes via the M3.3 edit-mode UI (<span style="font-family: var(--mono); font-size: 12.5px;">call_classification_history</span> records the manual override). Fully manual. Realistic note: with 389 calls and a sync + backfill + classifier ext already in the day, this likely bleeds past today — a partial pass is fine, follow-up sweep on next session.</div>
-        <div class="pills"><span class="pill">manual</span><span class="pill warn">gated on M5.4</span></div>
+        <div class="title">V1 filter set on /clients list page</div>
+        <div class="subtitle">Scope is "everything Scott uses daily on the master sheet." Confirmed today: filter by owner + status, "every NPS-happy client that hasn't yet left a Trustpilot," "who haven't I spoken to in three weeks." Includes the deferred-from-M4 filter additions (<span style="font-family: var(--mono); font-size: 12.5px;">csm_standing</span>, <span style="font-family: var(--mono); font-size: 12.5px;">ghl_adoption</span>, <span style="font-family: var(--mono); font-size: 12.5px;">trustpilot_status</span>) plus combination/saved-filter patterns Scott will surface in his Loom walking through every master-sheet workflow. Loom IS the V1 spec — anything beyond what's listed here stays scope-pending until it lands. Loom timing uncertain; tracker not gated on it.</div>
+        <div class="pills"><span class="pill warn">scope pending — Loom-driven</span></div>
       </div>
 
       <div class="card">
         <div class="id">M5.6</div>
-        <div class="title">(stretch) Gregory concerns + health score deep-dive</div>
-        <div class="subtitle">Investigative. Read the rubric in <span style="font-family: var(--mono); font-size: 12.5px;">agents/gregory/</span>, understand the scoring (call cadence, action items, NPS), decide if anything needs adjusting against the new 197-client baseline + post-backfill summary density. With M5.3 landing summaries across the active base, the original gate on <span style="font-family: var(--mono); font-size: 12.5px;">GREGORY_CONCERNS_ENABLED</span> (empty input for ~85% of clients) lifts. Possible end-state: flip the flag, manual-trigger one client to verify concerns shape, then watch Monday's cron sweep. Only if M5.5 finishes with time to spare.</div>
-        <div class="pills"><span class="pill stretch">stretch</span><span class="pill warn">gated on M5.3</span></div>
+        <div class="title">Owner + status final sync from master sheet</div>
+        <div class="subtitle">One-time data task, not engineering. Scott is mid-handover; he'll update statuses + owners on the master sheet, send Drake the diff (or Drake reads the master sheet directly), Drake syncs to cloud one final time via the dashboard's existing primary-CSM dropdown (M3-shipped) + status field. After this sync lands, Scott transitions off the master sheet onto Gregory — the trigger for adoption.</div>
+        <div class="pills"><span class="pill">manual / one-time</span><span class="pill">adoption trigger</span></div>
       </div>
     </div>
 
@@ -295,18 +288,23 @@
       <div class="card">
         <div class="id">M5.1</div>
         <div class="title">Manual client data cleanup — 197-client walk-through</div>
-        <div class="subtitle">Active block before 11am EST. Walk all 197 non-archived clients via the dashboard and resolve the three M4 Chunk C carry-overs from <span style="font-family: var(--mono); font-size: 12.5px;">docs/followups.md</span>: (a) cross-check the 21 non-churn auto-creates against existing-cloud-data-in-other-forms (any might already exist under a different identity — flag merge candidates); (b) reassign primary CSM on the 4 Aleks-orphan clients (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) via the dashboard's Primary CSM dropdown; (c) update the 7 placeholder emails (<span style="font-family: var(--mono); font-size: 12.5px;">&lt;slug&gt;+import@placeholder.invalid</span>) if real emails are known. Plus any field gaps the master sheet didn't cover. Goal: every active client up to date so CSMs use the dashboard as the source of truth from the 11am sync onward. Fully manual, no Code work.</div>
-        <div class="pills"><span class="pill">manual / no code</span><span class="pill">pre-sync</span></div>
+        <div class="subtitle">Pre-sync block continues post-pivot. Walk all 197 non-archived clients via the dashboard and resolve the three M4 Chunk C carry-overs from <span style="font-family: var(--mono); font-size: 12.5px;">docs/followups.md</span>: (a) cross-check the 21 non-churn auto-creates against existing-cloud-data-in-other-forms (any might already exist under a different identity — flag merge candidates); (b) reassign primary CSM on the 4 Aleks-orphan clients (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) via the dashboard's Primary CSM dropdown; (c) update the 7 placeholder emails (<span style="font-family: var(--mono); font-size: 12.5px;">&lt;slug&gt;+import@placeholder.invalid</span>) if real emails are known. Plus any field gaps the master sheet didn't cover. Goal: every active client up to date so the M5.6 owner+status final sync from Scott lands cleanly. Fully manual, no Code work.</div>
+        <div class="pills"><span class="pill">manual / no code</span></div>
       </div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">0</span>
+        <span class="count">1</span>
       </header>
 
-      <div class="empty">Nothing shipped yet — M5 just kicked off. M4's five chunks (M4.1 webhook restore + A/B1/B2/C client page schema) are now baseline state in CLAUDE.md § Live System State.</div>
+      <div class="card">
+        <div class="id">M5.2</div>
+        <div class="title">11am EST CSM sync — dashboard onboarding + call titling rollout</div>
+        <div class="subtitle">Drake-led. Walked the team through the V1 client page (7 sections, inline-edit, NPS-entry form), the Calls pages (list + detail + edit-mode classification), and the merge feature. Rolled out the three call-title prefixes (<span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span>) per <span style="font-family: var(--mono); font-size: 12.5px;">docs/conventions/call_titling.md</span>. Passive verification queued: query <span style="font-family: var(--mono); font-size: 12.5px;">webhook_deliveries</span> at EOD for any <span style="font-family: var(--mono); font-size: 12.5px;">source='fathom_webhook'</span> rows — naturally exercises the M4.1-restored realtime webhook smoke test if any CSM recorded during/after the sync. Drake's follow-on 1:1 with Scott reset V1 scope (see header).</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill warn">webhook check pending EOD</span></div>
+      </div>
     </div>
 
   </section>
@@ -315,12 +313,16 @@
     <h2>Blockers / Needs from Nabeel</h2>
     <ul>
       <li>
-        <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending at M5 SOD.)</em>
+        <strong>V1 scope reset — sequencing for adoption, not feature cuts.</strong> Drake will frame for Nabeel as "sequencing for adoption" rather than "cutting features." V2 vision (action item HITL, classifier work, Gregory concerns, archetypes, summary backfill) sits on top of adopted V1, not underneath unadopted V1. The adoption-or-failure framing came from Scott's 1:1 today; needs Nabeel-side alignment so the V1 scope reset doesn't surprise him at the next strategic check-in.
+        <div><span class="ref">Unblocks: confidence on the V2 deferral list; clean narrative for Nabeel's visibility cadence.</span></div>
+      </li>
+      <li>
+        <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending.)</em>
         <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
       </li>
       <li>
-        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. Original gate (empty input for ~85% of clients) lifts once M5.3 summary backfill ships. M5.6 stretch covers the verification + flip if time allows; otherwise queued.
-        <div><span class="ref">Unblocks: concerns column in Gregory dashboard surfaces real watchpoints instead of empty state.</span></div>
+        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. Now V2 territory per the adoption-first scope reset — reads as a Gregory-concerns piece that sits on top of adopted V1 rather than something to ship into an unadopted V1. Will revisit once Scott is on Gregory daily.
+        <div><span class="ref">Deferred to V2 alongside the rest of the Gregory-concerns surface area.</span></div>
       </li>
     </ul>
   </section>
