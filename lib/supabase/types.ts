@@ -7,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       agent_feedback: {
@@ -458,6 +483,132 @@ export type Database = {
           },
         ]
       }
+      client_journey_stage_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          client_id: string
+          id: string
+          journey_stage: string | null
+          note: string | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id: string
+          id?: string
+          journey_stage?: string | null
+          note?: string | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string
+          id?: string
+          journey_stage?: string | null
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_journey_stage_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_journey_stage_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_standing_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          client_id: string
+          csm_standing: string
+          id: string
+          note: string | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id: string
+          csm_standing: string
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string
+          csm_standing?: string
+          id?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_standing_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_standing_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_status_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          client_id: string
+          id: string
+          note: string | null
+          status: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id: string
+          id?: string
+          note?: string | null
+          status: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string
+          id?: string
+          note?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_status_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_status_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_team_assignments: {
         Row: {
           assigned_at: string
@@ -503,60 +654,153 @@ export type Database = {
           },
         ]
       }
+      client_upsells: {
+        Row: {
+          amount: number | null
+          client_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          product: string | null
+          recorded_by: string | null
+          sold_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          client_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          product?: string | null
+          recorded_by?: string | null
+          sold_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          product?: string | null
+          recorded_by?: string | null
+          sold_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_upsells_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_upsells_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
+          archetype: string | null
           archived_at: string | null
+          arrears: number
+          arrears_note: string | null
+          birth_year: number | null
+          contracted_revenue: number | null
+          country: string | null
           created_at: string
+          csm_standing: string | null
+          dfy_setting: boolean | null
           email: string
           full_name: string
+          ghl_adoption: string | null
           id: string
           journey_stage: string | null
+          location: string | null
           metadata: Json
           notes: string | null
+          occupation: string | null
           phone: string | null
           program_type: string | null
+          sales_group_candidate: boolean | null
           slack_user_id: string | null
           start_date: string | null
           status: string
           tags: string[]
           timezone: string | null
+          trustpilot_status: string | null
           updated_at: string
+          upfront_cash_collected: number | null
         }
         Insert: {
+          archetype?: string | null
           archived_at?: string | null
+          arrears?: number
+          arrears_note?: string | null
+          birth_year?: number | null
+          contracted_revenue?: number | null
+          country?: string | null
           created_at?: string
+          csm_standing?: string | null
+          dfy_setting?: boolean | null
           email: string
           full_name: string
+          ghl_adoption?: string | null
           id?: string
           journey_stage?: string | null
+          location?: string | null
           metadata?: Json
           notes?: string | null
+          occupation?: string | null
           phone?: string | null
           program_type?: string | null
+          sales_group_candidate?: boolean | null
           slack_user_id?: string | null
           start_date?: string | null
           status?: string
           tags?: string[]
           timezone?: string | null
+          trustpilot_status?: string | null
           updated_at?: string
+          upfront_cash_collected?: number | null
         }
         Update: {
+          archetype?: string | null
           archived_at?: string | null
+          arrears?: number
+          arrears_note?: string | null
+          birth_year?: number | null
+          contracted_revenue?: number | null
+          country?: string | null
           created_at?: string
+          csm_standing?: string | null
+          dfy_setting?: boolean | null
           email?: string
           full_name?: string
+          ghl_adoption?: string | null
           id?: string
           journey_stage?: string | null
+          location?: string | null
           metadata?: Json
           notes?: string | null
+          occupation?: string | null
           phone?: string | null
           program_type?: string | null
+          sales_group_candidate?: boolean | null
           slack_user_id?: string | null
           start_date?: string | null
           status?: string
           tags?: string[]
           timezone?: string | null
+          trustpilot_status?: string | null
           updated_at?: string
+          upfront_cash_collected?: number | null
         }
         Relationships: []
       }
@@ -722,6 +966,7 @@ export type Database = {
           feedback: string | null
           id: string
           ingested_at: string
+          recorded_by: string | null
           score: number
           submitted_at: string
           survey_source: string | null
@@ -731,6 +976,7 @@ export type Database = {
           feedback?: string | null
           id?: string
           ingested_at?: string
+          recorded_by?: string | null
           score: number
           submitted_at: string
           survey_source?: string | null
@@ -740,6 +986,7 @@ export type Database = {
           feedback?: string | null
           id?: string
           ingested_at?: string
+          recorded_by?: string | null
           score?: number
           submitted_at?: string
           survey_source?: string | null
@@ -750,6 +997,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nps_submissions_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -930,18 +1184,6 @@ export type Database = {
         Args: { p_client_id: string; p_new_team_member_id: string }
         Returns: undefined
       }
-      merge_clients: {
-        Args: { p_source_id: string; p_target_id: string }
-        Returns: Json
-      }
-      update_call_classification: {
-        Args: {
-          p_call_id: string
-          p_changes: Json
-          p_changed_by: string | null
-        }
-        Returns: Json
-      }
       match_document_chunks: {
         Args: {
           client_id?: string
@@ -963,6 +1205,14 @@ export type Database = {
           metadata: Json
           similarity: number
         }[]
+      }
+      merge_clients: {
+        Args: { p_source_id: string; p_target_id: string }
+        Returns: Json
+      }
+      update_call_classification: {
+        Args: { p_call_id: string; p_changed_by: string; p_changes: Json }
+        Returns: Json
       }
     }
     Enums: {
@@ -1092,6 +1342,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
