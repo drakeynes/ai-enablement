@@ -120,31 +120,21 @@ Search: filter on name + email. Filter chips: status, journey stage, primary CSM
 
 ### Clients page — detail view
 
-Vertical layout, sectioned. Inline-save-on-blur for all fields except Primary CSM (which has its own commit semantics — see below).
+Vertical layout, 7 collapsible sections (default expanded) via native `<details>`/`<summary>`. The structure changed in M4 Chunk B (post-migration 0017) — what was a 6-implicit-section layout reorganized into 7 explicit sections that surface the new schema (14 columns + nps_submissions.recorded_by + 4 new tables). Inline-save-on-blur returns in M4 Chunk B2; M4 Chunk B1 ships read-only-with-affordance for every editable field. The needs_review tag triggers a Merge button at the top of the page (orthogonal to the sections, preserved from M3.2).
 
-**Section 1 — Identity (editable):** full_name, email, phone, timezone. slack_user_id read-only.
+**Section 1 — Identity & Contact:** Identity- and contact-level fields, mostly editable in B2. `clients.full_name`, primary `clients.email`, alternate emails (from `clients.metadata.alternate_emails`), phone, country (new), time zone, birth year (new — rendered as "Born YYYY"), location/city (new), occupation (new), status, primary CSM (active assignment from `client_team_assignments`), and tags. Three sub-fields are truly read-only (no edit affordance): Slack channel id (joined from `slack_channels` filtered to active, most recent by `created_at`), Slack user id (`clients.slack_user_id`), signup date (`clients.start_date`).
 
-**Section 2 — Status (editable):** status (dropdown), journey_stage (dropdown), program_type, start_date, tags (chip input).
+**Section 2 — Lifecycle & Standing:** CSM-judgment fields plus system-derived signals. Editable-in-B2: journey_stage (with note "Stage taxonomy in design — free-text for now"), csm_standing (enum: happy/content/at_risk/problem — new), latest NPS score (read from most recent `nps_submissions.score`), archetype (new — free-text V1, enum once Drake/Nabeel finalize). System-derived: Health score from latest `client_health_scores` row (preserved indicator with tier pill, "why this score" expand of the factors jsonb), and Concerns as a collapsible sub-section under Health score that distinguishes three empty states: "Gregory has not yet evaluated this client" when no health row exists, "No concerns currently surfaced" when a health row exists but `factors.concerns[]` is empty, and the existing list rendering (text + severity pill + linked source calls) when concerns are present.
 
-**Section 3 — Primary CSM (editable):** Single dropdown of team_members. Changing the value does NOT update-in-place — it sets the existing assignment's `unassigned_at = now()` and inserts a new `client_team_assignments` row with `role = 'primary_csm'` and the new team member. Preserves history. Schema flexibility for multi-CSM preserved for V1.1.
+**Section 3 — Financials:** Editable in B2: contracted_revenue (numeric, dollars), upfront_cash_collected, arrears (note: column has `not null default 0`, so existing clients render `$0.00` — distinguishing "0 because we set it" from "0 because we never imported a value" is not a V1 concern), arrears_note.
 
-**Section 4 — Indicators (Gregory's surface):**
+**Section 4 — Activity & Action Items:** System-derived activity counts (total calls, total Slack messages, total NPS submissions) rendered as stat blocks alongside two pipeline-pending placeholders (total accountability submissions, course content consumption). Recent calls list shows top 5 with a "Show all calls" expansion that reveals the rest from the same query (no extra round trip). Action items sub-section shows ALL action items grouped by status (open → done → cancelled), collapsing the tail behind a "Show N older action items" toggle when total > 10. Replaces what M2.3b shipped as the open-only Section 6.
 
-Four indicators rendered top-to-bottom:
+**Section 5 — Profile & Background:** All five fields live in `clients.metadata.profile` (jsonb sub-object), NOT as columns on `clients` — the schema spec deliberately keeps these in jsonb until query patterns justify promotion. Editable in B2: niche, offer, traffic_strategy, and SWOT split into 4 sub-fields (strengths, weaknesses, opportunities, threats). Empty by default.
 
-1. **Health score** — numeric 0-100 + tier pill (green/yellow/red). "Last computed" timestamp. Click → expandable "why" panel rendering `client_health_scores.factors`. V1 empty state: "No score yet — Gregory will populate this in V1.1."
+**Section 6 — Adoption & Programs:** Editable in B2: trustpilot_status (enum: not_asked/pending/given/declined — new), ghl_adoption (enum: never_adopted/affiliate/saas/inactive — new), sales_group_candidate (boolean three-state: yes/no/not assessed — new), dfy_setting (boolean three-state — new). Plus an Upsells sub-section listing rows from the new `client_upsells` table (sorted sold_at desc nulls last) — amount, product, sold_at, notes per row.
 
-2. **Call cadence** — "Last call: N days ago" with color coding (green <14 days, yellow 14-30, red >30). V1 live; pure SQL.
-
-3. **Concerns** — bulleted list of qualitative watchpoints from `client_health_scores.factors.concerns[]`. Each concern has text, severity (low/medium/high color-coded), and source_call_ids that link to the calls. V1 empty state: "No concerns surfaced — Gregory will populate this in V1.1."
-
-4. **NPS** — most recent `nps_submissions.score` + days ago. V1 empty state: "No NPS data yet."
-
-**Section 5 — Recent calls (read-only):** Last 5 calls with date, title, category, duration. Click → Calls detail page.
-
-**Section 6 — Open action items (read-only for V1):** List from `call_action_items` where `owner_client_id = client.id` and `status='open'`. Owner, description, due_date, source call. *Note:* this section is the canonical action-items view; it is not duplicated as a top-of-page indicator.
-
-**Section 7 — Notes (editable):** Free-text markdown field. Persists to new column `clients.notes` (migration 0012).
+**Section 7 — Notes:** Editable in B2: single text area rendering `clients.notes` (column added in 0012). Empty state shows "No notes yet — click to add" with a dashed-border affordance. Markdown rendering deferred to V1.1 polish.
 
 ### Calls page — list view
 
