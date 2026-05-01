@@ -18,6 +18,7 @@ Canonical record for each client. Kept deliberately lightweight for V1 — the l
 | `timezone` | `text` | IANA tz name. Used for scheduling and display |
 | `journey_stage` | `text` | `onboarding`, `active`, `churning`, `churned`, `alumni` |
 | `status` | `text` | Operational status: `active`, `paused`, `ghost`, `leave`, `churned`. Default `active`. CHECK constraint `clients_status_check` added in 0019; `leave` is a CSM decision to let a client go without chasing (distinct from `churned`, which is post-program) |
+| `nps_standing` | `text` | Added in 0021. NPS Survey segment classification mirrored from Airtable: `promoter`, `neutral`, `at_risk` (or null). Always written by `update_client_from_nps_segment` RPC; receiver normalizes Airtable raw strings (e.g. `"Strong / Promoter"`, `"Neutral"`, `"At Risk"`) to lowercase at the boundary. Distinct from `csm_standing` — `nps_standing` is mechanical (Airtable mirror), `csm_standing` is CSM judgment (auto-derived from this column subject to override-sticky semantics) |
 | `start_date` | `date` | When the client entered the program |
 | `program_type` | `text` | `9k_consumer`, `b2b_enterprise`, etc. |
 | `tags` | `text[]` | Ad-hoc labels; GIN-indexed |

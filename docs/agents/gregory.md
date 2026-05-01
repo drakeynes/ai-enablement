@@ -187,6 +187,36 @@ Adds a single nullable `notes` text column to `clients`. Edited inline by team m
 
 New append-only audit table for manual edits to `call_category`, `call_type`, and `primary_client_id` from the Calls detail page. Constrained `field_name` enum to those three fields. Application-side writes (not trigger-based) so the audit logic stays visible in dashboard code rather than hidden in a trigger.
 
+## Airtable NPS integration (V1 — M5.4)
+
+Airtable is the source of truth for NPS Survey segments. Gregory mirrors each client's segment classification into `clients.nps_standing` and conditionally auto-derives `clients.csm_standing` from it.
+
+**Architecture — three layers, one direction:**
+
+1. **Airtable Survey** (external) — captures NPS scores + classifies clients into segments. Fires a webhook into the Vercel receiver on segment change. Source of truth for the segment classification.
+2. **Receiver** (`api/airtable_nps.py`, next chunk) — small Vercel serverless function. Validates the webhook payload, normalizes Airtable's raw segment strings to lowercase (`"Strong / Promoter"` → `promoter`, `"Neutral"` → `neutral`, `"At Risk"` → `at_risk`), then calls the combined RPC. No business logic at this layer; it's a thin adapter.
+3. **`update_client_from_nps_segment` RPC** (migration 0021) — does the work in one transaction. Always writes `clients.nps_standing`. Conditionally auto-derives `clients.csm_standing` per override-sticky semantics.
+
+**Override-sticky semantics (Scott-confirmed behavior B — manual CSM judgment wins):**
+
+The auto-derive only writes `csm_standing` when EITHER:
+- `clients.csm_standing IS NULL` (no prior value), OR
+- the most recent `client_standing_history` row for the client has `changed_by = Gregory Bot UUID` (`cfcea32a-062d-4269-ae0f-959adac8f597`).
+
+If neither holds — i.e., a CSM has manually set `csm_standing` via the dashboard — the RPC skips the auto-derive and only writes `nps_standing`. The manual judgment is sticky until a CSM clears it (back to null) or until Gregory Bot is the most recent author again. The `Gregory Bot` `team_members` row (added in 0021, role `system_bot`) exists solely to make this manual-vs-auto distinction queryable from the existing `client_standing_history.changed_by` column — no separate `is_automated` flag needed.
+
+**Segment → csm_standing mapping** (encoded only inside the RPC; receiver passes the segment, DB does the work):
+
+| `nps_standing` | derived `csm_standing` |
+|---|---|
+| `promoter` | `happy` |
+| `neutral` | `content` |
+| `at_risk` | `at_risk` |
+
+`'problem'` `csm_standing` has no auto-derive path — only manual CSM judgment. The function never writes `csm_standing = 'problem'`.
+
+**Why the auto-derive delegates rather than writing directly:** the RPC `PERFORM update_client_csm_standing_with_history(...)` rather than UPDATE'ing `clients.csm_standing` directly. Reusing the 0018 RPC keeps the audit logic + idempotency (no-op when value unchanged → no history row written) in one place. The Gregory Bot UUID is passed as `p_changed_by` and `'auto-derived from NPS segment <segment>'` as `p_note` so the history row carries enough context to reconstruct what happened.
+
 ## Repo location
 
 Next.js at repo root, alongside the existing Python serverless functions in `api/`. The "dashboard" label survives as a conceptual grouping (Next.js routes live under `app/`, dashboard helpers under `components/` and `lib/`) rather than a literal top-level directory.

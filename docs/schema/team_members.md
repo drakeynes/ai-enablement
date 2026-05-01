@@ -39,6 +39,16 @@ Identify agency staff (CSMs, leadership, engineering, ops) so agents can attribu
 - Manual seed for V1 (Scott, Lou, Nico, Drake, Nabeel, Zain)
 - Later: programmatic sync from the CRM or an internal admin UI
 
+## Sentinel rows
+
+A small number of `team_members` rows aren't humans — they're system identities used for attribution on automated writes. They carry `role = 'system_bot'` so a future `WHERE role IN ('csm', 'leadership', ...)` filter excludes them naturally; their UUIDs are pinned literals in the migration that creates them so the value is stable across environments.
+
+| Sentinel | UUID | Migration | Purpose |
+|---|---|---|---|
+| Gregory Bot | `cfcea32a-062d-4269-ae0f-959adac8f597` | 0021 | `changed_by` attribution for auto-derived `clients.csm_standing` writes from `update_client_from_nps_segment`. The presence of Gregory Bot's UUID on the most recent `client_standing_history` row is what makes the manual-vs-auto distinction queryable — and is the gate for whether the next NPS segment update is allowed to auto-derive over the column (override-sticky semantics: only Gregory Bot's prior writes are clobberable, manual CSM judgment is sticky). |
+
+Sentinel rows have a non-null `metadata.sentinel = true` flag so they can be excluded from any "real team member" listing with `WHERE NOT (metadata ? 'sentinel') OR metadata->>'sentinel' <> 'true'`.
+
 ## Read By
 
 - Every agent (to identify who's acting and who to escalate to)
