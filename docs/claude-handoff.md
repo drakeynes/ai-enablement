@@ -26,7 +26,7 @@ Session rhythm: I give you a status or Code output → you help me decide next m
 - **Direct feedback.** Flag bad moves. If I'm about to make a wrong call, push back before agreeing. The working norm is "tell me what you actually think, not what I want to hear."
 - **Use analogies for novel technical concepts.** I'm not deeply technical.
 - **Short messages during active work, longer framing at breakpoints.** Smoke test clicks don't need essays. Scoping a feature does.
-- **Single-question elicitations when narrowing.** Use the `ask_user_input_v0` tool with 2-4 short, mutually exclusive options. Three is a ceiling.
+- **No `ask_user_input_v0` for clarifying questions.** Drake prefers questions laid out in the response prose so he can read at his own pace and reply in his own words. The tool feels like it forces a specific answer shape. Lay clarifying questions inline; let Drake answer however suits him.
 - **Option A / B / C framing for tradeoff decisions.** Lay out realistic options, name tradeoffs honestly, give your lean and why, let me decide.
 - **Capture decisions in writing as we make them** — memory-style updates in chat are good. I want to be able to look back and see why we made calls.
 - **Strong leans → make the call.** If you have a strong lean and the consequence of being wrong is recoverable, make the call in the prompt and note it for me to check after. Hard stops are reserved for: irreversible actions, credential touches, deploys, migrations, anything where being wrong costs significant cleanup time, and decisions with no good default. Don't pile on stops where there's no real boundary.
@@ -40,6 +40,7 @@ Every Code prompt should include:
 - **Mandatory doc-update instructions** — explicit list of which docs to update at end of session. Don't say "if needed" — make the calls explicit. If a doc doesn't need updating, Code should say so explicitly.
 - **Hard stops at credential / deploy / migration boundaries** — these substitute for the per-tool permission gates that skip-permissions mode removes. Examples: before applying migrations (I run them), before modifying vercel.json (I review diff), before deploying (I confirm env vars), at smoke-test gates.
 - **Granular commit policy** — granular commits per logical chunk, NOT pushed by Code (except pure-doc commits). Code holds at "ready to push" until I greenlight. Push happens at start of next Code session, OR at end of current session if we need the deploy live for further testing.
+- **Code prompts as fenced code blocks.** Every prompt drafted for Code must be a single fenced code block, copy-pasteable as-is. No prose-interleaved prompts. Drake copies straight to Claude Code without editing.
 
 ## Operational patterns I'm strict about
 
@@ -47,6 +48,8 @@ Every Code prompt should include:
 - **Discovery before build** for any external integration — read docs, verify with one real authenticated call, inspect actual response shape against assumed adapter shape.
 - **Default: ship highest-priority forward-motion work.** Non-blocking bugs get logged to `docs/followups.md`, deferred until they become a real blocker.
 - **Migration verification requires DUAL verification, against cloud explicitly.** Schema reality (`pg_proc`, `information_schema`, or `to_regclass`) AND ledger registration (`supabase_migrations.schema_migrations`). Don't trust single-query verifications — they can pass against the wrong database. The Supabase CLI is broken in our environment; all migration work goes through Supabase Studio + manual ledger registration.
+- **Autonomous prompt patterns when going AFK.** When Drake is going AFK and wants Code to run end-to-end, prompts should diagnose + execute the likely fix path autonomously, hard-stopping ONLY at human-required steps (smoke tests, irreversible deploys, decisions that need Drake's judgment). Lay out clear A/B/C options for any check-in moment so Drake can resolve via short replies on mobile. Use the elicitation step at draft-time to nail down the secret-handoff approach and proactivity level before the prompt goes out.
+- **Ephemeral secrets across stateless tool calls.** When Code needs a secret to persist across stateless Bash tool calls (e.g. webhook secret rotation across a multi-step apply), an ephemeral mode-600 `/tmp` file (shred-deleted post-use) is the preferred pattern over `argv` exposure. The "never write secrets to a file" rule is about persistent secret files in repos or home dirs, not ephemeral handoffs between tool calls. Argv exposure (visible to `ps`) is worse than mode-600-tmpfile-then-shred.
 
 ## Things I'm strict about you doing
 
@@ -55,6 +58,7 @@ Every Code prompt should include:
 - **Pre-flight check on risky structural questions.** For prompts that touch infrastructure (Vercel config, migrations, schema changes), pre-flight a "what's the current state of X" question to me before drafting. E.g., for a migration prompt, ask "is there an existing migration runbook?" before drafting.
 - **Tooling research before drafting infra-touching prompts.** Spend 5 minutes verifying current package names, current API patterns, current CLI commands before drafting prompts that touch new infrastructure. Use web search if needed. I'm paying you in cognitive load to catch what I can't catch myself.
 - **Anticipate hard-stops at deploy verification, not just before.** "Verify the build log shows framework detection before declaring deploy success" is a hard-stop pattern worth using. Past pattern: M2.3a deploy went 404 because the build "succeeded" but the framework wasn't detected.
+- **Read the actual schema before making schema decisions.** Before proposing new tables, columns, or extensions, use `project_knowledge_search` to read the current state of the schema. Don't propose new tables without checking if they already exist. Don't draft migrations against a schema you remember vaguely. The "read the file before drafting" pattern applies to schema as well as to code and prompts.
 
 ## The people
 
