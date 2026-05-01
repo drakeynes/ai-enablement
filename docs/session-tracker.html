@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Session M4 — tracker</title>
-<!-- M4 EOD: shell reframed from SOD plan to close-out summary. Done count = 5 across the day's chunks (M4.1 + A + B1 + B2 + C). -->
+<title>Session M5 — tracker</title>
+<!-- M5 SOD: clean data day. Active block before 11am EST is manual client cleanup; sync at 11am; engineering chunks queued post-sync. -->
 
 <style>
   :root {
@@ -231,13 +231,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M4</div>
-    <h1>M4 shipped — V1 client page schema, populated, deployed.</h1>
+    <div class="id">Session M5</div>
+    <h1>Clean data day — every client up to date, classifier extended, dashboard becomes the source of truth.</h1>
     <div class="goal">
-      Five chunks shipped today: M4.1 restored the silent Fathom realtime webhook (re-registered + secret-rotated + redeployed). Chunks A / B1 / B2 / C built the V1 client page schema end-to-end — migration 0017 added 14 clients columns + nps_submissions.recorded_by + 4 new tables; B1 rebuilt the detail page as a 7-section read-only layout; B2 wired inline-edit with history-writing RPCs (migration 0018) + an NPS-entry inline form; C imported the master sheet (197 active clients now in cloud, 69 auto-created per Drake's amendment to the spec's auto-create rule). CSM team onboards to the new dashboard at tomorrow's 11am EST sync, including the call titling convention rollout (docs/conventions/call_titling.md).
+      Active block before 11am EST: walk all 197 active clients via the dashboard and resolve the three M4 Chunk C carry-overs (21 non-churn cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails) plus any field gaps the master sheet didn't cover. 11am EST: CSM sync — onboard the team to the new dashboard, roll out the call titling convention per <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">docs/conventions/call_titling.md</span>; passive smoke test for the M4.1-restored Fathom webhook bakes in for free if anyone records. Post-sync engineering: summary backfill from Fathom API (~367 calls), then extend the classifier to read the new title prefixes, then walk every call and reclassify against the new ruleset. Stretch: Gregory concerns + health-score deep-dive, possibly flipping <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">GREGORY_CONCERNS_ENABLED</span>.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M4 — end of day, all M4 chunks shipped</span>
+      <span><strong>Last updated:</strong> Session M5 — start of day, manual cleanup active</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -247,80 +247,66 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">3</span>
+        <span class="count">5</span>
       </header>
 
       <div class="card">
-        <div class="id">M4.2</div>
-        <div class="title">Summary backfill from Fathom API</div>
-        <div class="subtitle">~22 call_summary documents currently exist across 132 active clients because the F1.5 backlog ingest was transcripts-only. Walk calls.external_id for rows missing a paired summary document, fetch summaries via Fathom API (default_summary.markdown_formatted), write documents rows of type call_summary. Reuse extraction logic from ingestion/fathom/webhook_adapter.py.</div>
-        <div class="pills"><span class="pill">discovery before build</span></div>
+        <div class="id">M5.2</div>
+        <div class="title">11am EST CSM sync — dashboard onboarding + call titling rollout</div>
+        <div class="subtitle">Drake-led. Walk the team through the V1 client page (7 sections, inline-edit, NPS-entry form), the Calls pages (list + detail + edit-mode classification), and the merge feature. Roll out the three call-title prefixes (<span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span>) per <span style="font-family: var(--mono); font-size: 12.5px;">docs/conventions/call_titling.md</span>. No engineering. Passive verification: after the sync, query <span style="font-family: var(--mono); font-size: 12.5px;">webhook_deliveries</span> for any <span style="font-family: var(--mono); font-size: 12.5px;">source='fathom_webhook'</span> rows — naturally exercises the M4.1-restored realtime webhook smoke test if any CSM records during/after the sync.</div>
+        <div class="pills"><span class="pill">fixed time</span><span class="pill">passive smoke test</span></div>
       </div>
 
       <div class="card">
-        <div class="id">M4.4</div>
-        <div class="title">Flip GREGORY_CONCERNS_ENABLED + verify</div>
-        <div class="subtitle">Gated on M4.2 landing summary data. Single-client manual run on Vid Velayutham (known-shape test target with summary coverage post-backfill) to verify concerns shape and quality, then flip the Vercel env var so the next Monday cron runs concerns across all 132 active clients.</div>
-        <div class="pills"><span class="pill warn">gated on M4.2</span></div>
+        <div class="id">M5.3</div>
+        <div class="title">Summary backfill from Fathom API (~367 calls)</div>
+        <div class="subtitle">Walk <span style="font-family: var(--mono); font-size: 12.5px;">calls.external_id</span> for rows missing a paired <span style="font-family: var(--mono); font-size: 12.5px;">documents</span> row of type <span style="font-family: var(--mono); font-size: 12.5px;">call_summary</span>. Fetch via Fathom API (<span style="font-family: var(--mono); font-size: 12.5px;">default_summary.markdown_formatted</span>), reuse the extraction logic from <span style="font-family: var(--mono); font-size: 12.5px;">ingestion/fathom/webhook_adapter.py</span>, write through the validator. ~367 to backfill (389 total minus the ~22 already covered). One-shot script in <span style="font-family: var(--mono); font-size: 12.5px;">scripts/</span> — not re-runnable infrastructure, the realtime webhook is the long-term path. Lifts the original gate on <span style="font-family: var(--mono); font-size: 12.5px;">GREGORY_CONCERNS_ENABLED</span> by populating summary input across the active client base.</div>
+        <div class="pills"><span class="pill">discovery before build</span><span class="pill">one-shot</span></div>
       </div>
 
       <div class="card">
-        <div class="id">M4.5</div>
-        <div class="title">(stretch) Repo cleanup pass</div>
-        <div class="subtitle">Scope TBD; broader sweep beyond scripts/archive/ per the followup logged at M3 close-out. Drake will scope specifics if/when this slot opens.</div>
-        <div class="pills"><span class="pill stretch">stretch</span></div>
+        <div class="id">M5.4</div>
+        <div class="title">Classifier extension — read new title prefixes</div>
+        <div class="subtitle">The classifier today reads participant emails and call content but not title prefixes. Extend <span style="font-family: var(--mono); font-size: 12.5px;">ingestion/fathom/classifier.py</span> to recognize <span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span> (existing client-call handling), <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span> (likely a new <span style="font-family: var(--mono); font-size: 12.5px;">call_type='sales'</span> on the existing path that already has the Aman+no-CSM heuristic), and <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span> (genuinely new — needs scoping when picked up). Tests in <span style="font-family: var(--mono); font-size: 12.5px;">tests/ingestion/fathom/</span> alongside the existing classifier tests.</div>
+        <div class="pills"><span class="pill warn">[Client x Prospect] needs scoping</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.5</div>
+        <div class="title">Manual call reclassification — full walk-through</div>
+        <div class="subtitle">After M5.4 ships, Drake walks every call in the dashboard and verifies category against the new ruleset. Fixes via the M3.3 edit-mode UI (<span style="font-family: var(--mono); font-size: 12.5px;">call_classification_history</span> records the manual override). Fully manual. Realistic note: with 389 calls and a sync + backfill + classifier ext already in the day, this likely bleeds past today — a partial pass is fine, follow-up sweep on next session.</div>
+        <div class="pills"><span class="pill">manual</span><span class="pill warn">gated on M5.4</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.6</div>
+        <div class="title">(stretch) Gregory concerns + health score deep-dive</div>
+        <div class="subtitle">Investigative. Read the rubric in <span style="font-family: var(--mono); font-size: 12.5px;">agents/gregory/</span>, understand the scoring (call cadence, action items, NPS), decide if anything needs adjusting against the new 197-client baseline + post-backfill summary density. With M5.3 landing summaries across the active base, the original gate on <span style="font-family: var(--mono); font-size: 12.5px;">GREGORY_CONCERNS_ENABLED</span> (empty input for ~85% of clients) lifts. Possible end-state: flip the flag, manual-trigger one client to verify concerns shape, then watch Monday's cron sweep. Only if M5.5 finishes with time to spare.</div>
+        <div class="pills"><span class="pill stretch">stretch</span><span class="pill warn">gated on M5.3</span></div>
       </div>
     </div>
 
     <div class="col progress">
       <header>
         <h2>In Progress</h2>
-        <span class="count">0</span>
+        <span class="count">1</span>
       </header>
 
-      <div class="empty">Nothing in flight — M4 closed out and pushed. Tomorrow: 11am EST CSM sync (dashboard onboarding + call titling convention rollout). Manual data cleanup carry-overs from the master sheet import tracked in docs/followups.md.</div>
+      <div class="card">
+        <div class="id">M5.1</div>
+        <div class="title">Manual client data cleanup — 197-client walk-through</div>
+        <div class="subtitle">Active block before 11am EST. Walk all 197 non-archived clients via the dashboard and resolve the three M4 Chunk C carry-overs from <span style="font-family: var(--mono); font-size: 12.5px;">docs/followups.md</span>: (a) cross-check the 21 non-churn auto-creates against existing-cloud-data-in-other-forms (any might already exist under a different identity — flag merge candidates); (b) reassign primary CSM on the 4 Aleks-orphan clients (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) via the dashboard's Primary CSM dropdown; (c) update the 7 placeholder emails (<span style="font-family: var(--mono); font-size: 12.5px;">&lt;slug&gt;+import@placeholder.invalid</span>) if real emails are known. Plus any field gaps the master sheet didn't cover. Goal: every active client up to date so CSMs use the dashboard as the source of truth from the 11am sync onward. Fully manual, no Code work.</div>
+        <div class="pills"><span class="pill">manual / no code</span><span class="pill">pre-sync</span></div>
+      </div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">5</span>
+        <span class="count">0</span>
       </header>
 
-      <div class="card">
-        <div class="id">M4.1</div>
-        <div class="title">Fathom webhook diagnosis + autonomous re-registration</div>
-        <div class="subtitle">Diagnosis confirmed Fathom wasn't sending: 0 fathom_webhook rows in webhook_deliveries over all time (not just 7 days), 0 inbound POSTs to /api/fathom_events in Vercel logs over 7 days, no 401 traffic ruling out signature mismatch. Re-registered via POST /external/v1/webhooks (new id FTVBjD_JqTfjEzVA), rotated whsec_ secret into Vercel FATHOM_WEBHOOK_SECRET (Production scope only — Preview cleaned up), redeployed (3m, aliased to ai-enablement-sigma.vercel.app), verified handler reads new secret via bad-signature → 401 probe. Surprise findings: Fathom API has NO GET /webhooks endpoint (runbook diagnostic curl was based on a fabricated path; OpenAPI confirms only POST + DELETE/{id}); the F2.5 UI registration on 2026-04-24 never produced a single signature-verified row. End-to-end smoke test (real Fathom recording) pending Drake.</div>
-        <div class="pills"><span class="pill warn">smoke test pending</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M4.A</div>
-        <div class="title">Client page schema V1 — spec doc + migration 0017</div>
-        <div class="subtitle">Spec at docs/client-page-schema-spec.md (Drake's verbatim 7-section design; locks the V1 design that Chunks B + C reference). Migration 0017_client_page_schema_v1.sql adds 14 nullable columns to clients (only arrears is not null, default 0; csm_standing / trustpilot_status / ghl_adoption / birth_year carry inline check constraints; three partial-on-archived indexes), 1 column to nps_submissions (recorded_by FK), and 4 new tables: client_upsells (cascade-delete, owned-by-parent), client_status_history / client_journey_stage_history / client_standing_history (no-cascade, append-only, application-layer writes mirroring client_team_assignments). Pre-apply spec correction: journey_stage seed gained the same archived_at filter as the status seed (Drake's call). Drake applied via Studio. Cloud-verified: schema reality (14/14 columns + nps_submissions.recorded_by + 4× to_regclass non-null), ledger ('0017', 'client_page_schema_v1') registered, seed counts match the clients table filter exactly (status: 128 actual / 128 from non-archived-clients-with-non-null-status; journey_stage: 0 / 0 since no non-archived client has a non-null journey_stage; standing: 0 by design). Per-table docs + schema-v1.md updated. CLAUDE.md "146 active clients" figure noted as drifted — actual count is 128.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M4.B1</div>
-        <div class="title">Client detail page v3 — read paths + 7-section UI (read-only)</div>
-        <div class="subtitle">Types regenerated from cloud via --db-url fallback (--project-id path failed on IPv6 unreachable; --db-url worked first try). 1099 → 1352 lines, all 0017 columns + 4 new tables present. lib/db/clients.ts extended: ClientDetail gains all_calls / total_calls / all_action_items / total_nps_submissions / total_slack_messages / upsells / slack_channel_id; round-trip count holds at 7-8 (1 main client query with slack_channels + client_upsells embeds, 6 parallel + 1 conditional slack_messages count when slack_user_id is non-null). Page rewritten to 7 collapsible sections via native &lt;details&gt;/&lt;summary&gt; (Identity & Contact / Lifecycle & Standing / Financials / Activity & Action Items / Profile & Background / Adoption & Programs / Notes); every editable field renders read-only with hover-affordance, B2 wires inline edit. HealthScoreIndicator + ConcernsIndicator preserved verbatim, moved into Lifecycle. Concerns has three distinct empty states (no health row → "not yet evaluated"; health exists, empty concerns → "no concerns currently surfaced"; non-empty → list). Profile & Background reads from clients.metadata.profile jsonb (per spec; not promoted to columns yet). Action Items show all statuses grouped (open → done → cancelled); collapsible when &gt; 10. tsc clean, ESLint clean, next build clean (8/8 static pages, /clients/[id] = 3.68 kB). Side-effect: getClientsList row-builder switched to spread + delete-embeds so future column additions don't require touching it; bridged a regenerated-types nullability quirk on update_call_classification's p_changed_by arg. inline-fields.tsx + primary-csm-field.tsx + actions.ts left in place untouched for B2 to extend.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M4.B2</div>
-        <div class="title">Client detail page v3 — inline-edit + history writes + NPS entry</div>
-        <div class="subtitle">Migration 0018_client_history_rpcs.sql adds four security-definer Postgres functions with explicit grants to service_role: update_client_status_with_history, update_client_journey_stage_with_history, update_client_csm_standing_with_history (each atomic update + history-row insert; idempotent no-op when value unchanged; csm_standing clear-to-null skips history because client_standing_history.csm_standing is NOT NULL by design), and insert_nps_submission (manual NPS entry with 0-10 validation, stamps survey_source='manual_dashboard_entry'). Drake applied via Studio; ledger registered ('0018', 'client_history_rpcs'); 4/4 functions present FUNCTION + DEFINER. End-to-end smoke test against cloud verified all four paths (real change → history row → revert; csm_standing clear-to-null wrote 0 history rows as designed; score=11 raised). UPDATABLE_FIELDS grew from 10 to 21 columns with type-narrowing for integer (birth_year 1900..currentYear), numeric (money fields, arrears non-negative), enum (trustpilot_status, ghl_adoption), three-state boolean (sales_group_candidate, dfy_setting), and array dedup-trim-cap for tags. Status / journey_stage / csm_standing removed from the whitelist — they go through dedicated RPC actions to enforce the history-write invariant. Five new Server Actions: updateClientStatusAction, updateClientJourneyStageAction, updateClientCsmStandingAction, addNpsScoreAction, updateClientProfileFieldAction (read-modify-write on metadata; preserves alternate_emails). New components: EditableField (text / textarea / integer / numeric_money / enum / three_state_bool / date variants; click-to-edit, blur-or-Enter saves, Escape cancels), EditableTagsField (chip input with comma-or-Enter add, backspace-on-empty remove), NpsEntryForm (collapsed-by-default inline form). All 7 sections converted to client components and wired. PrimaryCsmField (dialog-confirm) preserved unchanged. Alternate emails kept read-only by design (no UI write path; merge_clients RPC + Fathom resolver are canonical writers; direct edit corrupts identity resolution — flagged for Drake decision). Dead inline-fields.tsx deleted. tsc clean, ESLint clean, next build clean (/clients/[id] = 10.1 kB, +6.4kB for client islands). Three followups logged: changed_by always null until auth context wires through; metadata.profile read-modify-write race; NPS-entry no duplicate protection.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M4.C</div>
-        <div class="title">Master sheet CSV importer — applied to cloud</div>
-        <div class="subtitle">scripts/import_master_sheet.py (1,294 lines) reads the Financial Master Sheet CSV and applies the column transformations from spec § Part 5. Default mode dry-run; --apply writes. First dry-run surfaced 21 unmatched non-churn rows (cross-checked: 0/20 sampled emails found anywhere in cloud — they're genuinely absent). Drake amended the auto-create rule to cover non-churn unmatched too; followup logged. Applied to cloud: 69 auto-creates (48 churn + 21 non-churn), 104 column updates across matched clients, 10 fill-null updates (slack_user_id 7, phone 0, start_date 3), 44 new client_team_assignments (10 fresh + 16 end+create + 1 churn-with-Scott incidental bug-fix + 17 non-churn auto-creates with recognized owners), 16 owner-changes archived, 24 client_upsells, 81 status_history seeds, 137 standing_history seeds, 7 placeholder emails synthesized (6 churned + Andy V). Aleks-orphans (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) land with primary_csm=null per Drake — manual reassignment via dashboard. Spot-checked Ashan Fernando (matched), Mubeen Siddiqui + Andy V (non-churn auto-create), Mark Dawson (churn auto-create with Scott — the +1 bug-fix), Colin Hill (Aleks-orphan, 0 active assignments confirmed). First idempotency-verification run exposed a Decimal-vs-float precision mismatch in _normalize_for_diff that produced 173 no-op writes (data-clean but bumped updated_at); fixed via fixed-point format + trailing-zero strip. Re-verified clean: 0 net writes on second --apply. New runbook at docs/runbooks/master_sheet_import.md. schema-v1.md DB population table refreshed (197 active clients, 24 upsells, 137 standing_history rows). Three carry-over followups logged for manual cleanup post-deploy.</div>
-        <div class="pills"><span class="pill">verified live</span></div>
-      </div>
+      <div class="empty">Nothing shipped yet — M5 just kicked off. M4's five chunks (M4.1 webhook restore + A/B1/B2/C client page schema) are now baseline state in CLAUDE.md § Live System State.</div>
     </div>
 
   </section>
@@ -329,21 +315,12 @@
     <h2>Blockers / Needs from Nabeel</h2>
     <ul>
       <li>
-        <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending at M3 close.)</em>
+        <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending at M5 SOD.)</em>
         <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
       </li>
       <li>
-        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. LLM cost ~$5–10/month at weekly cadence with current data density (~22 summaries across 132 clients; ~85% of clients would have empty input today, so most calls would skip Claude per the per-client empty-input gate). Drake's read: worth flipping once Nabeel okays the spend OR once summary density grows organically (whichever first).
+        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. Original gate (empty input for ~85% of clients) lifts once M5.3 summary backfill ships. M5.6 stretch covers the verification + flip if time allows; otherwise queued.
         <div><span class="ref">Unblocks: concerns column in Gregory dashboard surfaces real watchpoints instead of empty state.</span></div>
-      </li>
-    </ul>
-  </section>
-
-  <section class="blockers">
-    <h2>Carry-over blockers</h2>
-    <ul>
-      <li>
-        <strong>Supabase local/cloud confusion — CLI silently routes to local instead of cloud.</strong> Hit acutely during M2.3a (migrations <span class="ref">0012</span>/<span class="ref">0013</span> went local first, recovered via Studio). Working norm: all migration work goes through Supabase Studio + manual <span class="ref">supabase_migrations.schema_migrations</span> ledger registration + dual-verification (schema reality AND ledger). Workaround is fragile — easy to forget the ledger step, dual-verification overhead every migration. Real fix: figure out why the CLI misroutes (WSL2 networking? config? auth?) and restore CLI as the migration path, OR formalize the Studio workflow into a tighter runbook with unmissable manual steps. Logged as standing blocker, not session-bound.
       </li>
     </ul>
   </section>
