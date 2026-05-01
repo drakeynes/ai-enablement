@@ -1,29 +1,43 @@
+'use client'
+
 // Section 2 — Lifecycle & Standing.
 //
-// CSM-judgment fields (journey_stage, csm_standing, archetype) plus
-// system-derived signals (latest NPS, Health Score, Concerns).
+// journey_stage / csm_standing edits go through history-writing RPC
+// actions (see lib/db/clients.ts updateClientJourneyStageWithHistory /
+// updateClientCsmStandingWithHistory and migration 0018). archetype is
+// a plain whitelisted column. Latest NPS is read-only display; the
+// "Add NPS score" button below it opens NpsEntryForm.
 //
-// HealthScoreIndicator and ConcernsIndicator preserve the rendering
-// from the previous detail page — they were carefully designed against
-// the locked client_health_scores.factors jsonb shape and shouldn't
-// be rewritten.
-//
-// Concerns is a collapsible sub-section under Health Score. Empty
-// states distinguish "no health record" (not yet evaluated) from
-// "health record exists but no concerns" (either the flag is off
-// or this client had nothing to flag) — per the warning in the B1
-// prompt.
+// HealthScoreIndicator and ConcernsBlock preserve the rendering from
+// B1 — locked against the client_health_scores.factors jsonb shape.
+// Concerns has three distinct empty states (no health row → "not yet
+// evaluated"; health exists, empty concerns → "no concerns currently
+// surfaced"; non-empty → list).
 
 import Link from 'next/link'
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section, Subsection } from './section'
 import { ReadOnlyField } from './read-only-field'
+import { EditableField } from './editable-field'
+import { NpsEntryForm } from './nps-entry-form'
+import {
+  updateClientCsmStandingAction,
+  updateClientField,
+  updateClientJourneyStageAction,
+} from '@/app/(authenticated)/clients/[id]/actions'
 
 type ConcernShape = {
   text: string
   severity?: 'low' | 'medium' | 'high'
   source_call_ids?: string[]
 }
+
+const CSM_STANDING_OPTIONS = [
+  { value: 'happy', label: 'Happy' },
+  { value: 'content', label: 'Content' },
+  { value: 'at_risk', label: 'At risk' },
+  { value: 'problem', label: 'Problem' },
+]
 
 function HealthScoreIndicator({
   health,
@@ -70,7 +84,6 @@ function HealthScoreIndicator({
 }
 
 function ConcernsBlock({ health }: { health: ClientDetail['latest_health'] }) {
-  // No health record at all — Gregory hasn't run for this client.
   if (!health) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -78,9 +91,6 @@ function ConcernsBlock({ health }: { health: ClientDetail['latest_health'] }) {
       </p>
     )
   }
-
-  // Health record exists; pull the concerns array from factors. Empty
-  // when the flag is off OR when Gregory ran but surfaced none.
   const factorsObj =
     typeof health.factors === 'object' && health.factors
       ? (health.factors as { concerns?: ConcernShape[] })
@@ -140,26 +150,58 @@ function ConcernsBlock({ health }: { health: ClientDetail['latest_health'] }) {
 }
 
 export function LifecycleSection({ client }: { client: ClientDetail }) {
+  const latestNpsDisplay = client.latest_nps
+    ? `${client.latest_nps.score}  (${new Date(client.latest_nps.submitted_at).toLocaleDateString()})`
+    : null
+
   return (
     <Section title="Lifecycle & Standing">
       <div className="grid grid-cols-2 gap-4">
-        <ReadOnlyField
+        <EditableField
           label="Journey stage"
           value={client.journey_stage}
-        >
-          {client.journey_stage ?? (
-            <span className="text-muted-foreground">
-              — <span className="text-xs">(stage taxonomy in design — free-text for now)</span>
-            </span>
-          )}
-        </ReadOnlyField>
-        <ReadOnlyField label="CSM standing" value={client.csm_standing} />
-
-        <ReadOnlyField
-          label="Latest NPS"
-          value={client.latest_nps?.score ?? null}
+          variant="text"
+          placeholder="Stage taxonomy in design — free-text for now"
+          onSave={(v) =>
+            updateClientJourneyStageAction(
+              client.id,
+              v as string | null,
+              null,
+            )
+          }
         />
-        <ReadOnlyField label="Archetype" value={client.archetype} />
+        <EditableField
+          label="CSM standing"
+          value={client.csm_standing}
+          variant="enum"
+          options={CSM_STANDING_OPTIONS}
+          onSave={(v) =>
+            updateClientCsmStandingAction(
+              client.id,
+              v as 'happy' | 'content' | 'at_risk' | 'problem' | null,
+              null,
+            )
+          }
+        />
+
+        <div>
+          <ReadOnlyField
+            label="Latest NPS"
+            value={latestNpsDisplay}
+            editable={false}
+          />
+          <div className="mt-2">
+            <NpsEntryForm clientId={client.id} />
+          </div>
+        </div>
+        <EditableField
+          label="Archetype"
+          value={client.archetype}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'archetype', v as string | null)
+          }
+        />
       </div>
 
       <div className="space-y-2 pt-2">

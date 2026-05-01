@@ -1,17 +1,21 @@
+'use client'
+
 // Section 5 — Profile & Background.
 //
-// All five fields live in clients.metadata.profile, NOT as columns on
-// clients. The schema spec deliberately keeps these in jsonb because
-// the value set may evolve (per the metadata column comment in 0001:
-// "Long tail of attributes — promote to columns later").
+// All seven fields write to clients.metadata.profile.* (jsonb sub-
+// object) via updateClientProfileFieldAction → read-modify-write that
+// preserves alternate_emails / alternate_names and any other top-level
+// metadata keys. Race risk: concurrent edits to different sub-fields
+// can clobber each other (followup logged for V1.1).
 //
-// Defensive accessors throughout — metadata may be null, may not have
-// the profile sub-object, may have malformed types. Read what's
-// readable, render "—" for everything else.
+// Defensive read accessors throughout — metadata may be null, may
+// not have profile, may have malformed types. Read what's readable,
+// edit-mode renders empty for non-string values.
 
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section } from './section'
-import { ReadOnlyField } from './read-only-field'
+import { EditableField } from './editable-field'
+import { updateClientProfileFieldAction } from '@/app/(authenticated)/clients/[id]/actions'
 
 type ProfileShape = {
   niche?: unknown
@@ -39,30 +43,95 @@ export function ProfileSection({ client }: { client: ClientDetail }) {
   return (
     <Section title="Profile & Background">
       <div className="space-y-3">
-        <ReadOnlyField label="Niche" value={asString(profile.niche)} />
-        <ReadOnlyField label="Offer" value={asString(profile.offer)} />
-        <ReadOnlyField
+        <EditableField
+          label="Niche"
+          value={asString(profile.niche)}
+          variant="text"
+          onSave={(v) =>
+            updateClientProfileFieldAction(
+              client.id,
+              'niche',
+              v as string | null,
+            )
+          }
+        />
+        <EditableField
+          label="Offer"
+          value={asString(profile.offer)}
+          variant="text"
+          onSave={(v) =>
+            updateClientProfileFieldAction(
+              client.id,
+              'offer',
+              v as string | null,
+            )
+          }
+        />
+        <EditableField
           label="Traffic strategy"
           value={asString(profile.traffic_strategy)}
+          variant="text"
+          onSave={(v) =>
+            updateClientProfileFieldAction(
+              client.id,
+              'traffic_strategy',
+              v as string | null,
+            )
+          }
         />
       </div>
 
       <div className="space-y-2 pt-2">
         <h3 className="text-sm font-medium text-muted-foreground">SWOT</h3>
         <div className="grid grid-cols-2 gap-3">
-          <ReadOnlyField
+          <EditableField
             label="Strengths"
             value={asString(swot?.strengths)}
+            variant="textarea"
+            onSave={(v) =>
+              updateClientProfileFieldAction(
+                client.id,
+                'swot.strengths',
+                v as string | null,
+              )
+            }
           />
-          <ReadOnlyField
+          <EditableField
             label="Weaknesses"
             value={asString(swot?.weaknesses)}
+            variant="textarea"
+            onSave={(v) =>
+              updateClientProfileFieldAction(
+                client.id,
+                'swot.weaknesses',
+                v as string | null,
+              )
+            }
           />
-          <ReadOnlyField
+          <EditableField
             label="Opportunities"
             value={asString(swot?.opportunities)}
+            variant="textarea"
+            onSave={(v) =>
+              updateClientProfileFieldAction(
+                client.id,
+                'swot.opportunities',
+                v as string | null,
+              )
+            }
           />
-          <ReadOnlyField label="Threats" value={asString(swot?.threats)} />
+          <EditableField
+            label="Threats"
+            value={asString(swot?.threats)}
+            variant="textarea"
+            onSave={(v) =>
+              updateClientProfileFieldAction(
+                client.id,
+                'swot.threats',
+                v as string | null,
+              )
+            }
+          />
         </div>
       </div>
     </Section>

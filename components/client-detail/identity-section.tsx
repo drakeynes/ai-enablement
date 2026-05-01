@@ -1,63 +1,158 @@
+'use client'
+
 // Section 1 — Identity & Contact.
 //
-// Read-only-with-affordance for fields that B2 will wire up to edit.
-// Truly read-only (no affordance) for the three system-derived
-// references: Slack channel id, Slack user id, signup date.
+// Client component: each editable field's onSave is an inline closure
+// that wraps the appropriate Server Action. Server-only data shapes
+// imported as types (the runtime never reaches into lib/db/clients
+// from this module).
 //
-// Alternate emails come from clients.metadata->'alternate_emails' —
-// populated by the merge feature (M3.2) and the Fathom client resolver.
-// Render as a comma-separated list; null/empty handled at the field
-// level.
+// Read-only-by-design: slack_channel_id, slack_user_id, signup_date,
+// alternate_emails. The first three are system-sourced; alternate_emails
+// has no UI write path because the merge_clients RPC and Fathom
+// resolver are the canonical writers. Direct edit would corrupt the
+// identity-resolution chain.
 
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section } from './section'
 import { ReadOnlyField } from './read-only-field'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { EditableField } from './editable-field'
+import { EditableTagsField } from './editable-tags-field'
+import {
+  updateClientField,
+  updateClientStatusAction,
+} from '@/app/(authenticated)/clients/[id]/actions'
+import { PrimaryCsmField } from '@/app/(authenticated)/clients/[id]/primary-csm-field'
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'ghost', label: 'Ghost' },
+  { value: 'churned', label: 'Churned' },
+]
 
 export function IdentitySection({ client }: { client: ClientDetail }) {
   const metadata = (client.metadata ?? {}) as Record<string, unknown>
   const alternateEmails = Array.isArray(metadata.alternate_emails)
     ? (metadata.alternate_emails as string[])
     : []
-  const altEmailsDisplay = alternateEmails.length === 0 ? null : alternateEmails.join(', ')
-
-  const birthYearDisplay = client.birth_year ? `Born ${client.birth_year}` : null
+  const altEmailsDisplay =
+    alternateEmails.length === 0 ? null : alternateEmails.join(', ')
 
   const startDateDisplay = client.start_date
     ? new Date(client.start_date).toLocaleDateString()
     : null
 
+  const teamMemberOptions = client.team_members.map((m) => ({
+    id: m.id,
+    full_name: m.full_name,
+  }))
+
   return (
     <Section title="Identity & Contact">
       <div className="grid grid-cols-2 gap-4">
-        <ReadOnlyField label="Full name" value={client.full_name} />
-        <ReadOnlyField label="Status" value={client.status} />
-
-        <ReadOnlyField
-          label="Primary CSM"
-          value={client.active_primary_csm?.team_member_name ?? null}
+        <EditableField
+          label="Full name"
+          value={client.full_name}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'full_name', v as string | null)
+          }
         />
-        <ReadOnlyField
+        <EditableField
+          label="Status"
+          value={client.status}
+          variant="enum"
+          options={STATUS_OPTIONS}
+          onSave={(v) =>
+            updateClientStatusAction(client.id, v as string, null)
+          }
+        />
+
+        <PrimaryCsmField
+          clientId={client.id}
+          currentTeamMemberId={
+            client.active_primary_csm?.team_member_id ?? null
+          }
+          currentTeamMemberName={
+            client.active_primary_csm?.team_member_name ?? null
+          }
+          assignedAt={client.active_primary_csm?.assigned_at ?? null}
+          options={teamMemberOptions}
+        />
+        <EditableField
           label="Email"
           value={client.email}
+          variant="text"
           mono
+          onSave={(v) =>
+            updateClientField(client.id, 'email', v as string | null)
+          }
         />
 
+        {/* Alternate emails — read-only by design. Populated by the
+            merge_clients RPC and Fathom resolver; direct edit would
+            corrupt the resolver chain. */}
         <ReadOnlyField
           label="Alternate emails"
           value={altEmailsDisplay}
+          editable={false}
           mono
         />
-        <ReadOnlyField label="Phone" value={client.phone} />
+        <EditableField
+          label="Phone"
+          value={client.phone}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'phone', v as string | null)
+          }
+        />
 
-        <ReadOnlyField label="Country" value={client.country} />
-        <ReadOnlyField label="Time zone" value={client.timezone} />
+        <EditableField
+          label="Country"
+          value={client.country}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'country', v as string | null)
+          }
+        />
+        <EditableField
+          label="Time zone"
+          value={client.timezone}
+          variant="text"
+          placeholder="e.g. America/Los_Angeles"
+          onSave={(v) =>
+            updateClientField(client.id, 'timezone', v as string | null)
+          }
+        />
 
-        <ReadOnlyField label="Birth year" value={birthYearDisplay} />
-        <ReadOnlyField label="Location" value={client.location} />
+        <EditableField
+          label="Birth year"
+          value={client.birth_year}
+          variant="integer"
+          placeholder="YYYY"
+          displayValue={(v) => (v == null ? '—' : `Born ${v}`)}
+          onSave={(v) =>
+            updateClientField(client.id, 'birth_year', v as number | null)
+          }
+        />
+        <EditableField
+          label="Location"
+          value={client.location}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'location', v as string | null)
+          }
+        />
 
-        <ReadOnlyField label="Occupation" value={client.occupation} />
+        <EditableField
+          label="Occupation"
+          value={client.occupation}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'occupation', v as string | null)
+          }
+        />
 
         {/* Truly read-only — system-sourced references */}
         <ReadOnlyField
@@ -79,30 +174,12 @@ export function IdentitySection({ client }: { client: ClientDetail }) {
         />
 
         <div className="col-span-2">
-          <ReadOnlyField label="Tags">
-            {client.tags.length === 0 ? (
-              <span className="text-muted-foreground">—</span>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {client.tags.map((tag) => {
-                  const isReview = tag === 'needs_review'
-                  return (
-                    <Badge
-                      key={tag}
-                      className={cn(
-                        'border font-normal',
-                        isReview
-                          ? 'bg-amber-100 text-amber-900 border-amber-200'
-                          : 'bg-zinc-100 text-zinc-700 border-zinc-200',
-                      )}
-                    >
-                      {tag}
-                    </Badge>
-                  )
-                })}
-              </div>
-            )}
-          </ReadOnlyField>
+          <EditableTagsField
+            initialTags={client.tags}
+            onSave={(nextTags) =>
+              updateClientField(client.id, 'tags', nextTags)
+            }
+          />
         </div>
       </div>
     </Section>

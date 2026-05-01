@@ -1,20 +1,22 @@
+'use client'
+
 // Section 3 — Financials.
 //
-// Dollar amounts render as $X,XXX.XX. Arrears renders as $0.00 when the
-// column is at its default — that's correct (the migration set
-// not null default 0). Distinguishing "0 because we set it" from "0
-// because we never imported a value" is not a V1 concern; if it ever
-// becomes one, we'd switch arrears to nullable and re-derive the import
-// rule.
+// Three numeric_money fields + one text note. Display formatter
+// shows $X,XXX.XX while the editor accepts loose input ($1,234,
+// "1234.56", etc.) and the Server Action's narrowing strips $ and
+// commas before persisting. Arrears uses the numeric_nonneg field
+// type at the data layer (rejects negatives at the boundary).
 
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section } from './section'
-import { ReadOnlyField } from './read-only-field'
+import { EditableField } from './editable-field'
+import { updateClientField } from '@/app/(authenticated)/clients/[id]/actions'
 
-function formatDollars(value: number | string | null): string | null {
-  if (value === null || value === undefined || value === '') return null
-  const n = typeof value === 'string' ? parseFloat(value) : value
-  if (Number.isNaN(n)) return null
+function formatDollars(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—'
+  const n = typeof value === 'string' ? parseFloat(value) : (value as number)
+  if (!Number.isFinite(n)) return '—'
   return n.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -27,20 +29,50 @@ export function FinancialsSection({ client }: { client: ClientDetail }) {
   return (
     <Section title="Financials">
       <div className="grid grid-cols-2 gap-4">
-        <ReadOnlyField
+        <EditableField
           label="Contracted revenue"
-          value={formatDollars(client.contracted_revenue)}
+          value={client.contracted_revenue}
+          variant="numeric_money"
+          displayValue={formatDollars}
+          onSave={(v) =>
+            updateClientField(
+              client.id,
+              'contracted_revenue',
+              v as number | null,
+            )
+          }
         />
-        <ReadOnlyField
+        <EditableField
           label="Upfront cash collected"
-          value={formatDollars(client.upfront_cash_collected)}
+          value={client.upfront_cash_collected}
+          variant="numeric_money"
+          displayValue={formatDollars}
+          onSave={(v) =>
+            updateClientField(
+              client.id,
+              'upfront_cash_collected',
+              v as number | null,
+            )
+          }
         />
 
-        <ReadOnlyField
+        <EditableField
           label="Arrears"
-          value={formatDollars(client.arrears)}
+          value={client.arrears}
+          variant="numeric_money"
+          displayValue={formatDollars}
+          onSave={(v) =>
+            updateClientField(client.id, 'arrears', v as number | null)
+          }
         />
-        <ReadOnlyField label="Arrears note" value={client.arrears_note} />
+        <EditableField
+          label="Arrears note"
+          value={client.arrears_note}
+          variant="text"
+          onSave={(v) =>
+            updateClientField(client.id, 'arrears_note', v as string | null)
+          }
+        />
       </div>
     </Section>
   )
