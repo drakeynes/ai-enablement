@@ -245,7 +245,7 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">4</span>
+        <span class="count">3</span>
       </header>
 
       <div class="card">
@@ -253,13 +253,6 @@
         <div class="title">Summary backfill from Fathom API</div>
         <div class="subtitle">~22 call_summary documents currently exist across 132 active clients because the F1.5 backlog ingest was transcripts-only. Walk calls.external_id for rows missing a paired summary document, fetch summaries via Fathom API (default_summary.markdown_formatted), write documents rows of type call_summary. Reuse extraction logic from ingestion/fathom/webhook_adapter.py.</div>
         <div class="pills"><span class="pill">discovery before build</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M4.3</div>
-        <div class="title">NPS + Financial static fields on clients (CSM-editable)</div>
-        <div class="subtitle">Two new fields on clients table (NPS score numeric, financial status text — empty-by-default, no history table, no integration). Surface as new sections on the Clients detail page with inline-save (mirror existing Section 1–7 pattern). Add filters on Clients list page. Not yet plumbed into Gregory signals — that's a future re-balance.</div>
-        <div class="pills"><span class="pill">csm-editable metadata</span></div>
       </div>
 
       <div class="card">
@@ -283,13 +276,13 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing in flight — M4 Chunk B2 (inline-edit + history-table writes + NPS-entry) just landed. Chunk C (master sheet CSV importer) is the remaining M4 work; deploy + visual eyeball before C.</div>
+      <div class="empty">Nothing in flight — M4 client-page work (Chunks A/B1/B2/C) closed out. Remaining: M4.2 Fathom summary backfill + M4.4 GREGORY_CONCERNS_ENABLED flip (gated on M4.2). Push pending across the M4 commit stack.</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">4</span>
+        <span class="count">5</span>
       </header>
 
       <div class="card">
@@ -317,6 +310,13 @@
         <div class="id">M4.B2</div>
         <div class="title">Client detail page v3 — inline-edit + history writes + NPS entry</div>
         <div class="subtitle">Migration 0018_client_history_rpcs.sql adds four security-definer Postgres functions with explicit grants to service_role: update_client_status_with_history, update_client_journey_stage_with_history, update_client_csm_standing_with_history (each atomic update + history-row insert; idempotent no-op when value unchanged; csm_standing clear-to-null skips history because client_standing_history.csm_standing is NOT NULL by design), and insert_nps_submission (manual NPS entry with 0-10 validation, stamps survey_source='manual_dashboard_entry'). Drake applied via Studio; ledger registered ('0018', 'client_history_rpcs'); 4/4 functions present FUNCTION + DEFINER. End-to-end smoke test against cloud verified all four paths (real change → history row → revert; csm_standing clear-to-null wrote 0 history rows as designed; score=11 raised). UPDATABLE_FIELDS grew from 10 to 21 columns with type-narrowing for integer (birth_year 1900..currentYear), numeric (money fields, arrears non-negative), enum (trustpilot_status, ghl_adoption), three-state boolean (sales_group_candidate, dfy_setting), and array dedup-trim-cap for tags. Status / journey_stage / csm_standing removed from the whitelist — they go through dedicated RPC actions to enforce the history-write invariant. Five new Server Actions: updateClientStatusAction, updateClientJourneyStageAction, updateClientCsmStandingAction, addNpsScoreAction, updateClientProfileFieldAction (read-modify-write on metadata; preserves alternate_emails). New components: EditableField (text / textarea / integer / numeric_money / enum / three_state_bool / date variants; click-to-edit, blur-or-Enter saves, Escape cancels), EditableTagsField (chip input with comma-or-Enter add, backspace-on-empty remove), NpsEntryForm (collapsed-by-default inline form). All 7 sections converted to client components and wired. PrimaryCsmField (dialog-confirm) preserved unchanged. Alternate emails kept read-only by design (no UI write path; merge_clients RPC + Fathom resolver are canonical writers; direct edit corrupts identity resolution — flagged for Drake decision). Dead inline-fields.tsx deleted. tsc clean, ESLint clean, next build clean (/clients/[id] = 10.1 kB, +6.4kB for client islands). Three followups logged: changed_by always null until auth context wires through; metadata.profile read-modify-write race; NPS-entry no duplicate protection.</div>
+        <div class="pills"><span class="pill warn">push pending</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.C</div>
+        <div class="title">Master sheet CSV importer — applied to cloud</div>
+        <div class="subtitle">scripts/import_master_sheet.py (1,294 lines) reads the Financial Master Sheet CSV and applies the column transformations from spec § Part 5. Default mode dry-run; --apply writes. First dry-run surfaced 21 unmatched non-churn rows (cross-checked: 0/20 sampled emails found anywhere in cloud — they're genuinely absent). Drake amended the auto-create rule to cover non-churn unmatched too; followup logged. Applied to cloud: 69 auto-creates (48 churn + 21 non-churn), 104 column updates across matched clients, 10 fill-null updates (slack_user_id 7, phone 0, start_date 3), 44 new client_team_assignments (10 fresh + 16 end+create + 1 churn-with-Scott incidental bug-fix + 17 non-churn auto-creates with recognized owners), 16 owner-changes archived, 24 client_upsells, 81 status_history seeds, 137 standing_history seeds, 7 placeholder emails synthesized (6 churned + Andy V). Aleks-orphans (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) land with primary_csm=null per Drake — manual reassignment via dashboard. Spot-checked Ashan Fernando (matched), Mubeen Siddiqui + Andy V (non-churn auto-create), Mark Dawson (churn auto-create with Scott — the +1 bug-fix), Colin Hill (Aleks-orphan, 0 active assignments confirmed). First idempotency-verification run exposed a Decimal-vs-float precision mismatch in _normalize_for_diff that produced 173 no-op writes (data-clean but bumped updated_at); fixed via fixed-point format + trailing-zero strip. Re-verified clean: 0 net writes on second --apply. New runbook at docs/runbooks/master_sheet_import.md. schema-v1.md DB population table refreshed (197 active clients, 24 upsells, 137 standing_history rows). Three carry-over followups logged for manual cleanup post-deploy.</div>
         <div class="pills"><span class="pill warn">push pending</span></div>
       </div>
     </div>

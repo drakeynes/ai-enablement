@@ -4,13 +4,17 @@ First version of the schema. Oriented around what Ella (Slack Bot V1) and CSM Co
 
 **Status:** Implemented by migrations 0001–0018. Cloud project (`sjjovsjcfffrftnraocu`) is the production target; all migrations applied + ledger-registered. Migration 0017 (`client_page_schema_v1`) added 14 columns to `clients`, 1 column to `nps_submissions`, and 4 new tables for the Gregory client detail page V1 — see `docs/client-page-schema-spec.md` for the design. Migration 0018 (`client_history_rpcs`) added four `security definer` Postgres functions that the dashboard's edit endpoints call for atomic update + history-row writes (status / journey_stage / csm_standing) and for manual NPS-score entry.
 
-**DB population (as of 2026-04-23):**
+**DB population (as of M4 Chunk C apply, 2026-05-01):**
 
 | Table | Count | Source |
 |---|---:|---|
 | `team_members` | 9 | Manual seed (`supabase/seed/team_members.sql`); 7 have `slack_user_id` backfilled |
-| `clients` (active) | 146 | 100 from Active++ sheet import + 46 auto-created by Fathom ingest (`needs_review`); 4 of the auto-created rows merged into pilot clients via the one-shot `scripts/archive/merge_client_duplicates.py` (now superseded by the Gregory dashboard merge flow) |
-| `clients` (archived) | 68 | Soft-archived by the Active++ re-import cascade |
+| `clients` (active) | 197 | 128 pre-M4 (post-merge state from M3) + 69 auto-created by `scripts/import_master_sheet.py` during M4 Chunk C (48 churned, 21 non-churn paused/active per Drake's triage amendment to the spec). The pre-M4 baseline came from the original Active++ sheet seed + Fathom-ingest `needs_review` rows minus M3.2 merges. |
+| `clients` (archived) | 6 | Pre-M4 archives; the M4 Chunk C importer didn't archive anything |
+| `client_upsells` | 24 | Inserted by `scripts/import_master_sheet.py` |
+| `client_status_history` | 209 | 128 migration-0017 seed rows (one per non-archived client at migration time) + 81 import-seed rows (`note='import seed'`) from the M4 Chunk C importer |
+| `client_journey_stage_history` | 0 | No non-archived client has a non-null `journey_stage`; importer sets none |
+| `client_standing_history` | 137 | All from the M4 Chunk C importer (`note='import seed'`); migration 0017 didn't seed this table |
 | `slack_channels` (active) | 101 | 100 client channels + `ella-test` |
 | `slack_channels` (archived) | 21 | Cascaded from archived clients |
 | `client_team_assignments` (active) | 100 | Primary CSM mappings |
