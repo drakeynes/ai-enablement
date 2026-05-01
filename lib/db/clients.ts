@@ -146,26 +146,17 @@ export async function getClientsList(
 
     // Strip the nested-select arrays from the row — they're already
     // captured in the derived fields below — and return a clean
-    // ClientsListRow.
-    const client = row as unknown as ClientRow
+    // ClientsListRow. Spread inherits all ClientRow columns (including
+    // any added by future migrations) so we don't have to enumerate.
+    const stripped = { ...(row as Record<string, unknown>) }
+    delete stripped.client_team_assignments
+    delete stripped.client_health_scores
+    delete stripped.calls
+    delete stripped.call_action_items
+    const client = stripped as unknown as ClientRow
 
     return {
-      id: client.id,
-      email: client.email,
-      full_name: client.full_name,
-      slack_user_id: client.slack_user_id,
-      phone: client.phone,
-      timezone: client.timezone,
-      journey_stage: client.journey_stage,
-      status: client.status,
-      start_date: client.start_date,
-      program_type: client.program_type,
-      tags: client.tags,
-      metadata: client.metadata,
-      notes: client.notes,
-      created_at: client.created_at,
-      updated_at: client.updated_at,
-      archived_at: client.archived_at,
+      ...client,
       primary_csm_id: activePrimaryCsm?.team_members?.id ?? null,
       primary_csm_name: activePrimaryCsm?.team_members?.full_name ?? null,
       latest_health_score: latestScore?.score ?? null,
@@ -191,25 +182,39 @@ export async function getClientsList(
 // ----------------------------------------------------------------------
 //
 // Detail view query. Returns null for missing or archived clients.
-// Pulls everything the 7-section detail page needs in one round trip;
-// the page renders directly from this shape.
+// Pulls everything the v3 7-section detail page needs in 7-8 round trips
+// total: 1 main client query (with slack_channels + client_upsells
+// embedded), 6 parallel queries (calls/action_items/health/nps/csm/team),
+// plus 1 conditional slack_messages count when the client has a
+// slack_user_id. The page renders directly from this shape.
+
+type CallSummary = {
+  id: string
+  started_at: string
+  title: string | null
+  call_category: string
+  duration_seconds: number | null
+}
+
+type ActionItem = {
+  id: string
+  description: string
+  owner_type: string
+  owner_team_member_id: string | null
+  owner_client_id: string | null
+  due_date: string | null
+  call_id: string
+  status: string
+  completed_at: string | null
+  extracted_at: string
+}
+
+type UpsellRow = Database['public']['Tables']['client_upsells']['Row']
+
 export type ClientDetail = ClientRow & {
-  recent_calls: Array<{
-    id: string
-    started_at: string
-    title: string | null
-    call_category: string
-    duration_seconds: number | null
-  }>
-  open_action_items: Array<{
-    id: string
-    description: string
-    owner_type: string
-    owner_team_member_id: string | null
-    owner_client_id: string | null
-    due_date: string | null
-    call_id: string
-  }>
+  // Existing fields, preserved for backward compat:
+  recent_calls: CallSummary[] // derived: top 5 of all_calls
+  open_action_items: ActionItem[] // derived: filter status='open' from all_action_items
   latest_health: {
     score: number
     tier: string
@@ -226,64 +231,142 @@ export type ClientDetail = ClientRow & {
     assigned_at: string
   } | null
   team_members: Array<{ id: string; full_name: string; email: string }>
+
+  // New fields for the v3 detail page:
+  all_calls: CallSummary[] // full list, started_at desc
+  total_calls: number
+  all_action_items: ActionItem[] // all statuses, extracted_at desc
+  total_nps_submissions: number
+  total_slack_messages: number // 0 if slack_user_id is null
+  upsells: UpsellRow[] // sold_at desc nulls last
+  slack_channel_id: string | null // most recently created active channel
 }
 
 export async function getClientById(id: string): Promise<ClientDetail | null> {
   const supabase = createAdminClient()
 
+  // Round 1: main client row + embedded slack_channels + client_upsells.
+  // Embedding saves two round trips vs separate queries; volume is small
+  // (most clients have 0-1 channels and 0-3 upsells).
   const { data: client, error } = await supabase
     .from('clients')
-    .select('*')
+    .select(
+      `
+      *,
+      slack_channels(slack_channel_id, is_archived, created_at),
+      client_upsells(*)
+    `,
+    )
     .eq('id', id)
     .is('archived_at', null)
     .maybeSingle()
   if (error) throw error
   if (!client) return null
 
-  const [callsRes, actionItemsRes, healthRes, npsRes, assignmentRes, teamRes] =
-    await Promise.all([
-      supabase
-        .from('calls')
-        .select('id, started_at, title, call_category, duration_seconds')
-        .eq('primary_client_id', id)
-        .order('started_at', { ascending: false })
-        .limit(5),
-      supabase
-        .from('call_action_items')
-        .select(
-          'id, description, owner_type, owner_team_member_id, owner_client_id, due_date, call_id',
-        )
-        .eq('owner_client_id', id)
-        .eq('status', 'open')
-        .order('due_date', { ascending: true, nullsFirst: false }),
-      supabase
-        .from('client_health_scores')
-        .select('score, tier, factors, computed_at')
-        .eq('client_id', id)
-        .order('computed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('nps_submissions')
-        .select('score, submitted_at')
-        .eq('client_id', id)
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('client_team_assignments')
-        .select('team_member_id, assigned_at, team_members(full_name)')
-        .eq('client_id', id)
-        .eq('role', 'primary_csm')
-        .is('unassigned_at', null)
-        .maybeSingle(),
-      supabase
-        .from('team_members')
-        .select('id, full_name, email')
-        .eq('is_active', true)
-        .is('archived_at', null)
-        .order('full_name'),
-    ])
+  type ChannelEmbed = {
+    slack_channel_id: string
+    is_archived: boolean
+    created_at: string
+  }
+  const channels = (client.slack_channels ?? []) as ChannelEmbed[]
+  const activeChannels = channels
+    .filter((c) => !c.is_archived)
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
+  const slackChannelId = activeChannels[0]?.slack_channel_id ?? null
+
+  const upsells = ((client.client_upsells ?? []) as UpsellRow[]).sort(
+    (a, b) => {
+      // sold_at desc nulls last
+      if (a.sold_at === null && b.sold_at === null) return 0
+      if (a.sold_at === null) return 1
+      if (b.sold_at === null) return -1
+      return new Date(b.sold_at).getTime() - new Date(a.sold_at).getTime()
+    },
+  )
+
+  // Strip embeds off the client row before spreading into the result —
+  // they're already captured in slackChannelId / upsells above.
+  const clientRow = client as unknown as ClientRow & {
+    slack_channels?: unknown
+    client_upsells?: unknown
+  }
+  delete clientRow.slack_channels
+  delete clientRow.client_upsells
+
+  // Rounds 2-8: parallel block. The slack_messages count is conditional
+  // on slack_user_id — when null, we resolve a sentinel inline so the
+  // Promise.all stays one-shot.
+  const slackUserId = clientRow.slack_user_id
+  const slackMsgPromise: Promise<{
+    count: number | null
+    error: { message: string } | null
+  }> = slackUserId
+    ? (async () => {
+        const r = await supabase
+          .from('slack_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('slack_user_id', slackUserId)
+        return { count: r.count, error: r.error }
+      })()
+    : Promise.resolve({
+        count: 0 as number | null,
+        error: null as { message: string } | null,
+      })
+
+  const [
+    callsRes,
+    actionItemsRes,
+    healthRes,
+    npsRes,
+    assignmentRes,
+    teamRes,
+    slackMsgRes,
+  ] = await Promise.all([
+    supabase
+      .from('calls')
+      .select('id, started_at, title, call_category, duration_seconds', {
+        count: 'exact',
+      })
+      .eq('primary_client_id', id)
+      .order('started_at', { ascending: false }),
+    supabase
+      .from('call_action_items')
+      .select(
+        'id, description, owner_type, owner_team_member_id, owner_client_id, due_date, call_id, status, completed_at, extracted_at',
+      )
+      .eq('owner_client_id', id)
+      .order('extracted_at', { ascending: false }),
+    supabase
+      .from('client_health_scores')
+      .select('score, tier, factors, computed_at')
+      .eq('client_id', id)
+      .order('computed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('nps_submissions')
+      .select('score, submitted_at', { count: 'exact' })
+      .eq('client_id', id)
+      .order('submitted_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('client_team_assignments')
+      .select('team_member_id, assigned_at, team_members(full_name)')
+      .eq('client_id', id)
+      .eq('role', 'primary_csm')
+      .is('unassigned_at', null)
+      .maybeSingle(),
+    supabase
+      .from('team_members')
+      .select('id, full_name, email')
+      .eq('is_active', true)
+      .is('archived_at', null)
+      .order('full_name'),
+    slackMsgPromise,
+  ])
 
   if (callsRes.error) throw callsRes.error
   if (actionItemsRes.error) throw actionItemsRes.error
@@ -291,6 +374,21 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
   if (npsRes.error) throw npsRes.error
   if (assignmentRes.error) throw assignmentRes.error
   if (teamRes.error) throw teamRes.error
+  if (slackMsgRes.error) throw slackMsgRes.error
+
+  const allCalls = (callsRes.data ?? []) as CallSummary[]
+  const totalCalls = callsRes.count ?? allCalls.length
+  const recentCalls = allCalls.slice(0, 5)
+
+  const allActionItems = (actionItemsRes.data ?? []) as ActionItem[]
+  const openActionItems = allActionItems.filter((item) => item.status === 'open')
+
+  const npsRows = (npsRes.data ?? []) as Array<{
+    score: number
+    submitted_at: string
+  }>
+  const latestNps = npsRows[0] ?? null
+  const totalNpsSubmissions = npsRes.count ?? 0
 
   const assignment = assignmentRes.data as
     | {
@@ -301,11 +399,11 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
     | null
 
   return {
-    ...client,
-    recent_calls: callsRes.data ?? [],
-    open_action_items: actionItemsRes.data ?? [],
+    ...clientRow,
+    recent_calls: recentCalls,
+    open_action_items: openActionItems,
     latest_health: healthRes.data ?? null,
-    latest_nps: npsRes.data ?? null,
+    latest_nps: latestNps,
     active_primary_csm: assignment
       ? {
           team_member_id: assignment.team_member_id,
@@ -314,6 +412,13 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
         }
       : null,
     team_members: teamRes.data ?? [],
+    all_calls: allCalls,
+    total_calls: totalCalls,
+    all_action_items: allActionItems,
+    total_nps_submissions: totalNpsSubmissions,
+    total_slack_messages: slackMsgRes.count ?? 0,
+    upsells,
+    slack_channel_id: slackChannelId,
   }
 }
 

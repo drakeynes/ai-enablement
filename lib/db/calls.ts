@@ -357,10 +357,17 @@ export async function updateCallClassification(
   }
 
   const supabase = createAdminClient()
+  // The migration declares p_changed_by as `uuid default null`, so
+  // omitting it from the args / passing null is correct at the SQL
+  // boundary. The 2026-05 supabase type generator drops the default-null
+  // and types the arg as a required string; cast through unknown to
+  // pass null without satisfying the regenerated type. Behavior is
+  // unchanged at runtime; this is a type-gen quirk, not a real
+  // nullability change.
   const { data, error } = await supabase.rpc('update_call_classification', {
     p_call_id: callId,
     p_changes: changes,
-    p_changed_by: currentUserTeamMemberId ?? null,
+    p_changed_by: (currentUserTeamMemberId ?? null) as unknown as string,
   })
 
   if (error) return { success: false, error: error.message }
