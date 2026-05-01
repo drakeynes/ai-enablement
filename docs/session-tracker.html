@@ -283,13 +283,13 @@
         <span class="count">0</span>
       </header>
 
-      <div class="empty">Nothing in flight — M4.1 done (smoke test pending), M4.2 next.</div>
+      <div class="empty">Nothing in flight — M4.A schema landed (downstream chunks pending). Session may stretch into Chunk B (backend + UI for the 7 dashboard sections).</div>
     </div>
 
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">1</span>
+        <span class="count">2</span>
       </header>
 
       <div class="card">
@@ -297,6 +297,13 @@
         <div class="title">Fathom webhook diagnosis + autonomous re-registration</div>
         <div class="subtitle">Diagnosis confirmed Fathom wasn't sending: 0 fathom_webhook rows in webhook_deliveries over all time (not just 7 days), 0 inbound POSTs to /api/fathom_events in Vercel logs over 7 days, no 401 traffic ruling out signature mismatch. Re-registered via POST /external/v1/webhooks (new id FTVBjD_JqTfjEzVA), rotated whsec_ secret into Vercel FATHOM_WEBHOOK_SECRET (Production scope only — Preview cleaned up), redeployed (3m, aliased to ai-enablement-sigma.vercel.app), verified handler reads new secret via bad-signature → 401 probe. Surprise findings: Fathom API has NO GET /webhooks endpoint (runbook diagnostic curl was based on a fabricated path; OpenAPI confirms only POST + DELETE/{id}); the F2.5 UI registration on 2026-04-24 never produced a single signature-verified row. End-to-end smoke test (real Fathom recording) pending Drake.</div>
         <div class="pills"><span class="pill warn">smoke test pending</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M4.A</div>
+        <div class="title">Client page schema V1 — spec doc + migration 0017</div>
+        <div class="subtitle">Spec at docs/client-page-schema-spec.md (Drake's verbatim 7-section design; locks the V1 design that Chunks B + C reference). Migration 0017_client_page_schema_v1.sql adds 14 nullable columns to clients (only arrears is not null, default 0; csm_standing / trustpilot_status / ghl_adoption / birth_year carry inline check constraints; three partial-on-archived indexes), 1 column to nps_submissions (recorded_by FK), and 4 new tables: client_upsells (cascade-delete, owned-by-parent), client_status_history / client_journey_stage_history / client_standing_history (no-cascade, append-only, application-layer writes mirroring client_team_assignments). Pre-apply spec correction: journey_stage seed gained the same archived_at filter as the status seed (Drake's call). Drake applied via Studio. Cloud-verified: schema reality (14/14 columns + nps_submissions.recorded_by + 4× to_regclass non-null), ledger ('0017', 'client_page_schema_v1') registered, seed counts match the clients table filter exactly (status: 128 actual / 128 from non-archived-clients-with-non-null-status; journey_stage: 0 / 0 since no non-archived client has a non-null journey_stage; standing: 0 by design). Per-table docs + schema-v1.md updated. CLAUDE.md "146 active clients" figure noted as drifted — actual count is 128.</div>
+        <div class="pills"><span class="pill warn">Chunks B + C remaining</span></div>
       </div>
     </div>
 
