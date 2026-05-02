@@ -217,6 +217,56 @@ If neither holds — i.e., a CSM has manually set `csm_standing` via the dashboa
 
 **Why the auto-derive delegates rather than writing directly:** the RPC `PERFORM update_client_csm_standing_with_history(...)` rather than UPDATE'ing `clients.csm_standing` directly. Reusing the 0018 RPC keeps the audit logic + idempotency (no-op when value unchanged → no history row written) in one place. The Gregory Bot UUID is passed as `p_changed_by` and `'auto-derived from NPS segment <segment>'` as `p_note` so the history row carries enough context to reconstruct what happened.
 
+### Receiver implementation (M5.4)
+
+Endpoint: `POST https://ai-enablement-sigma.vercel.app/api/airtable_nps_webhook`. Source code: `api/airtable_nps_webhook.py`. Friendly `GET` returns 200 with `{"status": "ok", "endpoint": "airtable_nps_webhook", "accepts": "POST"}` for browser/uptime probes.
+
+**Auth.** `X-Webhook-Secret` HTTP header. Server compares against `AIRTABLE_NPS_WEBHOOK_SECRET` env var via `hmac.compare_digest` (constant-time). Missing or mismatched → 401 with `{"error": "unauthorized"}`, no DB write. Missing env var (deployment misconfiguration) → 500 with `{"error": "misconfigured"}`. Note: this is shared-secret auth, NOT HMAC signature like Fathom — Make.com supports custom headers cleanly, signature-based auth would require Make-side computation.
+
+**Payload shape (Make.com → receiver):**
+
+```json
+{
+  "client_email": "ada@example.com",
+  "segment": "Strong / Promoter",
+  "airtable_record_id": "recXyz123",
+  "submitted_at": "2026-05-01T15:30:00Z"
+}
+```
+
+`client_email` and `segment` are required. `airtable_record_id` is optional but persisted on `webhook_deliveries.call_external_id` for forensics + queryability via the existing `(source, call_external_id)` partial index. `submitted_at` is captured in the `payload` jsonb but not used in the V1 logic.
+
+**Segment normalization at the receiver boundary** (case-insensitive, whitespace-stripped):
+
+| Airtable raw | Normalized |
+|---|---|
+| `Strong / Promoter` | `promoter` |
+| `Neutral` | `neutral` |
+| `At Risk` | `at_risk` |
+
+Unrecognized → 400 with `{"error": "invalid_segment", "accepted": ["Strong / Promoter", "Neutral", "At Risk"]}`. The accepted list shows canonical Airtable forms (not the lowercased internal lookup keys) so Make.com configurators see the strings to send.
+
+**Response shapes:**
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{"status": "ok", "delivery_id": "airtable_nps_<uuid>", "client_id": "<uuid>", "nps_standing": "<seg>", "csm_standing": "<value\|null>", "auto_derive_applied": true\|false}` | RPC succeeded |
+| 400 | `{"error": "invalid_json"}` | body not parseable JSON |
+| 400 | `{"error": "missing_field", "detail": "<which>"}` | required field missing or empty |
+| 400 | `{"error": "wrong_type", "detail": "<which> must be a string..."}` | type mismatch |
+| 400 | `{"error": "invalid_segment", "detail": "...", "accepted": [...]}` | segment value not in the three known forms |
+| 401 | `{"error": "unauthorized"}` | missing or wrong `X-Webhook-Secret` |
+| 404 | `{"error": "client_not_found", "email": "<input>"}` | RPC raised "no active client matches email" — primary `clients.email` and `metadata.alternate_emails` both missed |
+| 500 | `{"error": "misconfigured"}` | `AIRTABLE_NPS_WEBHOOK_SECRET` env var unset |
+| 500 | `{"error": "rpc_failed"}` | any other RPC exception |
+| 500 | `{"error": "internal_error"}` | unhandled exception in handler |
+
+`auto_derive_applied` is a best-effort inference: post-RPC `csm_standing` matches what the segment-mapping would produce. Intentionally NOT a precise "we just wrote it" signal — the RPC's idempotency + the override-sticky branch means the value can match without a write happening this call. The boolean answers "value matches the mapping," not "the auto-derive ran." Source of truth for actual writes is `client_standing_history.changed_by` — a Gregory Bot UUID on the most recent row means the auto-derive ran.
+
+**Audit trail.** Every request that passes auth lands a `webhook_deliveries` row with `source='airtable_nps_webhook'`. Status transitions: `received` (initial insert) → `processed` (RPC success) | `failed` (404/500) | `malformed` (400). Auth failures (401) write NO row — same gate-before-DB pattern as the Fathom webhook handler. The `webhook_id` PK is `airtable_nps_<uuid4>` per request (no native idempotency token from Airtable; UUID-per-request gives every delivery a unique row, which matches the V1 "no idempotency layer" decision).
+
+**Local test harness:** `scripts/test_airtable_nps_webhook_locally.py` spins up the real `handler` class via `http.server.HTTPServer` in a background thread (same pattern Vercel uses), fires 8 paths (2 happy + 6 negative), verifies HTTP responses + cloud DB state via direct psycopg2, cleans up the test client (Branden Bledsoe — selected as a low-profile active client with null csm_standing and no history rows pre-test) in try/finally. Run via `.venv/bin/python scripts/test_airtable_nps_webhook_locally.py`. Sets a test secret if `AIRTABLE_NPS_WEBHOOK_SECRET` is unset.
+
 ## Repo location
 
 Next.js at repo root, alongside the existing Python serverless functions in `api/`. The "dashboard" label survives as a conceptual grouping (Next.js routes live under `app/`, dashboard helpers under `components/` and `lib/`) rather than a literal top-level directory.

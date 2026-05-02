@@ -16,6 +16,10 @@
     "api/gregory_brain_cron.py": {
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 300
+    },
+    "api/airtable_nps_webhook.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 60
     }
   },
   "crons": [
