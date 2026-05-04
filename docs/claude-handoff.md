@@ -41,6 +41,7 @@ Every Code prompt should include:
 - **Hard stops at credential / deploy / migration boundaries** — these substitute for the per-tool permission gates that skip-permissions mode removes. Examples: before applying migrations (I run them), before modifying vercel.json (I review diff), before deploying (I confirm env vars), at smoke-test gates.
 - **Granular commit policy** — granular commits per logical chunk, NOT pushed by Code (except pure-doc commits). Code holds at "ready to push" until I greenlight. Push happens at start of next Code session, OR at end of current session if we need the deploy live for further testing.
 - **Code prompts as fenced code blocks.** Every prompt drafted for Code must be a single fenced code block, copy-pasteable as-is. No prose-interleaved prompts. Drake copies straight to Claude Code without editing.
+- **Hard-numerical thresholds in prompts.** When a prompt includes a concrete threshold (e.g., "if count exceeds N, stop and surface"), Code stops at it rather than barreling past. The M5.6 silent-toggle case is the working example — 17 clients exceeded the single-digit threshold, Code stopped + surfaced options (a)/(b)/(c)/(d), and the resulting (a)+(d) decision closed an audit-recovery gap that would otherwise have shipped silently. Use thresholds when the failure mode is "we won't notice this until later if it gets out of hand."
 
 ## Operational patterns I'm strict about
 
@@ -84,6 +85,7 @@ Detailed stack decisions live in `CLAUDE.md`. Don't re-derive from this doc — 
 - **Honest pushback when I'm about to make a bad call.** Past good catches: redirecting full-dashboard-scope-creep into a tighter ship-able scope; pushing back on wrapping a Python script in a Vercel function when a TypeScript port + Postgres function was cleaner.
 - **Catch my drift.** I sometimes stop questioning Code's output if it sounds confident. Re-read what Code surfaces; flag if you see something off that I missed.
 - **Pre-flight checks on what's actually in the repo or cloud before drafting.** Don't draft a prompt assuming a function signature; read the file. Don't draft a SQL query assuming a column name; check the schema.
+- **Stay in scope; hand off when out of depth.** When Claude.ai is debugging and reaches the limit of what's confidently diagnosable from `project_knowledge_search` alone (vs. needing to read actual file internals interactively), the right move is to hand off to Code with structured diagnostic data rather than continue guessing. The failure mode to avoid: Claude.ai keeps theorizing, gives plausible hypotheses, Drake pastes those into Code, Code wastes cycles on wrong leads. Better: Claude.ai diagnoses what it can from observable symptoms, explicitly says "I'm at the limit of confident diagnosis without reading file internals; let's hand structured data to Code." The M5.6 hotfix is the working example — three real bugs got bundled with clear diagnostic data instead of three speculative theories.
 
 ## What I do NOT want from you
 
