@@ -1,0 +1,13 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/*.egg-info": true
+  }
+}

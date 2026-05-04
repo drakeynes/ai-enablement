@@ -29,7 +29,11 @@ node_modules/
 next-env.d.ts
 
 # IDE / OS
-.vscode/
+# .vscode/settings.json is checked in (shared workspace file-tree
+# exclusions, etc.); other .vscode/* files (launch.json, tasks.json,
+# personal config) stay ignored.
+.vscode/*
+!.vscode/settings.json
 .idea/
 .DS_Store
 Thumbs.db
