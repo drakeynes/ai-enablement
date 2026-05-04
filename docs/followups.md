@@ -11,6 +11,55 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## NPS backfill 404s — Jonathan Duran-Rojas + Luis Malo email mismatches
+
+- **What:** M5.4 backfill surfaced 2 of 61 clients where Airtable's NPS Clients email doesn't match Gregory's `clients.email` or `metadata.alternate_emails`. Jonathan Duran-Rojas: Airtable has `wetasspressurewasher04@gmail.com`; Gregory has two rows (`Jonathan Duran` / `j05832952@gmail.com` and `Jonathan Duran-Rojas` / `jonathan@luxrevo.com`), neither in alternates. Luis Malo: Airtable has `lmalo721@yahoo.com`; needs the same lookup. Both visible in `webhook_deliveries.processing_error` from the M5.4 backfill run.
+- **Why it matters:** these clients' nps_standing stays NULL in Gregory until reconciled. Scott's Monday onboarding will see `—` placeholders for them in Section 2.
+- **Next action:** triage flow per `docs/runbooks/backfill_nps_from_airtable.md` § "Failure modes" — figure out the canonical Gregory row for each, add the Airtable email to `clients.metadata.alternate_emails` (via merge_clients RPC if there's a duplicate to clean up, else direct edit), re-run `scripts/backfill_nps_from_airtable.py --apply` to land their nps_standing. Drake handling over the weekend cleanup queue.
+- **Logged:** 2026-05-03 (M5.4 backfill — `wetasspressurewasher04@gmail.com` and `lmalo721@yahoo.com`).
+
+## NPS backfill — 4 manual-override-sticky divergences worth Scott discussion
+
+- **What:** the M5.4 backfill's `auto_derive_applied=False` cases were the 4 clients where Scott's existing manual `csm_standing` differs from the segment-mapping. All four: Scott's read is **harsher** than NPS. Tina Hussain (NPS Neutral → mapping content; Scott set at_risk). Jenny Burnett (NPS Neutral → content; Scott at_risk). Mary Kissiedu (NPS Neutral → content; Scott at_risk). Saavan Patel (NPS At Risk → at_risk; Scott problem — one step worse).
+- **Why it matters:** signal that NPS is over-optimistic for these clients vs CSM judgment with full context. Useful framing for Scott's Monday onboarding — these are exactly the "manual judgment trumps NPS" cases the override-sticky logic was designed for. The receiver correctly skipped auto-derive on all 4.
+- **Next action:** surface the list at Monday's onboarding as discussion items. No code action — the data is correct; this is product/CSM workflow context. If Scott wants a "divergence dashboard" view in the future, it's a small `WHERE csm_standing != <derived from nps_standing>` query against `clients`.
+- **Logged:** 2026-05-03 (M5.4 backfill).
+
+## Master-sheet-import seed treatment for auto-derive eligibility — architectural question pending Monday
+
+- **What:** the 137 clients with `csm_standing` set by the M4 Chunk C master sheet importer all carry `changed_by=NULL` on their `client_standing_history` rows (note `'import seed'`). Per the override-sticky rule (`changed_by != Gregory Bot UUID` → skip), these clients are **ineligible for auto-derive forever** unless the rule changes. Concrete impact from M5.4 backfill: only 2 of 59 successful sends actually wrote `csm_standing` via Gregory Bot; the other 57 sticky-skipped because their existing csm_standing came from the importer.
+- **Why it matters:** if Scott wants NPS segments to drive `csm_standing` updates going forward (which is what M5.4 was set up for), the master-sheet seed effectively locks the column. Two paths: (a) treat master-sheet-seed as auto-derive-eligible (one-time NULL → Gregory Bot retroactive update on existing history rows, OR change the rule to "changed_by IS NULL OR Gregory Bot"); (b) accept that Scott's master-sheet seeds win and any future auto-derive only fires on net-new clients or clients Scott explicitly clears to NULL. The override-sticky design as built assumes (b); Drake-Scott Monday conversation may flip to (a).
+- **Next action:** Monday onboarding decision. If (a): write a one-shot script to update existing master-sheet-seed history rows' `changed_by` to Gregory Bot UUID, OR amend the function logic. If (b): document explicitly in `gregory.md` that master-sheet-seeds are sticky by design.
+- **Logged:** 2026-05-03 (M5.4 backfill — exposed the structural implication).
+
+## Airtable NPS Clients name whitespace hygiene
+
+- **What:** multiple rows in Airtable's NPS Clients table have leading/trailing/double whitespace in the Name field — e.g. `' Javier Pena'`, `' Vid'`, `' Marcus Miller'`, `'Edward  Molina'`, `'Jerry Thomas '`. Spotted during the M5.4 backfill dry-run; the script logs them with the exact whitespace preserved.
+- **Why it matters:** doesn't affect email-based matching (the receiver's RPC lookup uses `clients.email`, not `clients.full_name`) and doesn't affect Gregory data quality directly. But the Airtable side is messier than ideal — name-based lookups, future Airtable formulas that cross-reference Names, and any human reading the table get noise.
+- **Next action:** Airtable-side hygiene pass — Drake or Zain trims whitespace on the affected rows. Or: an Airtable automation that runs `TRIM()` on Name field changes. Low-priority operational hygiene.
+- **Logged:** 2026-05-03 (M5.4 backfill dry-run output).
+
+## NpsStandingPill ↔ M5.5 filter-dropdown share value→label mapping
+
+- **What:** `components/client-detail/nps-standing-pill.tsx` carries the lowercase-DB → capitalized-display mapping (`promoter` → `Strong / Promoter`, etc.). When the M5.5 filtering chunk lands an NPS Standing dropdown, that dropdown will need the same mapping for option labels. Today's pill component keeps the mapping internal.
+- **Why it matters:** maintenance cost when the Airtable form changes display strings — two files instead of one.
+- **Next action:** during M5.5 implementation, extract the mapping to a shared module (e.g. `lib/nps-standing.ts` or similar) and import from both the pill and the filter dropdown. ~10 lines of refactor, zero behavior change.
+- **Logged:** 2026-05-03 (M5.4 follow-up — anticipated by the next chunk).
+
+## Receiver-broken-diagnosis — two-step pattern for "is the function actually live?"
+
+- **What:** when a Vercel serverless function appears broken (HTML response on GET instead of friendly JSON, 404 on POST, etc.), there's a two-step diagnostic that catches >90% of cases before deeper investigation: **(1)** `git log origin/main..HEAD` to confirm no unpushed local commits — Code's commits land in local-only state until pushed, and a deploy can't include code that isn't on origin yet. **(2)** Vercel deployment Functions tab — confirm the function actually appears in the build. If absent, either `vercel.json`'s `functions` block is missing the entry, or the file path doesn't match what Vercel expects.
+- **Why it matters:** the receiver-shipped-but-broken failure mode tends to look like real code bugs but is usually a deploy/sync gap. Both steps take <30 seconds; either alone catches most cases.
+- **Next action:** no code action. Worth referencing in any future "the receiver isn't responding" diagnostic flow — either a runbook addition or a CLAUDE.md operational note.
+- **Logged:** 2026-05-03 (M5.4 — captured during deploy verify operations).
+
+## Vercel `auto_derive_applied` response field is best-effort inference — pre-state SELECT could give true precision
+
+- **What:** `api/airtable_nps_webhook.py` returns `auto_derive_applied` by comparing post-RPC `csm_standing` to the segment-mapping. Documented false positive: when a CSM manually set `csm_standing='happy'` (sticky override) and a 'promoter' segment arrives, the RPC skips the auto-derive but the values still match → response says `auto_derive_applied=true`. Verified concretely in the M5.4 backfill: 53 of 59 successes had this false positive (only 2 actual auto-derive writes). The simple comparison was an explicit V1 design choice (accepted by Drake during the receiver chunk).
+- **Why it matters:** the response body misleads anyone who reads `auto_derive_applied` as "the auto-derive ran." The source of truth is `client_standing_history.changed_by`. Documented in code comments, gregory.md, and the receiver's response-shape table — but if Make.com or future operators rely on the flag for their own logic, it'll bite.
+- **Next action:** if false positives become operationally annoying (someone reads the report wrong, or Make.com tries to route on the flag): add a pre-state `SELECT csm_standing FROM clients WHERE id = ?` before the RPC call, then compute `auto_derive_applied = (pre != post) OR (pre IS NULL)`. One extra round trip, true precision. ~10 lines in the receiver. Defer until needed.
+- **Logged:** 2026-05-03 (M5.4 receiver — V1 accepted-imprecision flagged for V2 if it bites).
+
 ## `lib/supabase/types.ts` manually edited for `nps_standing` — next CLI regen will overwrite cleanly
 
 - **What:** The Supabase types regen path is broken in this environment (CLI misroutes per the standing followup; Studio UI's gen-types feature was moved/removed in newer dashboard versions). For the M5.4 NPS Standing UI work to compile, `lib/supabase/types.ts` was hand-edited to add `nps_standing: string | null` to the clients `Row`, `Insert`, and `Update` types — plus the three RPC `Returns` blocks that mirror the clients shape (`update_client_status_with_history`, `update_client_journey_stage_with_history`, `update_client_csm_standing_with_history`). 6 insertions total, all between `notes` and `occupation` (alphabetical). The new `update_client_from_nps_segment` RPC from migration 0021 is NOT in the types file at all — fine for now since no TS code calls it (only the Python receiver does).
@@ -72,7 +121,7 @@ These three are byproducts of Drake's M4 Chunk C triage decisions on the master 
 
 ## NPS-entry has no duplicate-submission protection
 
-- **What:** the Section 2 "Add NPS score" form invokes `insert_nps_submission` which always inserts a fresh row. A CSM who clicks Save twice (network blip, double-tap, browser back-then-forward) creates two `nps_submissions` rows for the same client at near-identical timestamps. The dashboard then displays the more recent one as "Latest NPS" and ignores the duplicate; total count becomes inflated.
+- **What:** the Section 2 "Add NPS score" form invokes `insert_nps_submission` which always inserts a fresh row. A CSM who clicks Save twice (network blip, double-tap, browser back-then-forward) creates two `nps_submissions` rows for the same client at near-identical timestamps. (Note: post-M5.4 the dashboard no longer surfaces a "Latest NPS" field — `nps_submissions.score` is invisible in V1; the duplicate sits in the table without a UI consumer. `latest_nps` stays in the data layer for V1.5 score-piping.) Total count of `nps_submissions` becomes inflated.
 - **Why it matters:** low-stakes for V1 — duplicate NPS rows are easy to spot in the table and easy to delete via Studio. But "the duplicate count drifts the more clients you have" is a slow-growing data-hygiene tax.
 - **Next action:** options when usage scales: (a) optimistic UI lock — disable the Save button between submit and revalidation; (b) server-side dedup — reject inserts where a row exists for `(client_id, score)` within the last 30 seconds; (c) a uniqueness check by (client_id, submitted_at::date) when manual entries dominate. (a) is the cheapest and probably enough.
 - **Logged:** 2026-05-01 (M4 Chunk B2 — known design gap, deferred).

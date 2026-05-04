@@ -36,4 +36,4 @@ Internal CSM syncs, team meetings, and any call that's not client-facing should 
 
 ## Rollout
 
-Convention launches at the 2026-05-01 CSM sync. Existing scheduled calls don't need retroactive renaming — the classifier handles legacy titles via its existing logic. New scheduled calls follow the convention.
+Convention launched at the 2026-05-01 CSM sync. Existing scheduled calls don't need retroactive renaming — the classifier handles legacy titles via its existing logic. New scheduled calls follow the convention.

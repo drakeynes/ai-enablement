@@ -108,10 +108,10 @@ Your job is to read those, then help me execute. Don't propose work — I'll tel
 - This doc, when working norms genuinely shift (with my confirmation in chat — don't silent-edit).
 - Followups in `docs/followups.md` after a decision is made or a constraint is logged.
 - The tracker (`docs/session-tracker.html`) at session boundaries.
+- `CLAUDE.md` — full file is fair game. Code drafts updates at EOD or session end (or mid-session for hygiene sweeps); Drake reviews the diff before push. Don't silent-edit during active work; batch into a doc-hygiene commit.
 
 ## Things I update myself
 
-- `CLAUDE.md` § Live System State + § Next Session Priorities + § Current Focus (EOD territory — though I sometimes delegate this to Code at end of session if it's been a long day).
 - Loom videos (no AI substitutes).
 - Conversations with Nabeel, Zain, Aman.
 

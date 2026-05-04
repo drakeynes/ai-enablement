@@ -11,6 +11,62 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ---
 
+## Path 2 outbound writeback architecture
+
+- **What:** Gregory writes back to upstream sources (Airtable, future master-sheet replacement) when CSM-driven dashboard edits should propagate. Today's M5.4 Path 1 is one-way (Airtable → Gregory). Path 2 is the inverse: dashboard edits → Make.com webhook → Airtable mutation. Architecture pending — likely a small Vercel serverless function in `api/` that fires on relevant `clients` UPDATE events (via Supabase webhook? Server Action hook?), normalizes payload to Airtable's expected shape, POSTs to Make.com.
+- **Why deferred:** waiting on Make.com walkthrough with Zain Monday to scope the Airtable side (which fields, write semantics, conflict resolution if both sides edit the same field, idempotency token shape).
+- **Revisit trigger:** Monday Make.com walkthrough complete + scope decision on which fields are write-back-eligible.
+- **Logged:** 2026-05-03.
+
+## Filter framework extensibility for Scott Chasing column
+
+- **What:** the M5.5 filtering UI ships with 5 active dropdowns + 2 placeholders. When the M5 status cascade chunk adds a "Scott Chasing" column (or whatever boolean/state field comes out of that work), the filter framework needs to accommodate without a rewrite. Today's M5.5 design sets the precedent for "always-present dropdown set"; new fields slot in as additional dropdowns.
+- **Why deferred:** depends on what the status cascade chunk actually defines — column type, vocabulary, default state. Premature to scope the filter accommodation before the column exists.
+- **Revisit trigger:** M5 status cascade chunk lands AND Scott Chasing column has a defined shape.
+- **Logged:** 2026-05-03.
+
+## Auto-derive eligibility rule revisit (master-sheet-seed treatment)
+
+- **What:** the M5.4 override-sticky rule treats master-sheet-seeded `csm_standing` rows (`changed_by=NULL` from M4 Chunk C) as ineligible for auto-derive. Concrete impact: 137 active clients' csm_standing is sticky against Airtable NPS segment changes. If Scott wants NPS-driven updates to flow through, the rule needs amending — either retroactively reattributing master-sheet-seed history rows to Gregory Bot, OR loosening the rule to "changed_by IS NULL OR Gregory Bot UUID."
+- **Why deferred:** product/CSM decision, not a code question. Scott's Monday onboarding will surface whether he wants the seed locked or eligible.
+- **Revisit trigger:** Monday onboarding answers the question. Either (a) one-shot script to update existing history rows + amend the RPC; (b) document the seed-locked semantics explicitly in gregory.md.
+- **Logged:** 2026-05-03 (M5.4 surfaced the structural implication; see paired followup entry).
+
+## NPS score piping (V1.5)
+
+- **What:** ingest the NPS score (0-10) alongside the segment classification. Path 1 receiver only handles segment; the score field on `nps_submissions` stays empty for clients who submit through Airtable (the manual NpsEntryForm in Section 2 is the only score-write path today). Score piping would extend the receiver's payload contract to include `score`, validate, write to `nps_submissions` via `insert_nps_submission` RPC alongside the `update_client_from_nps_segment` call.
+- **Why deferred:** Path 1 segment-only is sufficient for Scott's Monday onboarding. Score adds complexity (two writes per webhook, idempotency on duplicate score submissions, Airtable Score field shape questions).
+- **Revisit trigger:** Path 1 stable for 2+ weeks AND Scott asks for score-driven views (e.g. "show me clients whose NPS score dropped this month") OR a reporting need surfaces the gap.
+- **Logged:** 2026-05-03.
+
+## Inactivity flag (end-of-week-2 monthly meeting count)
+
+- **What:** automated flag on `clients` (or computed in a view) for clients who haven't met with their CSM in N days, where N is configurable per Scott's expectations. Likely tied to Scott's Loom 2 walkthrough of his weekly monitoring habits. Implementation could be a derived column, a scheduled cron, or a dashboard filter computed at query time — depends on whether the flag needs to drive notifications or just display.
+- **Why deferred:** scope unclear until Scott's Loom 2 lands. The "monthly meeting count at end-of-week-2" framing suggests a specific cadence rule that needs clarification.
+- **Revisit trigger:** Scott's Loom 2 walkthrough OR first time CSM asks "show me clients who haven't met in N days."
+- **Logged:** 2026-05-03.
+
+## CSM-edit lockdown (per Scott's Loom 1)
+
+- **What:** restrict who can edit certain client fields. Likely some fields (e.g. financials, contract terms) shouldn't be CSM-editable; others (NPS standing, csm_standing) are CSM territory. Implementation could be RLS policies, application-layer field allowlists per role, or both.
+- **Why deferred:** CSM team is currently 4 people who all have full edit access, and no visible incident from over-permissive editing. Scott's Loom 1 walkthrough will define the boundaries.
+- **Revisit trigger:** CSM team grows past current 4 OR a non-CSM team member modifies a client incorrectly OR Scott explicitly defines boundaries in Loom 1.
+- **Logged:** 2026-05-03.
+
+## Trustpilot auto-correct on standing change (per Scott's Loom 2)
+
+- **What:** when `csm_standing` transitions in certain directions (e.g. happy → at_risk), auto-flip `trustpilot_status` to a corresponding state (e.g. clear `'asked'` back to `'ask'` because asking again would be premature on an at-risk client). Concrete rule pending Scott's Loom 2.
+- **Why deferred:** rule definition pending; needs Loom 2 to define which transitions trigger which trustpilot_status changes.
+- **Revisit trigger:** M5 status cascade chunk lands (which provides the infrastructure for cross-field reactive updates) AND Scott's Loom 2 defines the rule.
+- **Logged:** 2026-05-03.
+
+## Australia / US country tagging
+
+- **What:** the master sheet importer captured country (`USA` / `AUS`) into `clients.country` and `clients.metadata.country`, but it's underused in V1 — no filter, no display segmentation. As Scott or Lou starts working specific markets differently, country becomes a meaningful filter dimension.
+- **Why deferred:** column exists, value is populated, but no current consumer surfaces it.
+- **Revisit trigger:** filter requires country segmentation (likely after M5.5 lands and Scott uses it daily) OR Aus market expansion materializes (separate cohort, separate workflows).
+- **Logged:** 2026-05-03.
+
 ## Ella V2 — conversational behavior
 
 Four upgrades to how Ella handles Slack conversation flow, all surfaced during pilot testing 2026-04-27. None are bugs in V1 scope; all are "she's correct but feels stiff." Grouped here so they get picked up together, since each one's testing surface (the `#ella-test-drakeonly` channel + the pilot 7) is the same — easier to validate as a batch than one at a time.

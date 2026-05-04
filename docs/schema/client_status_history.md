@@ -4,7 +4,7 @@ Append-only audit trail for `clients.status` changes.
 
 ## Purpose
 
-Preserve when a client moved between operational statuses (`active`, `paused`, `ghost`, `churned`) and who made the change, so the dashboard's Lifecycle & Standing section can show a status timeline and so churn analysis has a clean source. Same application-layer write pattern as `client_team_assignments` — the dashboard's status-edit endpoint writes both `clients.status` and a new history row in the same transaction. Not trigger-based, so the audit logic stays visible in dashboard code.
+Preserve when a client moved between operational statuses (`active`, `paused`, `ghost`, `leave`, `churned` — `leave` added in 0019) and who made the change, so the dashboard's Lifecycle & Standing section can show a status timeline and so churn analysis has a clean source. Same application-layer write pattern as `client_team_assignments` — the dashboard's status-edit endpoint writes both `clients.status` and a new history row in the same transaction. Not trigger-based, so the audit logic stays visible in dashboard code.
 
 Seeded at migration time (`0017_client_page_schema_v1.sql`) with one row per non-archived client whose `status` is non-null, using `clients.created_at` as `changed_at` and `'initial migration seed'` as the `note`.
 
