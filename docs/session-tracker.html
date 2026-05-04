@@ -237,7 +237,7 @@
       Today's four priorities follow M5.6's close-out. Path 2 was reshaped by the Zain conversation — it's a daily-pull GET endpoint Make.com hits for the active-client roster (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">nps_enabled</span> + Slack identifiers, joined per-client), not the event-driven UPDATE-listener architecture previously sketched; this replaces the Financial Master Sheet as Zain's daily source. P2 is the manual cleanup pass to land Gregory in a usable state by EOD, P3 is a Drake-led plan around base44 for Nabeel, and P4 is onboarding Scott tomorrow so he starts using Gregory in his daily workflow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — cleanup script applied (95 writes, 70 clients)</span>
+      <span><strong>Last updated:</strong> Session M5 — delta + completeness applied (Gregory matches canonical CSVs)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -277,8 +277,15 @@
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">8</span>
+        <span class="count">9</span>
       </header>
+
+      <div class="card">
+        <div class="id">Cleanup II</div>
+        <div class="title">M5 cleanup — delta + completeness against canonical CSVs</div>
+        <div class="subtitle">Phase A delta (against <span style="font-family: var(--mono); font-size: 12.5px;">data/master_sheet/master-sheet-05-04/</span>): 24 primary_csm reverts (cascade had reassigned negative-status clients to Scott Chasing during prior apply; CSV had real CSMs). Phase B completeness (<span style="font-family: var(--mono); font-size: 12.5px;">scripts/cleanup_master_sheet_completeness.py</span>): 8 autocreates (4 N/A → churned with metadata.original_master_sheet_status='N/A' for forensics; Mishank, Matthew Gibson, Melvin Dayal, Anthony Huang all created), 180 country fills, 180 start_date fills, 92 phone fills, 1 slack_user_id fill, 29 slack_channels inserts/relinks, 5 primary_csm assignments. Re-running reconcile dry-run after both passes: 0 Tier 1 changes — Gregory exactly matches CSV. End-state: 203 non-archived clients, 15 NULL country/start_date (= non-CSV gap, 203-188).</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill stretch">idempotent</span></div>
+      </div>
 
       <div class="card">
         <div class="id">Cleanup</div>

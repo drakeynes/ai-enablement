@@ -11,6 +11,20 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Cleanup completeness — 4 N/A clients autocreated as churned (forensics flag)
+
+- **What:** the M5 completeness pass (2026-05-04) autocreated 4 USA clients whose master sheet status was `N/A` — Vaishali Adla, Scott Stauffenberg, Clyde Vinson, Rachelle Hernandez. Per spec, `N/A` was coerced to `status='churned'` and the literal CSV string preserved on `metadata.original_master_sheet_status='N/A'`. These rows are discoverable via SQL: `SELECT * FROM clients WHERE metadata->>'original_master_sheet_status' = 'N/A';`. Mishank (AUS) also autocreated with `original_master_sheet_status='Churn (Aus)'` (real Churn, not N/A).
+- **Why it matters:** `N/A` status in the master sheet is Scott's "I don't know what to do with this client" sentinel. Coercing to churned was Drake's call so they don't pollute Active counts and don't trigger the cascade weirdly. If Scott later wants to revive any of them, the metadata string surfaces the original ambiguity so the dashboard can show "this was N/A — you flipped it to active intentionally?".
+- **Next action:** ad-hoc — surface these 4 in Scott's onboarding meeting (under Bucket A of `docs/data/m5_cleanup_scott_notes.md`). If Scott wants any reactivated, manual dashboard flip + the metadata string remains as historical context. If Scott wants the metadata cleaned up later, one-line SQL to remove the key.
+- **Logged:** 2026-05-04 (M5 completeness pass).
+
+## Master sheet CSV canonical location
+
+- **What:** Going forward, drop fresh master sheet exports under `data/master_sheet/master-sheet-<MM-DD>/`. `cleanup_master_sheet_reconcile.py` and `cleanup_master_sheet_completeness.py` both default to that location. Prior `/mnt/c/Users/drake/Downloads/` defaults pointed at stale Windows-side downloads — the canonical export superseded that, and the script's path constants are now repointed in-repo.
+- **Why it matters:** if a future cleanup pass needs the CSVs, the in-repo location keeps the source-of-truth co-located with the script that consumes it. The `master-sheet-<MM-DD>` subdirectory naming captures "as of which date" for forensics — comparing two exports across a few days surfaces what Scott edited in between.
+- **Next action:** when a fresh export is needed, drop `Financial MasterSheet (Nabeel - Jan 26) - USA TOTALS.csv` and `Financial MasterSheet (Nabeel - Jan 26) - AUS TOTALS.csv` (note: spaces + parens in filenames are correct) into a new `data/master_sheet/master-sheet-<MM-DD>/` directory. If the directory naming convention changes (e.g., Scott renames the spreadsheet), update the script's `DEFAULT_USA_CSV` / `DEFAULT_AUS_CSV` constants in `cleanup_master_sheet_reconcile.py`. The completeness script imports those constants so a single edit covers both.
+- **Logged:** 2026-05-04 (path repoint during the M5 delta + completeness pass).
+
 ## Cleanup pass — toggle re-activation for positive-status transitions
 
 - **What:** the M5 master sheet reconcile (2026-05-04) fired status flips going positive (`ghost→active` or `paused→active`) for 2 clients (Marcus Miller, Allison Jayme Boeshans) and possibly more in future runs. The M5.6 cascade is **one-directional** (off-only) — when those clients moved INTO negative status earlier, `accountability_enabled` and `nps_enabled` got flipped to false, and the cascade does NOT auto-revert on positive transitions. So Marcus Miller is now active but `accountability_enabled=false, nps_enabled=false`. Allison Jayme Boeshans appears to have been manually flipped back to true at some point.

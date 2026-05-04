@@ -683,3 +683,49 @@ Spec deviations:
 **Migration count: 0.** All writes go through existing RPCs (`update_client_status_with_history`, `update_client_csm_standing_with_history`, `change_primary_csm`) + direct UPDATE on `clients.trustpilot_status` and `clients.notes`. The `cleanup:m5_master_sheet_reconcile` note format is SQL-joinable to find every row written by this sweep.
 
 **Cleanup commit chain shipped 2026-05-04** (all on origin/main): `7f4d917` (Phase 1 dry-run + script) → `1c80149` (Drake-adjusted refactor + Phase 2 apply landed). Idempotency: re-running `--apply` against unchanged CSVs is a near-no-op — RPCs are no-op-when-unchanged; the handover-note append is gated on the literal text not already being present.
+
+### Cleanup pass — delta + completeness (against canonical CSVs, shipped 2026-05-04)
+
+Shipped: a delta re-run of the reconcile script against the canonical CSV location (`data/master_sheet/master-sheet-05-04/`) followed by a new completeness pass (`scripts/cleanup_master_sheet_completeness.py`) that closes the autocreate + crucial-field-fill gaps. End state: every CSV row resolves to a Gregory client, every client whose CSV row carries a value has Gregory populated, country is set USA/AUS per tab. Reconcile re-dry-run after both passes shows 0 Tier 1 changes — fully idempotent against the canonical CSVs.
+
+Pieces:
+
+- **CSV path repointing.** `cleanup_master_sheet_reconcile.py`'s `DEFAULT_USA_CSV` / `DEFAULT_AUS_CSV` constants now point at `data/master_sheet/master-sheet-05-04/...` (in-repo, gitignored data dir). Prior `/mnt/c/Users/drake/Downloads/` defaults were ad-hoc and had pointed at a stale Windows-side export — the canonical export superseded that, found in the prior diff/CSV mismatch surfaced as 24 cascade-introduced primary_csm reverts that needed a second pass.
+- **Delta apply (Phase A).** 24 primary_csm reverts: clients whose status went negative during the prior cleanup's apply got reassigned to Scott Chasing by the M5.6 cascade trigger, but Scott's master sheet still had the original real CSM in the Owner column. The reconcile script's "primary_csm if current ≠ CSV" check at compute_diff time only caught cases where Gregory differed from CSV BEFORE the cascade; the cascade then introduced new mismatches that this re-run catches. Sample: `Cheston Nguyen: Scott Chasing → Lou Perez`. Zero status flips, csm_standing flips, trustpilot flips. 8 handover-note appends were idempotent skips (literal text already present from the prior apply).
+- **Completeness script (Phase B).** New `scripts/cleanup_master_sheet_completeness.py`. Imports the reconcile script's CSV loader / resolver / normalizers (rather than re-building them) and adds two phases: autocreate-unmatched + fill-NULL-crucial-fields. NULL-fill semantics — never overwrites an existing Gregory value, with the one exception of `@placeholder.invalid` email replacement (synthesized stubs from `import_master_sheet.py` get replaced with real CSV emails when the CSV row resolves). UNIQUE collision-aware on `slack_user_id` (existing client wins) and `slack_channel_id` (existing link wins; NULL-client_id slack_channels rows get reattached to the new client). All RPCs / inserts attributed to Gregory Bot UUID with note `cleanup:m5_completeness`. Autocreated clients carry `metadata.created_via='m5_cleanup_completeness'` + `metadata.original_master_sheet_status='<raw CSV string>'` for the 4 N/A USA clients (Vaishali Adla, Scott Stauffenberg, Clyde Vinson, Rachelle Hernandez) coerced to status='churned'.
+- **CsvRow extension.** Added `raw_date` field so the completeness pass can fill `clients.start_date` from the master sheet's `Date` column. Reconcile script's `_USA_HEADER_KEYS` / `_AUS_HEADER_KEYS` extended to include `"date"`. Backwards-compatible default (`raw_date: str = ""`).
+- **slack_channels reattach pattern.** Inspired by `ingestion/slack/pipeline.py:262`: insert new row when `slack_channel_id` doesn't exist; if existing row has `client_id IS NULL`, UPDATE to set `client_id`; if existing row points elsewhere, surface to anomalies (skip — existing link wins). The 29 slack_channels writes during apply broke down as 26 fills + 3 inserts from autocreates; whether each was a fresh INSERT or a NULL-reattach is captured in the apply summary counts (`slack_channels_inserted` vs `slack_channels_relinked`).
+
+Apply outcomes (2026-05-04 cloud cleanup):
+
+**Phase A delta (commit `0efff3a`):**
+- 24 primary_csm reassignments applied (cascade-introduced reverts)
+- 0 status / csm_standing / trustpilot flips needed
+- 8 handover-note idempotent skips (literal text present from prior run)
+- 0 errors
+
+**Phase B completeness (commit `83a0f88`):**
+- 8 autocreates (5 with placeholder email, 3 with real email)
+- 180 country fills (every matched non-archived client; tab-derived USA/AUS)
+- 180 start_date fills (every matched client had CSV date + Gregory NULL)
+- 92 phone fills
+- 1 slack_user_id fill (UNIQUE-collision-aware)
+- 29 slack_channels inserts (26 from gap-fills + 3 from autocreates with channel ids)
+- 5 primary_csm assignments (3 of 8 autocreates had no resolvable owner: Clyde Vinson, Rachelle Hernandez, Mishank)
+- 8 status_history seeds + 3 standing_history seeds (only 3 autocreates had csm_standing in CSV)
+- 0 anomalies, 0 errors
+
+End-state verification:
+- 203 non-archived clients (was 195; +8 autocreates ✓)
+- 15 clients with NULL country / start_date — these are non-CSV clients (203 total - 188 CSV rows = 15 not on Scott's master sheet; can't fill from a source that doesn't exist)
+- Re-running `cleanup_master_sheet_reconcile.py` dry-run after both passes: 0 Tier 1 changes — Gregory exactly matches CSV across status, csm_standing, primary_csm, trustpilot. Tier 2 dropped 44 → 18 (the 26 slack_channel coverage gaps closed). Tier 3 went 63 → 67 (+4 because the 8 new autocreates surface NPS Standing values from CSV that Path 1 hasn't touched yet).
+
+Spec deviations:
+
+- **start_date and country are completeness-pass scope, not reconcile-pass scope.** Reconcile only handles the four canonical edit fields (status / csm_standing / primary_csm / trustpilot_status). Adding two more would have bloated reconcile's diff and conflated edit-flips with first-time fills. Keeping completeness as the dedicated NULL-fill tool keeps each script's purpose tight.
+- **Reused reconcile's data primitives via import.** `cleanup_master_sheet_completeness.py` imports `CsvRow`, `load_csv`, `build_resolver`, `load_team_members`, `load_active_primary_csm`, `load_slack_channels_by_client`, all the normalizers, and the sentinel UUIDs. Not factored into a `shared/cleanup/` module yet — the two scripts are the only callers and a third would prompt the refactor. Logged as a follow-up if a third caller arrives.
+- **No status_history seed for autocreates with N/A original status.** The status_history insert lands the post-coercion value (`'churned'`), not the literal `'N/A'`. The metadata column carries the literal — that's the forensics trail. The history table only carries valid status values per its CHECK constraint.
+
+**Migration count: 0.** All writes through existing RPCs / direct INSERTs. `cleanup:m5_completeness` note is SQL-joinable to find every row written by this sweep, distinct from `cleanup:m5_master_sheet_reconcile` so the two passes' contributions are separable.
+
+**Combined commit chain on origin/main:** `0efff3a` (Phase A path repoint + delta apply) → `83a0f88` (Phase B completeness script + apply). Both phases idempotent on re-run. Canonical CSV location going forward: `data/master_sheet/master-sheet-<MM-DD>/`.
