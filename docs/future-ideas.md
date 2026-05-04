@@ -20,10 +20,10 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ## Filter framework extensibility for Scott Chasing column
 
-- **What:** the M5.5 filtering UI ships with 5 active dropdowns + 2 placeholders. When the M5 status cascade chunk adds a "Scott Chasing" column (or whatever boolean/state field comes out of that work), the filter framework needs to accommodate without a rewrite. Today's M5.5 design sets the precedent for "always-present dropdown set"; new fields slot in as additional dropdowns.
-- **Why deferred:** depends on what the status cascade chunk actually defines — column type, vocabulary, default state. Premature to scope the filter accommodation before the column exists.
-- **Revisit trigger:** M5 status cascade chunk lands AND Scott Chasing column has a defined shape.
-- **Logged:** 2026-05-03.
+- **What:** the M5.5 filtering UI shipped 2026-05-03 with 5 active multi-select dropdowns + 1 single-value toggle + 3 disabled placeholders (Accountability, NPS toggle, Country). When the M5 status cascade chunk adds a "Scott Chasing" column (or whatever boolean/state field comes out of that work), the framework already exists: `MultiSelectDropdown` (`app/(authenticated)/clients/multi-select-dropdown.tsx`) is reusable, the URL-state pattern (parse → array → `.in()` filter) is established in `lib/db/clients.ts`, and the vocab module (`lib/client-vocab.ts`) is the single source of truth to extend. Adding a new filter is roughly: add a `*_OPTIONS` const to the vocab module; add a field to `ClientsListFilters`; add a `.in()` branch to `getClientsList`; add a `<MultiSelectDropdown>` instance to the filter bar; parse the URL param in `readFilters`. ~30-line vertical slice per new column.
+- **Why deferred:** depends on what the status cascade chunk actually defines — column type, vocabulary, default state, whether one of the three disabled placeholders ("Accountability") collapses into the Scott Chasing role.
+- **Revisit trigger:** M5 status cascade chunk lands AND Scott Chasing column has a defined shape. The "Accountability" placeholder may absorb this filter outright depending on how the cascade scopes ownership of the boolean.
+- **Logged:** 2026-05-03 (deferred). Updated 2026-05-03 (M5.5 — framework now real, revisit trigger unchanged but cost-to-extend shrank from "design and build" to "wire up").
 
 ## Auto-derive eligibility rule revisit (master-sheet-seed treatment)
 

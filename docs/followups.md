@@ -39,13 +39,6 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Next action:** Airtable-side hygiene pass — Drake or Zain trims whitespace on the affected rows. Or: an Airtable automation that runs `TRIM()` on Name field changes. Low-priority operational hygiene.
 - **Logged:** 2026-05-03 (M5.4 backfill dry-run output).
 
-## NpsStandingPill ↔ M5.5 filter-dropdown share value→label mapping
-
-- **What:** `components/client-detail/nps-standing-pill.tsx` carries the lowercase-DB → capitalized-display mapping (`promoter` → `Strong / Promoter`, etc.). When the M5.5 filtering chunk lands an NPS Standing dropdown, that dropdown will need the same mapping for option labels. Today's pill component keeps the mapping internal.
-- **Why it matters:** maintenance cost when the Airtable form changes display strings — two files instead of one.
-- **Next action:** during M5.5 implementation, extract the mapping to a shared module (e.g. `lib/nps-standing.ts` or similar) and import from both the pill and the filter dropdown. ~10 lines of refactor, zero behavior change.
-- **Logged:** 2026-05-03 (M5.4 follow-up — anticipated by the next chunk).
-
 ## Receiver-broken-diagnosis — two-step pattern for "is the function actually live?"
 
 - **What:** when a Vercel serverless function appears broken (HTML response on GET instead of friendly JSON, 404 on POST, etc.), there's a two-step diagnostic that catches >90% of cases before deeper investigation: **(1)** `git log origin/main..HEAD` to confirm no unpushed local commits — Code's commits land in local-only state until pushed, and a deploy can't include code that isn't on origin yet. **(2)** Vercel deployment Functions tab — confirm the function actually appears in the build. If absent, either `vercel.json`'s `functions` block is missing the entry, or the file path doesn't match what Vercel expects.
