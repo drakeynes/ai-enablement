@@ -463,7 +463,7 @@ Spec deviations:
 
 First scheduled cron run hits next Monday 09:00 UTC. Manual sweeps via the script are fine in the meantime.
 
-### M5.5 — Comprehensive filter bar on /clients (shipped 2026-05-03, visual smoke pending)
+### M5.5 — Comprehensive filter bar on /clients (shipped 2026-05-03, visual smoke implicitly verified through M5.6 smoke 2026-05-04)
 
 Shipped: replacement of the chip-row + single-CSM-dropdown filter bar with a row of 9 dropdowns. 5 active multi-selects, 1 single-value toggle, 3 disabled placeholders that signal next-slice work to Scott during Monday's onboarding. Highest-priority push #1 from the M5 V1-adoption pivot — Scott reads "match the master sheet so I'll adopt Gregory" and the filter bar is the surface he'll spend most of his daily time on.
 
@@ -490,7 +490,7 @@ Deviations from the M5.5 spec:
 
 **Pushed during the smoke greenlight window.** Three commits at `c761207` (vocab module + nps-standing-pill refactor) → `d8febaa` (MultiSelectDropdown) → `4059602` (FilterBar + page + getClientsList). Vercel auto-deploy follows the push. Visual smoke through the auth-gated dashboard UI is the remaining verification step — pending Drake's eyeball.
 
-### M5.6 — Status cascade + Scott Chasing + accountability/NPS toggles (built 2026-05-04, awaiting visual smoke)
+### M5.6 — Status cascade + Scott Chasing + accountability/NPS toggles (shipped 2026-05-04, hotfix landed same day)
 
 Shipped: DB-level cascade so when a client's `clients.status` moves to a negative value (`ghost` / `paused` / `leave` / `churned`), a coordinated set of derived field changes auto-fire in one transaction:
 
@@ -551,4 +551,30 @@ Risks post-build:
 3. **Backfill UPDATE accidentally firing the cascade** — *did not materialize.* The backfill UPDATE doesn't touch status; the trigger's `OLD.status IS DISTINCT FROM NEW.status` guard correctly evaluates false. 65 cascade:backfill:m5.6 rows landed via the explicit INSERT path; no surprise extras.
 4. **active+off UI hint requires `client.status` in the toggle's data flow** — *resolved at design time* by building a custom `BooleanToggleField` rather than extending `EditableField`. Section reads `client.status` and `client.<toggle>` together at the call site; passes computed `warn` boolean down. EditableField stays unchanged.
 
-**Local commits ready, push pending Drake's visual smoke.** `fe51fec` (M5.5 carryover docs) → `4f8811f` (migration 0022) → `7251906` (dashboard wiring) → next: docs commit (this build-log entry + schema doc updates + CLAUDE.md sync + future-ideas.md narrowing + 17-client snapshot + followups recovery query).
+**M5.6 commit chain shipped 2026-05-04** (all on origin/main): `fe51fec` (M5.5 carryover docs) → `4f8811f` (migration 0022) → `7251906` (dashboard wiring) → `5e57983` (close-out docs) → hotfix follow-up below.
+
+#### M5.6 hotfix — three regressions surfaced by visual smoke (shipped 2026-05-04)
+
+The expanded visual smoke triggered by the M5.6 deploy surfaced three bugs. Two of them were **pre-existing** issues never tested before; one was the M5.6 cascade exercising a 0014-era code path the migration apply briefly hit and the trigger had already correctly fixed inline. Documenting honestly because the audit trail benefits from "this bug existed for X commits before being caught" being visible — informs future smoke-test scoping.
+
+- **Bug 1 — `clients.status` edit silently failed** (Section 1 of the client detail page). Click registered, dropdown closed, no Server Action fired. Pre-existed M5.6 — root cause introduced in M4 commit `19f4e50` ("feat(client-detail): add EditableField, EditableTagsField, NpsEntryForm") via the `setTimeout(commit, 0)` pattern in EditableField's enum onChange. Affected every enum and three_state_bool dropdown (status, csm_standing, trustpilot, ghl_adoption, sales_group_candidate, dfy_setting). Went untested until M5.6's expanded visual smoke because nobody had previously edited those specific fields through the dashboard end-to-end with a network-tab eye on them.
+- **Bug 2 — `clients.csm_standing` edit silently failed** (Section 2). Same root cause as Bug 1, same fix.
+- **Bug 3 — `change_primary_csm` RPC errored on swap-back-to-archived-CSM** with a unique-key violation. The 0014 RPC unconditionally INSERTed the new (client, member, primary_csm) row after archiving the active one — but `client_team_assignments` has `UNIQUE (client_id, team_member_id, role)` so a previously-archived row collided. The M5.6 cascade trigger (migration 0022) had hit the same case and used `ON CONFLICT (...) DO UPDATE SET unassigned_at = NULL, assigned_at = now()` to reactivate; the dashboard-facing RPC didn't get the same treatment until 0023 aligned it.
+
+Root cause analysis on Bug 1+2 — the `setTimeout(commit, 0)` in `editable-field.tsx`'s enum onChange queued a macrotask that captured the THIS-render `commit` closure. The closure read `draft` from React state at queue time — **before** the just-fired `setDraft(e.target.value)` had taken effect. By the time the macrotask fired, React had re-rendered with the new draft, but the queued commit was a stale reference. It computed `parsed.value` from the OLD draft, hit `rawEquals(parsed.value, committed) === true`, took the "no change — exit cleanly" branch, and exited without calling `onSave`. The user saw a closed dropdown and assumed the save fired. The text/textarea/integer paths were unaffected because they call `commit()` from `onBlur` — a separate event handler that runs after typing has settled, with a fresh closure.
+
+Pieces:
+
+- **Migration `0023_change_primary_csm_on_conflict.sql`** — single-function `CREATE OR REPLACE` that replaces `change_primary_csm` with the ON CONFLICT variant. Same signature, same `language plpgsql security definer`, same archive-then-insert two-step. Behavior change purely additive (previously-erroring case now succeeds; previously-working first-time-assignment path unchanged). Mirrors the M5.6 status cascade trigger's primary_csm reassignment pattern (0022) so cascade-fired and dashboard-fired paths produce identical row shapes. Explicit `GRANT EXECUTE on ... to service_role` preserved for symmetry with 0018+ RPCs (discoverable via grep without needing the CREATE OR REPLACE preservation rule).
+- **EditableField fix in `components/client-detail/editable-field.tsx`** — `commit` accepts an optional `draftOverride: string`; the enum / three_state_bool select onChange passes `e.target.value` directly (the new value is already in hand at that point); `setTimeout` dropped. Text/textarea/input onBlur paths wrap as `() => commit()` so React's FocusEvent doesn't get coerced into the new optional parameter. ~15 LoC net change including a multi-paragraph comment block explaining the failure mode for future readers.
+
+Smoke verification:
+
+- **Bug 3** — SQL probe (no UI needed) on Allison Jayme Boeshans (test client): swap Lou → Nico → Lou via the RPC. Step 2 (Nico → Lou, the previously-erroring case) succeeded with `+1` row delta — the archived Lou row reactivated rather than a duplicate landing.
+- **Bug 1+2 + the four enum fields** — visual smoke through the auth-gated dashboard (Drake-driven, 2026-05-04). Status (Section 1), csm_standing (Section 2), trustpilot_status (Section 6), and one three_state_bool (Section 6) all edit + persist correctly. Cascade fires correctly through the dashboard path on negative-status transitions (status edit → cascade history row with `cascade:status_to_<x>:by:NULL` + csm_standing/accountability/nps flipped + primary_csm reassigned to Scott Chasing). Bug 3 swap-back also verified through the dashboard CSM swap dialog.
+
+Untested but probably-affected pre-fix (verified working post-fix since they share the renderEditor branch): `ghl_adoption` (enum), `sales_group_candidate` (three_state_bool), `dfy_setting` (three_state_bool). Single fix covers the entire enum + three_state_bool family.
+
+Hotfix commits on origin/main: `8d27e1e` (migration 0023) → `c2d59f4` (EditableField fix). Vercel auto-deploy followed Drake's manual redeploy.
+
+Future-proofing: visual smoke scope expanded to include "edit-and-persist for every enum-variant field on the client detail page" going forward. The EditableField stale-closure bug existed for ~30+ commits across M4 → M5.6 before being caught; the cost of catching it earlier would have been one focused 5-minute pass after M4 Chunk B2 shipped. Logged as a reminder for future visual-smoke checklists.

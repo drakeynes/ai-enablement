@@ -11,6 +11,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## EditableField `<select>` missing id/name/htmlFor — a11y gap
+
+- **What:** the `<select>` rendered by `components/client-detail/editable-field.tsx` (renderEditor's enum / three_state_bool branch, around lines 280-305 of the post-hotfix file) has no `id` or `name` attribute, and the `<Label>` rendered above it at line ~197 has no `htmlFor` linking the two. Same gap exists on the text/textarea/integer/numeric/date `<Input>` and `<Textarea>` variants. Surfaced during the M5.6 hotfix diagnosis when Drake noticed browser dev tools warning about un-labeled form fields; ruled out as a cause of Bug 1 (silent-click bug) but the a11y problem is real.
+- **Why it matters:** screen readers can't announce field labels reliably. Browser autofill heuristics rely partly on `name`/`id` to recognize fields. Form validation tooling (and tests) that reference fields by name don't work. None of these are V1-blocking — the dashboard is internal-only with no screen-reader users today — but the gap will bite the moment Gregory ships beyond the agency.
+- **Next action:** thread a stable per-instance id from the `EditableField` props down to the input element and to the `<Label htmlFor=...>`. Either (a) generate via `useId()` if React 18+ is in scope (it is — check `package.json`), or (b) take an `id` prop and have call sites pass slugged labels (e.g. `id="client-status"` for the Status field). Option (a) is more idiomatic and zero-config at call sites. Sweep all input variants in the same pass: `<select>` (line ~280), `<Input>` (line ~349), `<Textarea>` (line ~248). ~20-line refactor; no behavior change. Worth bundling with any other EditableField change.
+- **Logged:** 2026-05-04 (M5.6 hotfix surface — diagnosis ruled out as cause of Bug 1 but the underlying a11y issue stands).
+
 ## M5.6 silent-toggle backfill — 17 clients flipped accountability/nps without history row
 
 - **What:** the M5.6 migration 0022 backfilled `accountability_enabled` and `nps_enabled` to `false` on 82 negative-status clients. 65 of them got a `cascade:backfill:m5.6` row in `client_standing_history` (those whose `csm_standing` flipped from a non-`at_risk` value or NULL). The other 17 already had `csm_standing='at_risk'` from prior CSM judgment / master-sheet seed, so the backfill flipped the toggles without writing a history row — `csm_standing` didn't change, so the history insert (which is keyed on csm_standing transitions) had nothing to write. There is no `client_accountability_history` / `client_nps_enabled_history` table in V1 either, so the toggle change for these 17 is invisible in the audit trail.
