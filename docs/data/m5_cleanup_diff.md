@@ -1,6 +1,6 @@
 # M5 cleanup — master sheet vs Gregory diff
 
-Generated: `2026-05-04T21:18:46.008562+00:00`
+Generated: `2026-05-04T23:05:43.864271+00:00`
 
 ## Summary
 
@@ -9,134 +9,40 @@ Generated: `2026-05-04T21:18:46.008562+00:00`
 - Unmatched: **8**
 - Drake silent-skipped: **0**
 - Name-ambiguous (>1 Gregory match): **0**
-- Field changes proposed: **210** (Tier 1: 103 / Tier 2: 44 / Tier 3: 63)
-- Handover note appends: **8** (0 idempotent skips)
-- Cascade-redundant csm_standing skips: **4** (cascade sets at_risk; explicit RPC would duplicate the history row)
+- Field changes proposed: **131** (Tier 1: 24 / Tier 2: 44 / Tier 3: 63)
+- Handover note appends: **8** (8 idempotent skips)
+- Cascade-redundant csm_standing skips: **0** (cascade sets at_risk; explicit RPC would duplicate the history row)
 
 ## Tier 1 — high-confidence auto-applies
 
-### status (36)
+### primary_csm (24)
 
 | Client | Tab | Current | → Proposed | Reason |
 |---|---|---|---|---|
-| Abel Asfaw | USA | `paused` | `leave` | status flip → cascade will fire |
-| Alex Crosby | USA | `paused` | `leave` | status flip → cascade will fire |
-| Allison Jayme Boeshans | USA | `paused` | `active` | status flip |
-| Amanda S. | USA | `paused` | `leave` | status flip → cascade will fire |
-| Ameet Kumar | USA | `active` | `paused` | status flip → cascade will fire |
-| Andy V | USA | `paused` | `leave` | status flip → cascade will fire |
-| Brooke Gorman | USA | `ghost` | `leave` | status flip → cascade will fire |
-| Cheston Nguyen | USA | `paused` | `leave` | status flip → cascade will fire |
-| Chikezie Igwebuike | USA | `paused` | `churned` | status flip → cascade will fire |
-| Christian Brooks | USA | `paused` | `leave` | status flip → cascade will fire |
-| Eric Brown | USA | `paused` | `leave` | status flip → cascade will fire |
-| Eric Washington | USA | `paused` | `leave` | status flip → cascade will fire |
-| Evan Bautista | USA | `paused` | `leave` | status flip → cascade will fire |
-| Fabio dirico | AUS | `active` | `churned` | status flip → cascade will fire |
-| Giovanni Gregorio | USA | `paused` | `leave` | status flip → cascade will fire |
-| Hannah Carter | USA | `paused` | `leave` | status flip → cascade will fire |
-| John Keever | USA | `active` | `ghost` | status flip → cascade will fire |
-| Jose Trejo | USA | `paused` | `leave` | status flip → cascade will fire |
-| Justin J. Fogg | USA | `paused` | `leave` | status flip → cascade will fire |
-| Kevin Black | USA | `paused` | `leave` | status flip → cascade will fire |
-| Kylie Goldsmith | USA | `paused` | `leave` | status flip → cascade will fire |
-| Marcus Miller | USA | `ghost` | `active` | status flip |
-| Ming-Shih Wang | USA | `paused` | `leave` | status flip → cascade will fire |
-| Mubeen Siddiqui | USA | `paused` | `leave` | status flip → cascade will fire |
-| Nate Simon | USA | `active` | `ghost` | status flip → cascade will fire |
-| Patrika Cheston | USA | `ghost` | `leave` | status flip → cascade will fire |
-| Raga Mamidipaka | USA | `paused` | `leave` | status flip → cascade will fire |
-| Rob Traffie | USA | `active` | `leave` | status flip → cascade will fire |
-| samhealy09@gmail.com | USA | `paused` | `leave` | status flip → cascade will fire |
-| Samuel Michel | AUS | `active` | `paused` | status flip → cascade will fire |
-| Sarah Cherney | USA | `active` | `leave` | status flip → cascade will fire |
-| Sean Rounds | USA | `paused` | `leave` | status flip → cascade will fire |
-| Sonal Patel | USA | `paused` | `leave` | status flip → cascade will fire |
-| Sunny Ghanathey | USA | `active` | `leave` | status flip → cascade will fire |
-| Temitomi Arenyeka | USA | `paused` | `leave` | status flip → cascade will fire |
-| Zach Roberts | USA | `paused` | `leave` | status flip → cascade will fire |
-
-### csm_standing (32)
-
-| Client | Tab | Current | → Proposed | Reason |
-|---|---|---|---|---|
-| Abel Asfaw | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Alex Crosby | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Ameet Kumar | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Basem Romio | USA | `at_risk` | `problem` | csm_standing flip |
-| Braden Threlkeld | USA | `at_risk` | `happy` | csm_standing flip |
-| Cheston Nguyen | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Chris Ferrente | USA | `at_risk` | `problem` | csm_standing flip |
-| Christian Brooks | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Colin Hill | USA | `at_risk` | `content` | csm_standing flip |
-| Dinesh | AUS | `null` | `at_risk` | csm_standing flip |
-| Eric Washington | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Ethan Clark | USA | `at_risk` | `content` | csm_standing flip |
-| Evan Bautista | USA | `at_risk` | `happy` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Fabio dirico | AUS | `null` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Giovanni Gregorio | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Guillermo Budde | USA | `at_risk` | `problem` | csm_standing flip |
-| Hannah Carter | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| James Tran | AUS | `null` | `content` | csm_standing flip |
-| Jose Trejo | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Kevin Black | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Krish Gopalani | USA | `at_risk` | `content` | csm_standing flip |
-| Kylie Goldsmith | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Le-Minh Khieu | USA | `at_risk` | `happy` | csm_standing flip |
-| Marcus Miller | USA | `at_risk` | `happy` | csm_standing flip (positive transition — cascade does NOT auto-revert; explicit write required) |
-| Mark Dawson | USA | `at_risk` | `content` | csm_standing flip |
-| Mary Kissiedu | USA | `at_risk` | `content` | csm_standing flip |
-| Raga Mamidipaka | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Salman Rahman | USA | `happy` | `content` | csm_standing flip |
-| samhealy09@gmail.com | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-| Sean Mullaney | USA | `at_risk` | `content` | csm_standing flip |
-| Yeshlin Singh | AUS | `null` | `content` | csm_standing flip |
-| Zach Roberts | USA | `at_risk` | `content` | csm_standing flip (cascade will overwrite to at_risk — Bucket B contradiction) |
-
-### primary_csm (22)
-
-| Client | Tab | Current | → Proposed | Reason |
-|---|---|---|---|---|
-| Abel Asfaw | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Adeeb Mohammed | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Amanda S. | USA | `Scott Wilson` | `Scott Chasing` | primary_csm reassignment |
-| Andrew Hsu | USA | `Nico Sandoval` | `Scott Wilson` | primary_csm reassignment |
-| Basem Romio | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Brooke Gorman | USA | `Scott Wilson` | `Scott Chasing` | primary_csm reassignment |
-| Chikezie Igwebuike | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Fabio dirico | AUS | `Nico Sandoval` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Jason Hamm | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| John Keever | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Krish Gopalani | USA | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Kurt Buechler | USA | `Scott Wilson` | `Nico Sandoval` | primary_csm reassignment |
-| Mac McLaughlin | USA | `Scott Wilson` | `Nico Sandoval` | primary_csm reassignment |
-| Marcus Miller | USA | `Lou Perez` | `Nico Sandoval` | primary_csm reassignment |
-| Michael Garner | USA | `Scott Wilson` | `Nico Sandoval` | primary_csm reassignment |
-| Patrika Cheston | USA | `Scott Wilson` | `Scott Chasing` | primary_csm reassignment |
-| Rahim Ali | USA | `Nico Sandoval` | `Scott Wilson` | primary_csm reassignment |
-| Shivam Patel | USA | `Scott Wilson` | `Lou Perez` | primary_csm reassignment |
-| Shyam Srinivas | AUS | `Lou Perez` | `Scott Chasing` | primary_csm reassignment |
-| Sierra Waldrep | USA | `Scott Wilson` | `Nico Sandoval` | primary_csm reassignment |
-| Srilekha Sikhinam | USA | `Scott Wilson` | `Nico Sandoval` | primary_csm reassignment |
-| Swapnil Napuri | USA | `null` | `Scott Wilson` | primary_csm reassignment |
-
-### trustpilot_status (13)
-
-| Client | Tab | Current | → Proposed | Reason |
-|---|---|---|---|---|
-| Allison Jayme Boeshans | USA | `ask` | `no` | trustpilot flip |
-| Dante Newton | USA | `asked` | `ask` | trustpilot flip |
-| Dinesh | AUS | `null` | `yes` | trustpilot flip |
-| James Tran | AUS | `null` | `no` | trustpilot flip |
-| Naymuddullah Farhan | AUS | `null` | `ask` | trustpilot flip |
-| Nicholas V. LoScalzo | USA | `ask` | `yes` | trustpilot flip |
-| Ruphael G | USA | `ask` | `yes` | trustpilot flip |
-| Sadiq Sumra | USA | `asked` | `yes` | trustpilot flip |
-| Samuel Michel | AUS | `null` | `no` | trustpilot flip |
-| Shivam Patel | USA | `asked` | `ask` | trustpilot flip |
-| Shyam Srinivas | AUS | `null` | `no` | trustpilot flip |
-| Trevor Heck | USA | `asked` | `ask` | trustpilot flip |
-| Yeshlin Singh | AUS | `null` | `no` | trustpilot flip |
+| Ameet Kumar | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Andy V | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Cheston Nguyen | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Christian Brooks | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Eric Brown | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Eric Washington | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Evan Bautista | USA | `Scott Chasing` | `Nabeel Junaid` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Giovanni Gregorio | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Hannah Carter | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Justin J. Fogg | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Kevin Black | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Kylie Goldsmith | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Mubeen Siddiqui | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Nate Simon | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Raga Mamidipaka | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Rob Traffie | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| samhealy09@gmail.com | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Samuel Michel | AUS | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Sarah Cherney | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Sean Rounds | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Sonal Patel | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Sunny Ghanathey | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Temitomi Arenyeka | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
+| Zach Roberts | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
 
 ### handover note append (8)
 
@@ -150,14 +56,14 @@ Lou-owned handover: Shivam Patel
 
 | Client | Existing notes? | Idempotent skip? |
 |---|---|---|
-| Marcus Miller | no | no — will append |
-| Mac McLaughlin | no | no — will append |
-| Srilekha Sikhinam | no | no — will append |
-| Kurt Buechler | no | no — will append |
-| Michael Garner | no | no — will append |
-| Sierra Waldrep | no | no — will append |
-| Shivam Patel | no | no — will append |
-| Nico Bubalo | no | no — will append |
+| Marcus Miller | yes | yes (already contains the text) |
+| Mac McLaughlin | yes | yes (already contains the text) |
+| Srilekha Sikhinam | yes | yes (already contains the text) |
+| Kurt Buechler | yes | yes (already contains the text) |
+| Michael Garner | yes | yes (already contains the text) |
+| Sierra Waldrep | yes | yes (already contains the text) |
+| Shivam Patel | yes | yes (already contains the text) |
+| Nico Bubalo | yes | yes (already contains the text) |
 
 
 ## Tier 2 — eyeball required
@@ -297,10 +203,10 @@ Lou-owned handover: Shivam Patel
 
 | Client | Tab | Current | CSV value | Reason |
 |---|---|---|---|---|
-| Alex Crosby | USA | `null` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
+| Alex Crosby | USA | `Scott Chasing` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
 | Colin Hill | USA | `null` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
-| Jose Trejo | USA | `null` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
-| Ming-Shih Wang | USA | `null` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
+| Jose Trejo | USA | `Scott Chasing` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
+| Ming-Shih Wang | USA | `Scott Chasing` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
 
 
 ## Unmatched CSV rows (8)

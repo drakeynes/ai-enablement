@@ -79,13 +79,19 @@ SCOTT_CHASING_UUID = "ccea0921-7fc1-4375-bcc7-1ab91733be73"
 # manual override."
 RPC_NOTE = "cleanup:m5_master_sheet_reconcile"
 
-# Default CSV locations. Drake's working CSVs land in his Windows
-# Downloads via WSL passthrough.
-DEFAULT_USA_CSV = Path(
-    "/mnt/c/Users/drake/Downloads/Financial MasterSheet (Nabeel - Jan 26) - USA TOTALS.csv"
+# Canonical CSV location (in-repo). Drop fresh exports under
+# `data/master_sheet/master-sheet-<MM-DD>/` going forward — the prior
+# `/mnt/c/Users/drake/Downloads/` defaults pointed at stale Windows-side
+# downloads. The 2026-05-04 canonical export superseded that ad-hoc set.
+DEFAULT_USA_CSV = (
+    _REPO_ROOT
+    / "data/master_sheet/master-sheet-05-04"
+    / "Financial MasterSheet (Nabeel - Jan 26) - USA TOTALS.csv"
 )
-DEFAULT_AUS_CSV = Path(
-    "/mnt/c/Users/drake/Downloads/Financial MasterSheet (Nabeel - Jan 26) - AUS TOTALS.csv"
+DEFAULT_AUS_CSV = (
+    _REPO_ROOT
+    / "data/master_sheet/master-sheet-05-04"
+    / "Financial MasterSheet (Nabeel - Jan 26) - AUS TOTALS.csv"
 )
 
 DEFAULT_DIFF_OUT = _REPO_ROOT / "docs/data/m5_cleanup_diff.md"

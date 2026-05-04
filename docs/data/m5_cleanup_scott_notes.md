@@ -1,8 +1,8 @@
 # M5 cleanup — Scott meeting notes
 
-Generated: `2026-05-04T21:18:46.008562+00:00`
+Generated: `2026-05-04T23:05:43.864271+00:00`
 
-_Apply phase ran. Counts: status_applied=36, csm_applied=32, primary_csm_applied=16, primary_csm_already_match=6, trustpilot_applied=13, handover_applied=8_
+_Apply phase ran. Counts: primary_csm_applied=24, handover_already_present=8_
 
 ## Bucket A — pre-apply ambiguities (Scott decides)
 
@@ -12,10 +12,10 @@ _(none)_
 
 ### A2. Aleks-owned rows (4)
 
-- **Alex Crosby** (USA) — current owner `null`
+- **Alex Crosby** (USA) — current owner `Scott Chasing`
 - **Colin Hill** (USA) — current owner `null`
-- **Jose Trejo** (USA) — current owner `null`
-- **Ming-Shih Wang** (USA) — current owner `null`
+- **Jose Trejo** (USA) — current owner `Scott Chasing`
+- **Ming-Shih Wang** (USA) — current owner `Scott Chasing`
 
 ### A3. Name-ambiguous CSV rows (0)
 
@@ -134,44 +134,5 @@ _(none — Gregory state matches CSV after apply)_
 
 ## Quick reference — status directives applied
 
-_(Each row reflects one Tier 1 status flip from the CSV — these are the operational status decisions Scott has made between the previous master sheet import and this cleanup pass.)_
-
-| Client | Tab | Was | Is now |
-|---|---|---|---|
-| Allison Jayme Boeshans | USA | `paused` | `active` |
-| Marcus Miller | USA | `ghost` | `active` |
-| Chikezie Igwebuike | USA | `paused` | `churned` |
-| Fabio dirico | AUS | `active` | `churned` |
-| John Keever | USA | `active` | `ghost` |
-| Nate Simon | USA | `active` | `ghost` |
-| Abel Asfaw | USA | `paused` | `leave` |
-| Alex Crosby | USA | `paused` | `leave` |
-| Amanda S. | USA | `paused` | `leave` |
-| Andy V | USA | `paused` | `leave` |
-| Brooke Gorman | USA | `ghost` | `leave` |
-| Cheston Nguyen | USA | `paused` | `leave` |
-| Christian Brooks | USA | `paused` | `leave` |
-| Eric Brown | USA | `paused` | `leave` |
-| Eric Washington | USA | `paused` | `leave` |
-| Evan Bautista | USA | `paused` | `leave` |
-| Giovanni Gregorio | USA | `paused` | `leave` |
-| Hannah Carter | USA | `paused` | `leave` |
-| Jose Trejo | USA | `paused` | `leave` |
-| Justin J. Fogg | USA | `paused` | `leave` |
-| Kevin Black | USA | `paused` | `leave` |
-| Kylie Goldsmith | USA | `paused` | `leave` |
-| Ming-Shih Wang | USA | `paused` | `leave` |
-| Mubeen Siddiqui | USA | `paused` | `leave` |
-| Patrika Cheston | USA | `ghost` | `leave` |
-| Raga Mamidipaka | USA | `paused` | `leave` |
-| Rob Traffie | USA | `active` | `leave` |
-| samhealy09@gmail.com | USA | `paused` | `leave` |
-| Sarah Cherney | USA | `active` | `leave` |
-| Sean Rounds | USA | `paused` | `leave` |
-| Sonal Patel | USA | `paused` | `leave` |
-| Sunny Ghanathey | USA | `active` | `leave` |
-| Temitomi Arenyeka | USA | `paused` | `leave` |
-| Zach Roberts | USA | `paused` | `leave` |
-| Ameet Kumar | USA | `active` | `paused` |
-| Samuel Michel | AUS | `active` | `paused` |
+_(no status flips proposed)_
 
