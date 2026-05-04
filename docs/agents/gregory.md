@@ -578,3 +578,58 @@ Untested but probably-affected pre-fix (verified working post-fix since they sha
 Hotfix commits on origin/main: `8d27e1e` (migration 0023) → `c2d59f4` (EditableField fix). Vercel auto-deploy followed Drake's manual redeploy.
 
 Future-proofing: visual smoke scope expanded to include "edit-and-persist for every enum-variant field on the client detail page" going forward. The EditableField stale-closure bug existed for ~30+ commits across M4 → M5.6 before being caught; the cost of catching it earlier would have been one focused 5-minute pass after M4 Chunk B2 shipped. Logged as a reminder for future visual-smoke checklists.
+
+### Path 2 outbound — accountability/NPS daily roster endpoint (shipped 2026-05-04)
+
+Shipped: a GET endpoint Make.com pulls once per day to drive Zain's existing accountability + NPS automation. Replaces the Financial Master Sheet as the source of truth for that roster. Path framing reshaped from the earlier "event-driven UPDATE listener" sketch by yesterday's Make.com walkthrough with Zain — Zain's Make.com scenario already operates on a daily-pull cadence, so giving him one simple GET to swap in (and keeping Gregory unaware of the consumer) was the cleaner contract than triggering on column-level UPDATEs.
+
+Pieces:
+
+- **`api/accountability_roster.py`** — Vercel Python serverless function. Mirrors `api/airtable_nps_webhook.py`'s `BaseHTTPRequestHandler` shape and `gate-before-DB` auth pattern: missing env var → 500 (deploy bug, not caller's problem); missing or wrong `X-Webhook-Secret` header → 401 with empty body; only GET supported (POST → 405 `{"error": "method_not_allowed"}`; PUT/DELETE/PATCH naturally 501 from the base class). Single round-trip query: `clients` SELECT with embedded `slack_channels(slack_channel_id, is_archived, created_at)`. Per-client filter in Python mirrors `getClientById`'s slack_channel selection rule exactly (filter `is_archived=false`, sort `created_at desc`, take first) — kept in a `_select_active_channel` helper so the rule lives in one place.
+- **`vercel.json`** — added `api/accountability_roster.py` to the functions block (`@vercel/python@4.3.1`, `maxDuration: 60`). Sixth Python function deployed.
+- **`scripts/test_accountability_roster_locally.py`** — local 7-path harness mirroring `scripts/test_airtable_nps_webhook_locally.py`. Stands up the real `handler` class in a background `HTTPServer` thread on a kernel-picked port, then runs: happy-path response shape (10 sub-checks), count matches direct-SQL expected actionable count, spot-check known-good client appears with matching slack_channel_id, missing/wrong secret → 401, POST → 405, missing env var → 500. Read-only — no test-client cleanup needed.
+- **`MAKE_OUTBOUND_ROSTER_SECRET`** env var minted by Drake, set in `.env.local` (local harness) and Vercel Production scope (deploy target). Same value in both. The harness uses its own per-run test secret and never reads the production value.
+
+Eligibility filter (server-side, every row in the response is actionable by Make.com):
+
+- `clients.archived_at IS NULL`
+- `clients.slack_user_id IS NOT NULL`
+- at least one `slack_channels` row with `is_archived=false` (most recently created wins)
+- `clients.email IS NOT NULL` (defensive — Make.com keys on email)
+
+No status filter — `accountability_enabled` and `nps_enabled` columns travel in the payload and Make.com filters on its side.
+
+Response shape:
+
+```json
+{
+  "generated_at": "<ISO8601 UTC>",
+  "count": <int>,
+  "clients": [
+    {
+      "client_email": "...",
+      "slack_user_id": "U...",
+      "slack_channel_id": "C...",
+      "accountability_enabled": <bool>,
+      "nps_enabled": <bool>
+    }
+  ]
+}
+```
+
+Smoke checkpoint passed 2026-05-04 (local harness 22/22 green, deploy verification 4/4):
+
+- Local harness: 22 checks across 7 paths against cloud DB. Live count = 100 actionable; total non-archived = 195; filtered out = 95 (NULL slack_user_id, no resolvable channel, or no email). Spot-check landed on Abel Asfaw with matching `C0A972VJQ9F` channel.
+- Live endpoint at `https://ai-enablement-sigma.vercel.app/api/accountability_roster`: 200 with valid secret + identical 100/195 numbers; 401 with no header; 401 with wrong secret; POST → 405. Deploy took ~4 minutes from push to first 200 (existing endpoints stayed up throughout — Next.js 404 page surfaced on the new path until the Python function registered).
+
+Spec deviations:
+
+- **Defensive email-NULL filter** beyond the spec's two-condition filter (slack_user_id + slack_channel_id). All 197 active clients have emails today but the seed/import path doesn't enforce NOT NULL on `clients.email`, so a future bad import could surface a row with all other fields resolved but no email. Cheap to skip; matches the "every row in the response is actionable" contract since Make.com keys on email.
+- **POST returns 405; PUT/DELETE/PATCH naturally 501.** Spec said "anything else → 405." Overriding all four `do_*` methods is busywork for a GET-only endpoint that Make.com only ever sends GET to. The harness covers POST → 405 (the spec'd test path); the rest hit `BaseHTTPRequestHandler`'s default 501 which is still rejection.
+- **No outbound `webhook_deliveries` audit row.** Spec was explicit (table is for inbound). Make.com has scenario history on its side; we don't need a per-pull row. Logged as a followup if duplicate-pull volume ever becomes worth tracking.
+
+Filter-delta observation worth flagging: **100 actionable / 195 non-archived = 95 clients dropped server-side** — bigger than expected. Likely causes: pre-resolution-sweep clients without `slack_user_id` resolved + clients without a `slack_channels` row in our DB. The endpoint is correct (it returns what's actionable today), but this surfaces a gap in client→Slack-identity coverage that may warrant a sweep before Scott's onboarding tomorrow. Surfaced to Drake at deploy time; not a blocker on the endpoint shipping.
+
+**Migration count: 0.** Pure new-endpoint + harness. No schema changes — `accountability_enabled` / `nps_enabled` columns landed in M5.6 (migration 0022).
+
+**Path 2 commit chain shipped 2026-05-04** (all on origin/main): `b204a88` (handler + vercel.json) → `b23b27c` (harness). Vercel auto-deploy followed; build registered the new function on the second-to-last poll.

@@ -11,6 +11,41 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Path 2 outbound roster — outbound-pull audit log not implemented
+
+- **What:** `api/accountability_roster.py` (Path 2 outbound, shipped 2026-05-04) does NOT write a `webhook_deliveries`-equivalent row per pull. The decision was deliberate at ship time: that table is for inbound deliveries; this is outbound; Make.com has scenario history on its side; V1 doesn't need a per-pull audit row. Logged here so the deferral is explicit.
+- **Why it matters:** if duplicate-pull volume spikes (Make.com mis-configured to pull every minute, an upstream retry loop), or if Drake later wants to debug "did Make.com actually pull at 9am today and what did it get," there's no server-side record. Vercel function logs persist for ~7 days but aren't structured for this kind of query.
+- **Next action:** if the gap surfaces (operational mystery about Make.com's pull cadence, or a need for "what was in yesterday's roster" forensics), add an `outbound_webhook_pulls` table — at minimum `(id, source, pulled_at, response_count, secret_match boolean)`. Mirror the `webhook_deliveries` lifecycle helpers in the receiver. Could share a table with inbound if a `direction` column is added; argument either way. ~30 lines added to the handler. Trigger: any operational ambiguity Drake can't resolve from Vercel function logs alone.
+- **Logged:** 2026-05-04 (Path 2 outbound ship — explicit V1 carve-out per spec).
+
+## Path 2 outbound — no rate limiting on Make.com pulls
+
+- **What:** the accountability roster endpoint does not enforce any rate limit. Make.com is configured to pull "once per day" per Zain's existing scenario, but nothing on our side prevents a misconfigured scenario or a manual replay from hammering the endpoint. Each pull issues one DB query (single round trip with embedded join) so the cost is tiny — but tiny times misconfigured-fast can still saturate.
+- **Why it matters:** at current volume (~100 actionable rows, single query, <1s response) a runaway pull at 1Hz would cost minutes of function-time per day; not a fire but not free. The bigger risk is a runaway pulling auth-failed (401s loop fast on Make.com if the secret rotates and they don't update). Vercel's per-function concurrency cap provides a soft ceiling.
+- **Next action:** if a runaway surfaces (cost spike, function-time alerts, audit log shows >>24 pulls/day), add a per-IP or per-secret rate limit. Two options: (a) Vercel Edge Config for a moving-window counter, (b) `webhook_deliveries`-style log + a count check at request entry. Don't pre-build — wait for the symptom.
+- **Logged:** 2026-05-04 (Path 2 outbound ship — non-blocker at current volume).
+
+## Path 2 outbound — no pre-filter mode flag for "only enabled clients"
+
+- **What:** the endpoint returns ALL actionable clients with the `accountability_enabled` and `nps_enabled` booleans in the payload; Make.com filters on its side. There's no `?only_enabled=true` query param that would have the server pre-filter rows where both booleans are false. The decision was deliberate — keeping the contract simple ("here is the roster, you decide what to do with it") and avoiding endpoint-shape proliferation.
+- **Why it matters:** if Zain's Make.com scenario grows complex enough that filtering the JSON in his platform becomes a maintenance burden, the simplest server-side opt-in is a query param. Not urgent — Make.com filters JSON arrays trivially.
+- **Next action:** if Zain asks for it, add a `?only_enabled=true` flag that filters the response to rows where `accountability_enabled OR nps_enabled` is true. Default behavior unchanged. ~5 lines in the handler.
+- **Logged:** 2026-05-04 (Path 2 outbound ship — deferred per "every row is actionable" contract).
+
+## Path 2 outbound — slack_channels staleness vs Slack-side archive state
+
+- **What:** the endpoint trusts our `slack_channels.is_archived` column. We have no reconciler that updates that flag when a channel is archived on Slack's side. A channel archived in Slack but still `is_archived=false` in our table will surface a `slack_channel_id` Make.com then fails to post to (Slack API returns `channel_not_found` or similar).
+- **Why it matters:** undetected drift = Make.com automation silently failing to deliver to specific clients, with the failure logged on Make.com's side rather than ours. Likely rare today (channels don't get archived often) but the gap is real.
+- **Next action:** either (a) add a reconciler that periodically checks Slack `conversations.info` for each non-archived `slack_channels` row and flips `is_archived=true` on Slack-archived channels, OR (b) accept the drift and let Make.com surface "channel not found" failures back to Drake/Zain operationally. (b) is the V1 stance. Trigger to revisit: any reported case of accountability/NPS automation failing to deliver to a specific client.
+- **Logged:** 2026-05-04 (Path 2 outbound ship — V1 carve-out, deferred).
+
+## Client→Slack-identity coverage gap — 95 of 195 non-archived clients filtered from Path 2 roster
+
+- **What:** Path 2's deploy-time numbers showed 100 actionable / 195 non-archived = 95 filtered server-side. Of those 95, the breakdown is some combination of: NULL `clients.slack_user_id`, no row in `slack_channels` matching the client, and (rarely) NULL `clients.email`. CLAUDE.md's prior per-message coverage note (`~94 of 2,914 messages from unknown authors`) is a different angle on the same underlying gap. The first time the gap got per-client visibility was the Path 2 deploy.
+- **Why it matters:** these 95 clients can't be acted on by Make.com's accountability or NPS automation until their Slack identity resolves. If most are paused/leave/churned, the gap is mostly cosmetic; if meaningful chunks are active clients, Scott will notice missing rows on his daily check.
+- **Next action:** triage SQL — count the 95 by `status`. If active count is meaningful, build a one-shot resolver: hit Slack `users.lookupByEmail` per unresolved `clients.email`, populate `slack_user_id` on hits. Bundle into the P1 cleanup pass for today's session if the active-count is non-trivial.
+- **Logged:** 2026-05-04 (Path 2 outbound deploy — surfaced the per-client view of an existing gap).
+
 ## EditableField `<select>` missing id/name/htmlFor — a11y gap
 
 - **What:** the `<select>` rendered by `components/client-detail/editable-field.tsx` (renderEditor's enum / three_state_bool branch, around lines 280-305 of the post-hotfix file) has no `id` or `name` attribute, and the `<Label>` rendered above it at line ~197 has no `htmlFor` linking the two. Same gap exists on the text/textarea/integer/numeric/date `<Input>` and `<Textarea>` variants. Surfaced during the M5.6 hotfix diagnosis when Drake noticed browser dev tools warning about un-labeled form fields; ruled out as a cause of Bug 1 (silent-click bug) but the a11y problem is real.

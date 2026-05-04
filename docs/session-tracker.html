@@ -237,7 +237,7 @@
       Today's four priorities follow M5.6's close-out. Path 2 was reshaped by the Zain conversation — it's a daily-pull GET endpoint Make.com hits for the active-client roster (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">nps_enabled</span> + Slack identifiers, joined per-client), not the event-driven UPDATE-listener architecture previously sketched; this replaces the Financial Master Sheet as Zain's daily source. P2 is the manual cleanup pass to land Gregory in a usable state by EOD, P3 is a Drake-led plan around base44 for Nabeel, and P4 is onboarding Scott tomorrow so he starts using Gregory in his daily workflow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — new session start (post-M5.6)</span>
+      <span><strong>Last updated:</strong> Session M5 — Path 2 outbound roster shipped + verified</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -247,35 +247,28 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">4</span>
+        <span class="count">3</span>
       </header>
 
       <div class="card">
         <div class="id">P1</div>
-        <div class="title">Hook up Gregory ↔ Make.com for accountability + NPS daily roster (TOP)</div>
-        <div class="subtitle">GET endpoint Make.com pulls daily. Returns active non-archived clients with <span style="font-family: var(--mono); font-size: 12.5px;">client_email</span>, <span style="font-family: var(--mono); font-size: 12.5px;">slack_user_id</span>, <span style="font-family: var(--mono); font-size: 12.5px;">slack_channel_id</span> (joined from <span style="font-family: var(--mono); font-size: 12.5px;">slack_channels</span> — most recently created non-archived per client, mirroring <span style="font-family: var(--mono); font-size: 12.5px;">getClientById</span>'s selection), <span style="font-family: var(--mono); font-size: 12.5px;">accountability_enabled</span>, <span style="font-family: var(--mono); font-size: 12.5px;">nps_enabled</span>. Auth via <span style="font-family: var(--mono); font-size: 12.5px;">X-Webhook-Secret</span> header against a new env var. Replaces the Financial Master Sheet as the source of truth Zain's existing Make.com automation pulls from. Reshaped from prior "event-driven UPDATE listener" framing by yesterday's Zain walkthrough.</div>
-        <div class="pills"><span class="pill">endpoint build</span><span class="pill">Make.com integration</span></div>
+        <div class="title">Full data cleanup pass — Gregory usable by EOD</div>
+        <div class="subtitle">Drake's manual cleanup walkthrough. Includes M4 Chunk C carry-overs (21 non-churn auto-creates cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails), 32 currently-CSM-owned negative-status clients from M5.6 (Lou 18 / Scott Wilson 13 / Nabeel 1 — decide whether to reassign to Scott Chasing), email-mismatch cleanup from M5.4 NPS backfill (Jonathan Duran-Rojas + Luis Malo), the client→Slack-identity gap surfaced by Path 2's deploy (95 of 195 non-archived filtered out — NULL <span style="font-family: var(--mono); font-size: 12.5px;">slack_user_id</span> or no resolvable channel), any field gaps surfacing in daily use. Goal: Gregory is in a usable state for Scott's onboarding tomorrow.</div>
+        <div class="pills"><span class="pill">manual / no code</span><span class="pill warn">gates P3</span></div>
       </div>
 
       <div class="card">
         <div class="id">P2</div>
-        <div class="title">Full data cleanup pass — Gregory usable by EOD</div>
-        <div class="subtitle">Drake's manual cleanup walkthrough. Includes M4 Chunk C carry-overs (21 non-churn auto-creates cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails), 32 currently-CSM-owned negative-status clients from M5.6 (Lou 18 / Scott Wilson 13 / Nabeel 1 — decide whether to reassign to Scott Chasing), email-mismatch cleanup from M5.4 NPS backfill (Jonathan Duran-Rojas + Luis Malo), any field gaps surfacing in daily use. Goal: Gregory is in a usable state for Scott's onboarding tomorrow.</div>
-        <div class="pills"><span class="pill">manual / no code</span><span class="pill warn">gates P4</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">P3</div>
         <div class="title">Plan around base44 for Nabeel</div>
         <div class="subtitle">Drake-led planning task. Output is a plan for Nabeel's review.</div>
         <div class="pills"><span class="pill">planning / no code</span></div>
       </div>
 
       <div class="card">
-        <div class="id">P4</div>
+        <div class="id">P3</div>
         <div class="title">Onboard Scott on Gregory for daily use starting tomorrow</div>
-        <div class="subtitle">Walkthrough so Scott can begin using Gregory in his daily workflow. Sits on top of P2 — depends on the data cleanup landing first so Scott sees a clean dashboard.</div>
-        <div class="pills"><span class="pill">walkthrough</span><span class="pill warn">P2-gated</span></div>
+        <div class="subtitle">Walkthrough so Scott can begin using Gregory in his daily workflow. Sits on top of P1 — depends on the data cleanup landing first so Scott sees a clean dashboard.</div>
+        <div class="pills"><span class="pill">walkthrough</span><span class="pill warn">P1-gated</span></div>
       </div>
     </div>
 
@@ -296,8 +289,15 @@
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">6</span>
+        <span class="count">7</span>
       </header>
+
+      <div class="card">
+        <div class="id">Path 2</div>
+        <div class="title">Accountability + NPS daily roster GET endpoint (Make.com outbound)</div>
+        <div class="subtitle"><span style="font-family: var(--mono); font-size: 12.5px;">api/accountability_roster.py</span> — single-query embedded join on <span style="font-family: var(--mono); font-size: 12.5px;">slack_channels</span>, per-client filter mirrors <span style="font-family: var(--mono); font-size: 12.5px;">getClientById</span>'s selection (most recently created non-archived). Auth via <span style="font-family: var(--mono); font-size: 12.5px;">X-Webhook-Secret</span> header against <span style="font-family: var(--mono); font-size: 12.5px;">MAKE_OUTBOUND_ROSTER_SECRET</span>. Server-side filter excludes NULL <span style="font-family: var(--mono); font-size: 12.5px;">slack_user_id</span>, missing channel, or NULL email — every row in the response is actionable. Live deploy: 100 actionable / 195 non-archived (95 filtered, surfaces a Slack-identity coverage gap rolled into P1). 7-path local harness 22/22 green; 4/4 production probes green (200 with secret / 401 / 401 / 405). Reshaped from prior "event-driven UPDATE listener" framing by yesterday's Make.com walkthrough with Zain.</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill stretch">deploy verified</span></div>
+      </div>
 
       <div class="card">
         <div class="id">M5.6</div>
