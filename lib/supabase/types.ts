@@ -725,6 +725,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_standing: string | null
           occupation: string | null
           phone: string | null
           program_type: string | null
@@ -757,6 +758,7 @@ export type Database = {
           location?: string | null
           metadata?: Json
           notes?: string | null
+          nps_standing?: string | null
           occupation?: string | null
           phone?: string | null
           program_type?: string | null
@@ -789,6 +791,7 @@ export type Database = {
           location?: string | null
           metadata?: Json
           notes?: string | null
+          nps_standing?: string | null
           occupation?: string | null
           phone?: string | null
           program_type?: string | null
@@ -1264,6 +1267,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_standing: string | null
           occupation: string | null
           phone: string | null
           program_type: string | null
@@ -1310,6 +1314,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_standing: string | null
           occupation: string | null
           phone: string | null
           program_type: string | null
@@ -1356,6 +1361,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_standing: string | null
           occupation: string | null
           phone: string | null
           program_type: string | null

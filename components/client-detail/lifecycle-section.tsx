@@ -5,8 +5,15 @@
 // journey_stage / csm_standing edits go through history-writing RPC
 // actions (see lib/db/clients.ts updateClientJourneyStageWithHistory /
 // updateClientCsmStandingWithHistory and migration 0018). archetype is
-// a plain whitelisted column. Latest NPS is read-only display; the
-// "Add NPS score" button below it opens NpsEntryForm.
+// a plain whitelisted column.
+//
+// NPS Standing is read-only display of clients.nps_standing — populated
+// by the Airtable webhook receiver (M5.4 Path 1) and a one-shot
+// historical backfill. Distinct from latest_nps (nps_submissions.score)
+// which is empty in V1 because score-piping is deferred. The
+// "Add NPS score" button below opens NpsEntryForm which writes
+// nps_submissions; both surfaces stay because they cover different
+// data sources.
 //
 // HealthScoreIndicator and ConcernsBlock preserve the rendering from
 // B1 — locked against the client_health_scores.factors jsonb shape.
@@ -17,9 +24,9 @@
 import Link from 'next/link'
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section, Subsection } from './section'
-import { ReadOnlyField } from './read-only-field'
 import { EditableField } from './editable-field'
 import { NpsEntryForm } from './nps-entry-form'
+import { NpsStandingPill } from './nps-standing-pill'
 import {
   updateClientCsmStandingAction,
   updateClientField,
@@ -150,10 +157,6 @@ function ConcernsBlock({ health }: { health: ClientDetail['latest_health'] }) {
 }
 
 export function LifecycleSection({ client }: { client: ClientDetail }) {
-  const latestNpsDisplay = client.latest_nps
-    ? `${client.latest_nps.score}  (${new Date(client.latest_nps.submitted_at).toLocaleDateString()})`
-    : null
-
   return (
     <Section title="Lifecycle & Standing">
       <div className="grid grid-cols-2 gap-4">
@@ -185,11 +188,12 @@ export function LifecycleSection({ client }: { client: ClientDetail }) {
         />
 
         <div>
-          <ReadOnlyField
-            label="Latest NPS"
-            value={latestNpsDisplay}
-            editable={false}
-          />
+          <div className="space-y-1">
+            <div className="text-sm font-medium text-muted-foreground">
+              NPS Standing
+            </div>
+            <NpsStandingPill value={client.nps_standing} />
+          </div>
           <div className="mt-2">
             <NpsEntryForm clientId={client.id} />
           </div>
