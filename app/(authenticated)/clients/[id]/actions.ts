@@ -170,6 +170,18 @@ function narrowValue(
       }
     }
 
+    case 'boolean_toggle': {
+      // Two-state — null is not allowed (DB columns are NOT NULL with
+      // default true). Used by accountability_enabled / nps_enabled
+      // (M5.6 cascade-owned toggles).
+      if (rawValue === true || rawValue === false) {
+        return { ok: true, value: rawValue }
+      }
+      if (rawValue === 'true') return { ok: true, value: true }
+      if (rawValue === 'false') return { ok: true, value: false }
+      return { ok: false, error: `${field} must be true or false.` }
+    }
+
     case 'string_array': {
       if (!Array.isArray(rawValue)) {
         return { ok: false, error: 'tags must be an array of strings.' }

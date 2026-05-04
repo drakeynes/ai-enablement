@@ -43,6 +43,10 @@ const UPDATABLE_FIELDS = [
   // Three-state booleans
   'sales_group_candidate',
   'dfy_setting',
+  // Two-state boolean toggles (M5.6 — cascade-owned for negative-status
+  // transitions, manually flippable from the dashboard, not sticky)
+  'accountability_enabled',
+  'nps_enabled',
   // Arrays
   'tags',
 ] as const
@@ -72,6 +76,8 @@ export const FIELD_TYPES: Record<UpdatableField, FieldType> = {
   ghl_adoption: 'enum_ghl_adoption',
   sales_group_candidate: 'three_state_bool',
   dfy_setting: 'three_state_bool',
+  accountability_enabled: 'boolean_toggle',
+  nps_enabled: 'boolean_toggle',
   tags: 'string_array',
 }
 
@@ -84,6 +90,7 @@ export type FieldType =
   | 'enum_trustpilot'
   | 'enum_ghl_adoption'
   | 'three_state_bool'
+  | 'boolean_toggle'
   | 'string_array'
 
 export const GHL_ADOPTION_VALUES = [
@@ -458,6 +465,7 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
       .from('team_members')
       .select('id, full_name, email')
       .eq('is_active', true)
+      .eq('is_csm', true)
       .is('archived_at', null)
       .order('full_name'),
     slackMsgPromise,

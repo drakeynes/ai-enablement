@@ -105,14 +105,17 @@ export default async function ClientsPage({
 
   const sorted = sortRows(rows, sort, dir)
 
-  // Build the list of CSMs that have at least one active assignment so
-  // the filter dropdown only shows real options. Also fetch the full
-  // active team_members list as a fallback.
+  // Build the list of CSMs for the Primary CSM filter dropdown.
+  // is_csm=true is the M5.6 cleanup gate — non-CSM team_members
+  // (engineering, ops, sales) are excluded; the four real CSMs
+  // (Lou, Nico, Scott Wilson, Nabeel) plus the Scott Chasing sentinel
+  // surface here.
   const supabase = createAdminClient()
   const { data: teamMembers } = await supabase
     .from('team_members')
     .select('id, full_name')
     .eq('is_active', true)
+    .eq('is_csm', true)
     .is('archived_at', null)
     .order('full_name')
 

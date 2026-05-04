@@ -707,6 +707,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          accountability_enabled: boolean
           archetype: string | null
           archived_at: string | null
           arrears: number
@@ -725,6 +726,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_enabled: boolean
           nps_standing: string | null
           occupation: string | null
           phone: string | null
@@ -740,6 +742,7 @@ export type Database = {
           upfront_cash_collected: number | null
         }
         Insert: {
+          accountability_enabled?: boolean
           archetype?: string | null
           archived_at?: string | null
           arrears?: number
@@ -758,6 +761,7 @@ export type Database = {
           location?: string | null
           metadata?: Json
           notes?: string | null
+          nps_enabled?: boolean
           nps_standing?: string | null
           occupation?: string | null
           phone?: string | null
@@ -773,6 +777,7 @@ export type Database = {
           upfront_cash_collected?: number | null
         }
         Update: {
+          accountability_enabled?: boolean
           archetype?: string | null
           archived_at?: string | null
           arrears?: number
@@ -791,6 +796,7 @@ export type Database = {
           location?: string | null
           metadata?: Json
           notes?: string | null
+          nps_enabled?: boolean
           nps_standing?: string | null
           occupation?: string | null
           phone?: string | null
@@ -1111,6 +1117,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          is_csm: boolean
           metadata: Json
           role: string
           slack_user_id: string | null
@@ -1123,6 +1130,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean
+          is_csm?: boolean
           metadata?: Json
           role: string
           slack_user_id?: string | null
@@ -1135,6 +1143,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          is_csm?: boolean
           metadata?: Json
           role?: string
           slack_user_id?: string | null
@@ -1249,6 +1258,7 @@ export type Database = {
           p_note?: string
         }
         Returns: {
+          accountability_enabled: boolean
           archetype: string | null
           archived_at: string | null
           arrears: number
@@ -1267,6 +1277,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_enabled: boolean
           nps_standing: string | null
           occupation: string | null
           phone: string | null
@@ -1296,6 +1307,7 @@ export type Database = {
           p_note?: string
         }
         Returns: {
+          accountability_enabled: boolean
           archetype: string | null
           archived_at: string | null
           arrears: number
@@ -1314,6 +1326,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_enabled: boolean
           nps_standing: string | null
           occupation: string | null
           phone: string | null
@@ -1343,6 +1356,7 @@ export type Database = {
           p_note?: string
         }
         Returns: {
+          accountability_enabled: boolean
           archetype: string | null
           archived_at: string | null
           arrears: number
@@ -1361,6 +1375,7 @@ export type Database = {
           location: string | null
           metadata: Json
           notes: string | null
+          nps_enabled: boolean
           nps_standing: string | null
           occupation: string | null
           phone: string | null
