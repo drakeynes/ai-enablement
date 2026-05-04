@@ -12,11 +12,11 @@ import {
   updateClientStatusWithHistory,
   FIELD_TYPES,
   GHL_ADOPTION_VALUES,
-  TRUSTPILOT_VALUES,
   type FieldType,
   type ProfilePath,
   type UpdatableField,
 } from '@/lib/db/clients'
+import { TRUSTPILOT_VALUES } from '@/lib/client-vocab'
 import { mergeClient, type MergeResult } from '@/lib/db/merge'
 
 // ----------------------------------------------------------------------

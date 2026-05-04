@@ -50,7 +50,7 @@ export type EditableFieldProps = {
   onSave: (
     newValue: RawValue,
   ) => Promise<{ success: true } | { success: false; error: string }>
-  options?: Array<{ value: string; label: string }>
+  options?: ReadonlyArray<{ readonly value: string; readonly label: string }>
   placeholder?: string
   mono?: boolean
   // Optional pretty-printer for display mode (e.g. format numeric_money as
@@ -235,7 +235,7 @@ function renderEditor({
   setDraft: (s: string) => void
   commit: () => void
   cancel: () => void
-  options?: Array<{ value: string; label: string }>
+  options?: ReadonlyArray<{ readonly value: string; readonly label: string }>
   placeholder?: string
   mono: boolean
   disabled: boolean

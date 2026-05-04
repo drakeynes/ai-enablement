@@ -86,12 +86,6 @@ export type FieldType =
   | 'three_state_bool'
   | 'string_array'
 
-export const TRUSTPILOT_VALUES = [
-  'yes',
-  'no',
-  'ask',
-  'asked',
-] as const
 export const GHL_ADOPTION_VALUES = [
   'never_adopted',
   'affiliate',

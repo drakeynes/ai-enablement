@@ -23,6 +23,7 @@
 
 import Link from 'next/link'
 import type { ClientDetail } from '@/lib/db/clients'
+import { CSM_STANDING_OPTIONS } from '@/lib/client-vocab'
 import { Section, Subsection } from './section'
 import { EditableField } from './editable-field'
 import { NpsEntryForm } from './nps-entry-form'
@@ -38,13 +39,6 @@ type ConcernShape = {
   severity?: 'low' | 'medium' | 'high'
   source_call_ids?: string[]
 }
-
-const CSM_STANDING_OPTIONS = [
-  { value: 'happy', label: 'Happy' },
-  { value: 'content', label: 'Content' },
-  { value: 'at_risk', label: 'At risk' },
-  { value: 'problem', label: 'Problem' },
-]
 
 function HealthScoreIndicator({
   health,

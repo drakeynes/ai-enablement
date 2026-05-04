@@ -8,16 +8,10 @@
 // path with type-narrowing in the Server Action.
 
 import type { ClientDetail } from '@/lib/db/clients'
+import { TRUSTPILOT_OPTIONS } from '@/lib/client-vocab'
 import { Section, Subsection } from './section'
 import { EditableField } from './editable-field'
 import { updateClientField } from '@/app/(authenticated)/clients/[id]/actions'
-
-const TRUSTPILOT_OPTIONS = [
-  { value: 'yes', label: 'Yes' },
-  { value: 'no', label: 'No' },
-  { value: 'ask', label: 'Ask' },
-  { value: 'asked', label: 'Asked' },
-]
 
 const GHL_OPTIONS = [
   { value: 'never_adopted', label: 'Never adopted' },
