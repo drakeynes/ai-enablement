@@ -11,6 +11,27 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## Cleanup pass — toggle re-activation for positive-status transitions
+
+- **What:** the M5 master sheet reconcile (2026-05-04) fired status flips going positive (`ghost→active` or `paused→active`) for 2 clients (Marcus Miller, Allison Jayme Boeshans) and possibly more in future runs. The M5.6 cascade is **one-directional** (off-only) — when those clients moved INTO negative status earlier, `accountability_enabled` and `nps_enabled` got flipped to false, and the cascade does NOT auto-revert on positive transitions. So Marcus Miller is now active but `accountability_enabled=false, nps_enabled=false`. Allison Jayme Boeshans appears to have been manually flipped back to true at some point.
+- **Why it matters:** an active client with accountability/nps automation off won't get DMs, nudges, or NPS surveys. If Scott expects these clients to receive automation, the toggles need a manual flip or the cleanup script needs a "positive-transition toggle reset" pass.
+- **Next action:** two paths. (a) Add a "positive-transition toggle reset" subsection to `scripts/cleanup_master_sheet_reconcile.py` that flips toggles to true when status goes from negative → active. Risk: makes the apply less idempotent (re-running might flip something Scott explicitly wants off). (b) Surface positive-transition clients in scott_notes Bucket B with their current toggle state and let Scott decide per-client. Lean: (b) — keeps the cleanup script's "respect Scott's explicit CSV values" semantics intact.
+- **Logged:** 2026-05-04 (M5 master sheet reconcile — Marcus Miller + Allison Jayme Boeshans surfaced this).
+
+## Cleanup pass — Matthew Gibson is in CSV but not Gregory
+
+- **What:** Matthew Gibson (USA row 180, email `leandeavor@gmail.com`, owned by Nico) is on Scott's master sheet as an active client AND is one of the handover-note targets per Scott's morning message. He doesn't exist in Gregory yet (handover note couldn't apply to him; surfaced to scott_notes A6 + A9). 7 other unmatched-with-email or unmatched-without-email CSV rows are similar candidates — see scott_notes A9 + A10.
+- **Why it matters:** these clients are operationally real but invisible to Gregory. Scott's daily Gregory review will miss them. Path 2 outbound roster also doesn't include them.
+- **Next action:** for each unmatched-with-email row (Matthew Gibson, Anthony Huang, Melvin Dayal): confirm with Scott whether to create or whether they're duplicates of an existing Gregory client (then add to alternate_emails). For unmatched-without-email rows (5 clients): Scott decides per row. Once Matthew Gibson is created, re-run the cleanup script — the handover-note append is idempotent and will pick him up.
+- **Logged:** 2026-05-04 (M5 master sheet reconcile A6/A9/A10).
+
+## Cleanup pass — re-run cadence + idempotency monitoring
+
+- **What:** `scripts/cleanup_master_sheet_reconcile.py` is designed to be re-run as Scott edits the master sheet. The first run (2026-05-04) made 95 explicit DB writes touching ~70 unique clients. Idempotency is achieved per-RPC (no-op when unchanged), per-trustpilot (UPDATE only when value differs), and per-handover-note (gate on literal-text-not-present). But each re-run does fire the cascade trigger for any negative-going status transition that's already true, writing a fresh `client_standing_history` row attributed to Gregory Bot with `cascade:status_to_<status>:by:<gregory-bot-uuid>`. Documented intentional in M5.6, but worth knowing if scanning history.
+- **Why it matters:** if Scott's master sheet stops drifting (Path 2 outbound landed yesterday, so Gregory ↔ Make.com automation is closing the loop), this script becomes a periodic sanity check. If it stays drift-y because Scott still edits the master sheet manually, the script becomes a regular sweep tool. Either way: the audit trail builds up `cleanup:m5_master_sheet_reconcile` history rows over time.
+- **Next action:** decide cadence after a few runs. Options: (a) ad-hoc when Scott sends a "match Gregory to my sheet please" Slack, (b) weekly cron (would need a Vercel function wrapper or Make.com trigger), (c) deprecate the script entirely once Path 2 + future Path 3-equivalent loops close all the holes. Lean: (a) until the next two cleanup-pass uses tell us whether (b) or (c) is right.
+- **Logged:** 2026-05-04 (M5 master sheet reconcile first run).
+
 ## Path 2 outbound roster — outbound-pull audit log not implemented
 
 - **What:** `api/accountability_roster.py` (Path 2 outbound, shipped 2026-05-04) does NOT write a `webhook_deliveries`-equivalent row per pull. The decision was deliberate at ship time: that table is for inbound deliveries; this is outbound; Make.com has scenario history on its side; V1 doesn't need a per-pull audit row. Logged here so the deferral is explicit.

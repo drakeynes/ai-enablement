@@ -633,3 +633,53 @@ Filter-delta observation worth flagging: **100 actionable / 195 non-archived = 9
 **Migration count: 0.** Pure new-endpoint + harness. No schema changes — `accountability_enabled` / `nps_enabled` columns landed in M5.6 (migration 0022).
 
 **Path 2 commit chain shipped 2026-05-04** (all on origin/main): `b204a88` (handler + vercel.json) → `b23b27c` (harness). Vercel auto-deploy followed; build registered the new function on the second-to-last poll.
+
+### Cleanup pass — master sheet reconcile (shipped 2026-05-04)
+
+Shipped: a two-phase Python tool (`scripts/cleanup_master_sheet_reconcile.py`) that diffs Scott's USA + AUS Financial Master Sheet tabs against Gregory's `clients` table and applies the high-confidence delta via existing RPCs. Replaces the M4 Chunk C `import_master_sheet.py` for ongoing reconciliation — that script was build-time seed; this one is steady-state cleanup. Built to handle the dual-CSV reality (master sheet now split across two regional tabs with different column orders) and the cascade-aware delta semantics that landed with M5.6.
+
+Phase 1 (read-only): reads both CSVs, matches each row via the same 4-step ladder as `import_master_sheet.py` (email primary → email alternate → name primary → name alternate), classifies proposed changes into Tier 1 (auto-apply via RPC), Tier 2 (eyeball), Tier 3 (Scott meeting), and writes:
+
+- `docs/data/m5_cleanup_diff.md` — structured diff for Drake to scan top-to-bottom
+- `docs/data/m5_cleanup_scott_notes.md` — Bucket A pre-apply ambiguities + Bucket B post-apply mismatches + Quick Reference (status directives applied)
+
+Phase 2 (`--apply`): tiered apply pass in cascade-aware order — status → re-read → csm_standing → primary_csm → trustpilot direct UPDATE → handover notes append. All RPC calls attributed to Gregory Bot UUID with structured note `cleanup:m5_master_sheet_reconcile` for SQL-side joinable audit. Re-diffs post-apply; remaining Gregory-vs-CSV mismatches land in scott_notes Bucket B.
+
+Pieces:
+
+- **CSV ingestion**: header-based parsing (filename is informational only — the contract is `Client Name` for USA / `Customer Name` for AUS). Trailing-whitespace headers (`Standing `, `Owner `, `Meetings May `) tolerated. Aggregator footer rows (USA's `TOTALS` / `Referrals` / `Upsells` / `Refund Rate` / etc.) filtered by "name non-empty AND email/status/owner/standing all blank" — drops 13 footer rows that survived the simpler blank-name filter.
+- **Vocab maps** (CSV → Gregory): status (`Active`/`Paused`/`Paused (Leave)`/`Ghost`/`Churn`/`Churn (Aus)` + `N/A`/blank skip sentinels), csm_standing (compound parser handling `Owing Money, At risk` → at_risk), trustpilot (identity post-0020), owner (longest-match-first: `Scott Chasing` before `Scott` first-name fallback — AUS data has `Scott Chasing` as a real owner value).
+- **Cascade-redundancy filter** (Drake's adjustment 1): if status is going to a negative value AND CSV csm_standing == `at_risk`, skip the explicit `update_client_csm_standing_with_history` RPC — the cascade trigger sets at_risk for free; an extra RPC produces a duplicate history row for no behavior delta. Positive-going transitions (Marcus Miller `ghost→active`, Allison Jayme Boeshans `paused→active`) keep the explicit write because the cascade is **one-directional** (off-only) and does not auto-revert standing.
+- **slack_channel_id coverage filter** (Drake's adjustment 2): the previous "surface every CSV channel" approach produced 126 Tier 2 rows that were mostly noise (Gregory already had channels for those clients). Refactored to query `slack_channels` and only flag clients where Gregory has zero channels — knocked 126 → 26 real coverage gaps.
+- **Handover note append**: 8 specific clients per Scott's morning message (Marcus Miller, Mac McLaughlin, Srilekha Sikhinam, Kurt Buechler, Michael Garner(Arthur Taylor), Sierra Waldrep, Shivam Patel, Nico Bubalo) get the literal handover note text appended to `clients.notes`. Idempotent on existing-text-contains-note. Matt G resolved to Matthew Gibson via CSV; he's a new client (CSV-side) not yet in Gregory, surfaced to scott_notes A6 + A9. The literal `Lou` from Scott's spec list is genuinely ambiguous (no client by that name in either CSV) — surfaced to A6.
+- **Phase 2 apply ordering** (cascade-aware): status flips fire first, cascade BEFORE/AFTER triggers run in-transaction, then we re-read post-cascade state. Then csm_standing flips: explicit RPC writes CSV value, overriding cascade's at_risk for the contradiction subset (status moved negative + CSV said non-at_risk). Then primary_csm: explicit RPC overrides cascade's Scott Chasing reassignment for clients where CSV says a real CSM should own. Then trustpilot direct UPDATE (no history table). Then handover notes append (read current, check idempotency, write).
+
+Apply outcome (2026-05-04 cloud cleanup):
+
+- 36 status flips applied (34 negative-going → cascade fires; 2 positive-going → explicit standing/owner writes required)
+- 32 csm_standing flips applied (4 cascade-redundant skipped at compute_diff time)
+- 22 primary_csm changes (16 applied via `change_primary_csm`, 6 already matched — likely cascade-set Scott Chasing already aligned with CSV)
+- 13 trustpilot flips applied (direct UPDATE; no history table)
+- 8 handover notes applied (0 idempotent skips — first run)
+- 0 errors
+- 0 post-apply Bucket B mismatches — Gregory matches CSV across all Tier 1 fields
+
+Tier 2 + Tier 3 staying for Scott meeting / manual triage (per Drake's adjustments 3, 4, 5):
+
+- 26 slack_channel_id coverage gaps (clients with no slack_channels row but CSV has one)
+- 15 csm_standing "Owing Money" / unparseable values (scott_notes A5 — CSM annotation, not a Gregory standing value)
+- 2 email mismatches (scott_notes A8 — handle per `docs/runbooks/backfill_nps_from_airtable.md` § Failure modes)
+- 4 Aleks-owned rows (scott_notes A2 — M4 Chunk C carry-over, Scott reassigns)
+- 59 NPS Standing CSV-vs-Gregory differences (scott_notes A4 — Path 1 owns the column; informational only)
+- 3 unmatched-with-email rows (scott_notes A9 — Anthony Huang, Matthew Gibson, Melvin Dayal — likely new clients to create-or-merge)
+- 5 unmatched-without-email rows (scott_notes A10 — Clyde Vinson, Mishank, Rachelle Hernandez, Scott Stauffenberg, Vaishali Adla — Scott decides per row)
+
+Spec deviations:
+
+- **CSV-wins ordering for cascade contradictions** (status going negative + CSV csm_standing != at_risk). Drake's apply-gate framing implied "cascade overrides to at_risk; surface as Bucket B contradiction." The implementation has the explicit RPC fire AFTER the cascade in the same flow, so the explicit RPC wins — Gregory ends up matching CSV. End result is the cleanest possible (no Bucket B mismatches), honors Scott's explicit CSV intent. The diff still labels these cases at compute time so Drake can spot the pattern; the post-apply re-diff confirms Gregory matches CSV.
+- **Toggle re-activation for positive-status transitions not handled.** Marcus Miller (ghost→active) ends with `accountability_enabled=False`, `nps_enabled=False` — cascade backfill from M5.6 set them False when he was negative-status, and the cascade is one-directional (off-only). These don't auto-revert on positive transitions. Followup logged for Drake/Scott to manually flip back via dashboard or to add a "positive-transition toggle reset" pass to this script in V1.1.
+- **Aggregator footer filter narrower than positional**. The USA tab has 13 footer rows with names like `TOTALS`, `Referrals`, `Refund Rate`, `BE Collection Opportunity` that survived the simpler blank-name filter. Filter rule: name non-empty AND email/status/owner/standing all blank. Real clients with `N/A` status (Vaishali Adla, Rachelle Hernandez) keep their `N/A` strings which pass the filter — they surface to scott_notes A10 correctly.
+
+**Migration count: 0.** All writes go through existing RPCs (`update_client_status_with_history`, `update_client_csm_standing_with_history`, `change_primary_csm`) + direct UPDATE on `clients.trustpilot_status` and `clients.notes`. The `cleanup:m5_master_sheet_reconcile` note format is SQL-joinable to find every row written by this sweep.
+
+**Cleanup commit chain shipped 2026-05-04** (all on origin/main): `7f4d917` (Phase 1 dry-run + script) → `1c80149` (Drake-adjusted refactor + Phase 2 apply landed). Idempotency: re-running `--apply` against unchanged CSVs is a near-no-op — RPCs are no-op-when-unchanged; the handover-note append is gated on the literal text not already being present.
