@@ -1,0 +1,163 @@
+# M5 cleanup — Scott meeting notes
+
+Generated: `2026-05-04T20:47:01.458309+00:00`
+
+## Bucket A — pre-apply ambiguities (Scott decides)
+
+### A1. Blank or N/A status (0)
+
+_(none)_
+
+### A2. Aleks-owned rows (4)
+
+- **Alex Crosby** (USA) — current owner `null`
+- **Colin Hill** (USA) — current owner `null`
+- **Jose Trejo** (USA) — current owner `null`
+- **Ming-Shih Wang** (USA) — current owner `null`
+
+### A3. Name-ambiguous CSV rows (0)
+
+_(none)_
+
+### A4. NPS Standing CSV-vs-Gregory (59)
+
+_(Path 1 owns `clients.nps_standing`; CSV's NPS Standing column is Scott's read. Surfaced for eyeball — never auto-applied.)_
+
+| Client | Tab | Gregory NPS Standing | CSV NPS Standing |
+|---|---|---|---|
+| Abel Asfaw | USA | `(not loaded)` | `Neutral` |
+| Ajalynn Domingo | USA | `(not loaded)` | `Neutral` |
+| Allison Jayme Boeshans | USA | `(not loaded)` | `Neutral` |
+| Amaan Mehmood | USA | `(not loaded)` | `Promoter` |
+| Amanda S. | USA | `(not loaded)` | `Detractor / At Risk` |
+| Andrew Hsu | USA | `(not loaded)` | `Neutral` |
+| Anthony Palumbo | USA | `(not loaded)` | `Neutral` |
+| Ashan Fernando | USA | `(not loaded)` | `Neutral` |
+| Austin Burke | USA | `(not loaded)` | `Promoter` |
+| Avery Walker | USA | `(not loaded)` | `Promoter` |
+| Brendan Groves | USA | `(not loaded)` | `Promoter` |
+| Cindy Yu | USA | `(not loaded)` | `Neutral` |
+| Cole Coughlin | USA | `(not loaded)` | `Detractor / At Risk` |
+| Dadiana Perez | USA | `(not loaded)` | `Promoter` |
+| Dhamen Hothi | USA | `(not loaded)` | `Neutral` |
+| Dominique Frederick | USA | `(not loaded)` | `Promoter` |
+| Edward Molina | USA | `(not loaded)` | `Promoter` |
+| Elizabeth Williams | USA | `(not loaded)` | `Neutral` |
+| Fernando G | USA | `(not loaded)` | `Promoter` |
+| Frank Roselli | USA | `(not loaded)` | `Promoter` |
+| Ian Drogin | USA | `(not loaded)` | `Promoter` |
+| Intekhab Naser | USA | `(not loaded)` | `Detractor / At Risk` |
+| Isabel Bledsoe | USA | `(not loaded)` | `Detractor / At Risk` |
+| Jason Hamm | USA | `(not loaded)` | `Promoter` |
+| Javi Pena | USA | `(not loaded)` | `Promoter` |
+| Jenny Burnett | USA | `(not loaded)` | `Detractor / At Risk` |
+| Jerry Thomas | USA | `(not loaded)` | `Promoter` |
+| Jonathan Duran | USA | `(not loaded)` | `Promoter` |
+| josh glandorf | USA | `(not loaded)` | `Promoter` |
+| KC Lantern (Casie Weneta) | USA | `(not loaded)` | `Promoter` |
+| Kenan Cantekin | USA | `(not loaded)` | `Promoter` |
+| Krish Gopalani | USA | `(not loaded)` | `Neutral` |
+| Kristen Lee | USA | `(not loaded)` | `Promoter` |
+| Kurt Buechler | USA | `(not loaded)` | `Detractor / At Risk` |
+| Luis Malo | USA | `(not loaded)` | `Promoter` |
+| Mac McLaughlin | USA | `(not loaded)` | `Promoter` |
+| Marcus Miller | USA | `(not loaded)` | `Promoter` |
+| Mark Entwistle | USA | `(not loaded)` | `Detractor / At Risk` |
+| Mary Kissiedu | USA | `(not loaded)` | `Neutral` |
+| Matt Leblanc | USA | `(not loaded)` | `Detractor / At Risk` |
+| Michael Shaw | USA | `(not loaded)` | `Detractor / At Risk` |
+| Musa Elmaghrabi | USA | `(not loaded)` | `Promoter` |
+| Naymuddullah Farhan | AUS | `(not loaded)` | `Neutral` |
+| Nicholas V. LoScalzo | USA | `(not loaded)` | `Promoter` |
+| Nico Bubalo | USA | `(not loaded)` | `Promoter` |
+| Nolan | USA | `(not loaded)` | `Detractor / At Risk` |
+| Owen Nordberg | USA | `(not loaded)` | `Promoter` |
+| Rahim Ali | USA | `(not loaded)` | `Neutral` |
+| Ryan Murphy | USA | `(not loaded)` | `Detractor / At Risk` |
+| Sadiq Sumra | USA | `(not loaded)` | `Promoter` |
+
+_(...truncated; 9 more — see full diff)_
+
+### A5. "Owing Money" / unparseable standing (15)
+
+- **Benjamin Baros** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
+- **Camilo Corona** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
+- **Charles Biller** (USA) — CSV value `N/A (Churn)`, current Gregory `at_risk`
+- **Daniel Wajsbrot** (USA) — CSV value `Partial Refund`, current Gregory `at_risk`
+- **Emmanuel DharaCharles** (USA) — CSV value `Chargeback`, current Gregory `at_risk`
+- **Ethan Evans** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
+- **Grayson Carpenter** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
+- **Heath Perkins** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
+- **Jarrett Fortune** (USA) — CSV value `Refunded`, current Gregory `at_risk`
+- **Muhammad Omer Masood** (USA) — CSV value `Chargeback`, current Gregory `at_risk`
+- **Muhammed Mudasser** (USA) — CSV value `Full Refund`, current Gregory `at_risk`
+- **Patrick Tobin** (USA) — CSV value `Partial Refund`, current Gregory `at_risk`
+- **roula deraz** (USA) — CSV value `Full Refund`, current Gregory `at_risk`
+- **Steven Bass** (USA) — CSV value `Chargeback`, current Gregory `at_risk`
+- **Taidhg Driscoll** (USA) — CSV value `Full Refund`, current Gregory `at_risk`
+
+### A6. Handover-note targets unresolved (2)
+
+- **Matthew Gibson (in CSV row USA/180 but no Gregory client matches — needs to be created first)**
+- **Lou (no client by that name in either CSV — spec ambiguous)**
+
+### A8. Unmatched CSV rows (8)
+
+_(CSV rows that didn't resolve to any Gregory client by email or name. Resolve manually or add to alternate_emails / alternate_names.)_
+
+- **Anthony Huang** (AUS row 10) — email=anthony@techmanual.io, status=Churn (Aus), owner=Lou
+- **Clyde Vinson** (USA row 87) — email=(none), status=N/A, owner=N/A
+- **Matthew Gibson** (USA row 180) — email=leandeavor@gmail.com, status=Active, owner=Nico
+- **Melvin Dayal** (AUS row 2) — email=mel2.kar3@hotmail.com, status=Churn (Aus), owner=Lou
+- **Mishank** (AUS row 8) — email=(none), status=Churn (Aus), owner=N/A
+- **Rachelle Hernandez** (USA row 132) — email=(none), status=N/A, owner=N/A
+- **Scott Stauffenberg** (USA row 81) — email=(none), status=N/A, owner=Nabeel
+- **Vaishali Adla** (USA row 45) — email=(none), status=N/A, owner=Nabeel
+
+## Bucket B — post-apply mismatches (Scott confirms)
+
+_(Phase 2 has not run yet. Run with `--apply` to populate this section.)_
+
+## Quick reference — status directives applied
+
+_(Each row reflects one Tier 1 status flip from the CSV — these are the operational status decisions Scott has made between the previous master sheet import and this cleanup pass.)_
+
+| Client | Tab | Was | Is now |
+|---|---|---|---|
+| Allison Jayme Boeshans | USA | `paused` | `active` |
+| Marcus Miller | USA | `ghost` | `active` |
+| Chikezie Igwebuike | USA | `paused` | `churned` |
+| Fabio dirico | AUS | `active` | `churned` |
+| John Keever | USA | `active` | `ghost` |
+| Nate Simon | USA | `active` | `ghost` |
+| Abel Asfaw | USA | `paused` | `leave` |
+| Alex Crosby | USA | `paused` | `leave` |
+| Amanda S. | USA | `paused` | `leave` |
+| Andy V | USA | `paused` | `leave` |
+| Brooke Gorman | USA | `ghost` | `leave` |
+| Cheston Nguyen | USA | `paused` | `leave` |
+| Christian Brooks | USA | `paused` | `leave` |
+| Eric Brown | USA | `paused` | `leave` |
+| Eric Washington | USA | `paused` | `leave` |
+| Evan Bautista | USA | `paused` | `leave` |
+| Giovanni Gregorio | USA | `paused` | `leave` |
+| Hannah Carter | USA | `paused` | `leave` |
+| Jose Trejo | USA | `paused` | `leave` |
+| Justin J. Fogg | USA | `paused` | `leave` |
+| Kevin Black | USA | `paused` | `leave` |
+| Kylie Goldsmith | USA | `paused` | `leave` |
+| Ming-Shih Wang | USA | `paused` | `leave` |
+| Mubeen Siddiqui | USA | `paused` | `leave` |
+| Patrika Cheston | USA | `ghost` | `leave` |
+| Raga Mamidipaka | USA | `paused` | `leave` |
+| Rob Traffie | USA | `active` | `leave` |
+| samhealy09@gmail.com | USA | `paused` | `leave` |
+| Sarah Cherney | USA | `active` | `leave` |
+| Sean Rounds | USA | `paused` | `leave` |
+| Sonal Patel | USA | `paused` | `leave` |
+| Sunny Ghanathey | USA | `active` | `leave` |
+| Temitomi Arenyeka | USA | `paused` | `leave` |
+| Zach Roberts | USA | `paused` | `leave` |
+| Ameet Kumar | USA | `active` | `paused` |
+| Samuel Michel | AUS | `active` | `paused` |
+
