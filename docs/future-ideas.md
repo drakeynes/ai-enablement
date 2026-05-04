@@ -11,6 +11,18 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ---
 
+## Repo split when Ella reaches independent-deploy-cycle threshold
+
+- **What:** today's repo holds Ella (Slack agent + ingestion + retrieval), Gregory (dashboard + brain + Path 1 receiver), and shared infrastructure (Supabase migrations, types, the shared validators / claude_client / kb_query / hitl / logging modules, and the unified Vercel project that bundles 5 Python serverless functions + the Next.js dashboard). Splitting into separate repos is a future possibility once friction signals justify it. Ella is the most extractable thing — clear boundaries (its own `agents/ella/` directory, its own webhook function `api/slack_events.py`, its own ingestion pipelines under `ingestion/`, its own Slack-specific schema lookups), clear deploy unit (Slack webhook + an ingestion cron), clear dependency surface (Supabase via `shared/db.py` + Anthropic via `shared/claude_client.py`).
+- **Why deferred:** today's friction signals are mostly absent. `next build` runs in ~30s, the Python test suite (381 tests) runs in well under a minute, and there's only one deploy unit so deploy coupling between agents is theoretical. Mental-model overhead is real but bounded — Drake works on one agent at a time, the file tree separates the two cleanly, and CLAUDE.md is the single canonical "where does this fit?" reference. Operational simplicity of one repo + one Vercel project + one CLAUDE.md is real value worth holding onto until something specifically pushes back.
+- **Revisit triggers (any one):**
+  - Build/test times cross 5 minutes for either agent.
+  - Shipping a Gregory dashboard fix has triggered an Ella regression twice (or vice versa) — concrete deploy-coupling cost in incidents, not just theory.
+  - Mental-model overload during navigation becomes daily friction (e.g., Drake regularly opens the wrong agent's docs by mistake, or Code-acclimatization-checklist file lists routinely miss the right context because both agents' files compete for relevance).
+  - Permissioning needs diverge: a non-Drake team member needs to work on one agent but shouldn't see the other.
+  - Deploy lifecycles diverge meaningfully: one agent needs frequent iterative deploys while the other needs change-controlled deploys (e.g., Gregory becomes Scott-facing-stable while Ella is in active iteration on a different agent flavor).
+- **Logged:** 2026-05-04.
+
 ## Path 2 outbound writeback architecture
 
 - **What:** Gregory writes back to upstream sources (Airtable, future master-sheet replacement) when CSM-driven dashboard edits should propagate. Today's M5.4 Path 1 is one-way (Airtable → Gregory). Path 2 is the inverse: dashboard edits → Make.com webhook → Airtable mutation. Post-M5.6 the columns Path 2 needs to listen on exist: `clients.accountability_enabled` and `clients.nps_enabled` (added in 0022). Both the cascade trigger and CSM manual flips land in the same `UPDATE clients`, so a single Supabase Database Webhook on UPDATE of these columns (or a parallel `clients_path2_writeback_after` trigger that POSTs to Make.com) fires correctly for both code paths — the receiver doesn't need to distinguish "cascade-fired" from "CSM-manual." Architecture narrows from "design the column set + trigger + webhook" to "wire Make.com onto an UPDATE-trigger we can build in ~50 lines."
