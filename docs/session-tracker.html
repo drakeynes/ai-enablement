@@ -231,13 +231,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M5 — V1 adoption infrastructure shipped</div>
-    <h1>Cascade infrastructure landed; Path 2 outbound writeback is next.</h1>
+    <div class="id">Session M5 — Path 2 daily roster + cleanup + Scott onboarding</div>
+    <h1>Path 2 outbound roster + data cleanup + Scott onboarding.</h1>
     <div class="goal">
-      The V1 adoption thesis (post-Scott 1:1) is now backed by infrastructure: status vocab expansion (M5.3), trustpilot vocab rename (M5.3b), Airtable NPS Path 1 inbound receiver (M5.4), comprehensive filter bar on <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">/clients</span> (M5.5), and DB-level status cascade with Scott Chasing sentinel + accountability/NPS toggles (M5.6, with same-day hotfix for three regressions surfaced by visual smoke). Gregory now matches the Financial Master Sheet's daily workflow shape, including the automation Scott does between columns. Next priority is Path 2 outbound writeback — dashboard edits propagate back to upstream Airtable via a Make.com webhook listening on UPDATE of the cascade-owned columns. Make.com walkthrough with Zain is the gate.
+      Today's four priorities follow M5.6's close-out. Path 2 was reshaped by the Zain conversation — it's a daily-pull GET endpoint Make.com hits for the active-client roster (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">nps_enabled</span> + Slack identifiers, joined per-client), not the event-driven UPDATE-listener architecture previously sketched; this replaces the Financial Master Sheet as Zain's daily source. P2 is the manual cleanup pass to land Gregory in a usable state by EOD, P3 is a Drake-led plan around base44 for Nabeel, and P4 is onboarding Scott tomorrow so he starts using Gregory in his daily workflow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — M5.6 + hotfix close-out</span>
+      <span><strong>Last updated:</strong> Session M5 — new session start (post-M5.6)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -252,30 +252,30 @@
 
       <div class="card">
         <div class="id">P1</div>
-        <div class="title">Path 2 outbound writeback architecture (TOP)</div>
-        <div class="subtitle">Make.com walkthrough with Zain happens during the next session — Zain will be active and working. Pre-meeting: scoping doc / question list ready. Path 1 (M5.4) is one-way Airtable → Gregory; Path 2 is the inverse — dashboard edits (cascade-fired or CSM-manual) propagate back to upstream Airtable. Architecture narrowed by M5.6: <span style="font-family: var(--mono); font-size: 12.5px;">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 12.5px;">nps_enabled</span> columns now exist; Path 2 listens on UPDATE via a Supabase Database Webhook (or parallel trigger). Both cascade and manual paths land in the same UPDATE so the receiver doesn't need to distinguish.</div>
-        <div class="pills"><span class="pill warn">walkthrough-gated</span><span class="pill">scoping doc needed</span></div>
+        <div class="title">Hook up Gregory ↔ Make.com for accountability + NPS daily roster (TOP)</div>
+        <div class="subtitle">GET endpoint Make.com pulls daily. Returns active non-archived clients with <span style="font-family: var(--mono); font-size: 12.5px;">client_email</span>, <span style="font-family: var(--mono); font-size: 12.5px;">slack_user_id</span>, <span style="font-family: var(--mono); font-size: 12.5px;">slack_channel_id</span> (joined from <span style="font-family: var(--mono); font-size: 12.5px;">slack_channels</span> — most recently created non-archived per client, mirroring <span style="font-family: var(--mono); font-size: 12.5px;">getClientById</span>'s selection), <span style="font-family: var(--mono); font-size: 12.5px;">accountability_enabled</span>, <span style="font-family: var(--mono); font-size: 12.5px;">nps_enabled</span>. Auth via <span style="font-family: var(--mono); font-size: 12.5px;">X-Webhook-Secret</span> header against a new env var. Replaces the Financial Master Sheet as the source of truth Zain's existing Make.com automation pulls from. Reshaped from prior "event-driven UPDATE listener" framing by yesterday's Zain walkthrough.</div>
+        <div class="pills"><span class="pill">endpoint build</span><span class="pill">Make.com integration</span></div>
       </div>
 
       <div class="card">
         <div class="id">P2</div>
-        <div class="title">Trustpilot auto-correct + Country promotion (bundled)</div>
-        <div class="subtitle">Trustpilot auto-correct (Scott's Loom 2) sits on top of the M5.6 cascade infrastructure — same trigger pattern, different rule (<span style="font-family: var(--mono); font-size: 12.5px;">csm_standing</span> → certain transitions auto-flip <span style="font-family: var(--mono); font-size: 12.5px;">trustpilot_status</span>). Country is currently a tag on <span style="font-family: var(--mono); font-size: 12.5px;">clients.metadata.country</span> (USA/AUS); promote to a real column with display + filter surfaces, retiring the disabled "Country" placeholder dropdown from M5.5. Bundled — both touch client-page schema + the M5.5 filter bar.</div>
-        <div class="pills"><span class="pill">schema-touch</span><span class="pill warn">migration boundary</span></div>
+        <div class="title">Full data cleanup pass — Gregory usable by EOD</div>
+        <div class="subtitle">Drake's manual cleanup walkthrough. Includes M4 Chunk C carry-overs (21 non-churn auto-creates cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails), 32 currently-CSM-owned negative-status clients from M5.6 (Lou 18 / Scott Wilson 13 / Nabeel 1 — decide whether to reassign to Scott Chasing), email-mismatch cleanup from M5.4 NPS backfill (Jonathan Duran-Rojas + Luis Malo), any field gaps surfacing in daily use. Goal: Gregory is in a usable state for Scott's onboarding tomorrow.</div>
+        <div class="pills"><span class="pill">manual / no code</span><span class="pill warn">gates P4</span></div>
       </div>
 
       <div class="card">
         <div class="id">P3</div>
-        <div class="title">May meetings tracker + inactivity flag (bundled)</div>
-        <div class="subtitle">Both are aggregations on existing call data. Inactivity flag = end-of-week-2 monthly meeting count (Scott's Loom 2 framing); May meetings tracker = related view of who's met who in the current month. Bundled — underlying call-aggregation queries are the same shape.</div>
-        <div class="pills"><span class="pill">read-only / aggregation</span></div>
+        <div class="title">Plan around base44 for Nabeel</div>
+        <div class="subtitle">Drake-led planning task. Output is a plan for Nabeel's review.</div>
+        <div class="pills"><span class="pill">planning / no code</span></div>
       </div>
 
       <div class="card">
         <div class="id">P4</div>
-        <div class="title">Manual cleanup pass</div>
-        <div class="subtitle">Drake's full client-data cleanup — happens after all Scott features ship so cleanup runs against a stable feature set. Includes the M4 Chunk C carry-overs (21 non-churn auto-creates cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails), the 32 currently-CSM-owned negative-status clients from M5.6 (Lou 18 / Scott Wilson 13 / Nabeel 1 — decide whether to reassign to Scott Chasing), and any field gaps surfacing in daily use.</div>
-        <div class="pills"><span class="pill">manual / no code</span></div>
+        <div class="title">Onboard Scott on Gregory for daily use starting tomorrow</div>
+        <div class="subtitle">Walkthrough so Scott can begin using Gregory in his daily workflow. Sits on top of P2 — depends on the data cleanup landing first so Scott sees a clean dashboard.</div>
+        <div class="pills"><span class="pill">walkthrough</span><span class="pill warn">P2-gated</span></div>
       </div>
     </div>
 
@@ -348,10 +348,6 @@
   <section class="blockers">
     <h2>Blockers / Needs from Nabeel + Zain</h2>
     <ul>
-      <li>
-        <strong>Make.com walkthrough with Zain — gates Path 2 outbound writeback (top priority next session).</strong> Zain will be active in the next session; pre-meeting scoping doc / question list ready before. Path 2 architecture narrowed by M5.6 to "listen on UPDATE of the cascade-owned columns" — the walkthrough is for the Airtable side (which fields each Gregory column maps to, write semantics, conflict resolution, idempotency token shape).
-        <div><span class="ref">Unblocks: Path 2 receiver scope + first build chunk.</span></div>
-      </li>
       <li>
         <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending.)</em>
         <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
