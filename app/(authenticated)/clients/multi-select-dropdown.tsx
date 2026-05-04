@@ -31,6 +31,14 @@ export type MultiSelectDropdownProps = {
   onChange: (next: string[]) => void
   disabled?: boolean
   disabledTooltip?: string
+  /**
+   * 'multi' (default) renders the trigger as "{label}: {first} +{N}".
+   * 'toggle' renders "{label}: on" when anything is selected — used for
+   * single-value toggles like Needs review where the option label is
+   * descriptive ("Auto-created — needs review") and including it in the
+   * trigger reads awkwardly.
+   */
+  mode?: 'multi' | 'toggle'
 }
 
 const TRIGGER_BASE =
@@ -43,6 +51,7 @@ export function MultiSelectDropdown({
   onChange,
   disabled = false,
   disabledTooltip,
+  mode = 'multi',
 }: MultiSelectDropdownProps) {
   if (disabled) {
     return (
@@ -71,9 +80,11 @@ export function MultiSelectDropdown({
   const triggerText =
     selectedLabels.length === 0
       ? label
-      : selectedLabels.length === 1
-        ? `${label}: ${selectedLabels[0]}`
-        : `${label}: ${selectedLabels[0]} +${selectedLabels.length - 1}`
+      : mode === 'toggle'
+        ? `${label}: on`
+        : selectedLabels.length === 1
+          ? `${label}: ${selectedLabels[0]}`
+          : `${label}: ${selectedLabels[0]} +${selectedLabels.length - 1}`
 
   const isActive = selected.length > 0
 

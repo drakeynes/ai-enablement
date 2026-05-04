@@ -22,19 +22,43 @@ const VALID_SORT_KEYS: SortKey[] = [
   'open_action_items_count',
 ]
 
+// Mirror of FilterBar's STATUS_DEFAULT_SELECTED. Kept duplicated rather
+// than imported because the file boundary between Server Component
+// (page) and Client Component (filter-bar) crosses a 'use client'
+// boundary; keeping the constant local avoids accidentally pulling
+// client-only code into the server bundle. Drift risk is low — both
+// values are tested at the smoke checkpoint.
+const STATUS_DEFAULT_SELECTED = ['active', 'paused', 'ghost']
+
+function parseMulti(raw: string | undefined): string[] {
+  if (raw === undefined || raw === '') return []
+  return raw.split(',').filter(Boolean)
+}
+
 function readFilters(searchParams: Record<string, string | string[] | undefined>): ClientsListFilters {
   const get = (key: string): string | undefined => {
     const v = searchParams[key]
     return Array.isArray(v) ? v[0] : v
   }
+
+  // Status sentinel: absent → default trio; explicit-empty → no filter
+  // (show all statuses including churned/leave); else parse.
+  const statusRaw = get('status')
+  const status: string[] =
+    statusRaw === undefined
+      ? STATUS_DEFAULT_SELECTED
+      : statusRaw === ''
+        ? []
+        : statusRaw.split(',').filter(Boolean)
+
   return {
-    status: get('status'),
-    journey_stage: get('journey_stage'),
-    primary_csm_id: get('primary_csm_id'),
-    has_open_action_items: get('has_open_action_items') === '1',
-    needs_review_only: get('needs_review') === '1',
+    status,
+    primary_csm_ids: parseMulti(get('primary_csm')),
+    csm_standing: parseMulti(get('csm_standing')),
+    nps_standing: parseMulti(get('nps_standing')),
+    trustpilot_status: parseMulti(get('trustpilot')),
+    needs_review: get('needs_review') === '1',
     search: get('q'),
-    show_archived: get('show_archived') === '1',
   }
 }
 

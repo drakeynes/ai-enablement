@@ -1,57 +1,75 @@
 'use client'
 
+// M5.5 — comprehensive filter bar.
+//
+// 9 dropdowns in a single flex row: 5 active multi-selects (Status,
+// Primary CSM, CSM Standing, NPS Standing, Trustpilot), 1 single-value
+// toggle (Needs review), and 3 disabled placeholders that signal the
+// next slice of work to Scott during onboarding (Accountability, NPS
+// toggle, Country). All built on MultiSelectDropdown.
+//
+// URL state model:
+//   - Each multi-select's checked values are comma-separated in its
+//     URL param: ?status=active,ghost. Filter semantics are
+//     OR-within-dropdown, AND-across-dropdowns.
+//   - Status is special: the dropdown is pre-checked with
+//     ['active','paused','ghost'] when the param is absent. Writing
+//     that exact set back to the URL would be redundant noise, so
+//     `setStatus` collapses the default-set case to a clean URL via
+//     set equality (order-independent). The explicit-empty sentinel
+//     `?status=` means "user has unchecked everything — show all
+//     statuses including churned/leave."
+//   - All other multi-selects use the simple "absent or empty = no
+//     filter" semantics. No sentinel required.
+//   - Search input remains debounced (300ms); writes/deletes ?q=.
+//   - Sort + dir are orthogonal (preserved by writeParams).
+//
+// Clear filters button visibility: searchValue OR any non-default
+// filter state. For status, "non-default" means "param present in URL"
+// (we never write the default set verbatim, so any presence is
+// non-default). Search is included directly so the button doesn't lag
+// during the debounce window.
+
 import { useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import {
+  CSM_STANDING_OPTIONS,
+  NPS_STANDING_OPTIONS,
+  STATUS_OPTIONS,
+  TRUSTPILOT_OPTIONS,
+} from '@/lib/client-vocab'
+import { MultiSelectDropdown } from './multi-select-dropdown'
 
-type ChipDef = {
-  paramKey: string
-  paramValue: string
-  label: string
-  className?: string
+const STATUS_DEFAULT_SELECTED: readonly string[] = ['active', 'paused', 'ghost']
+
+const NEEDS_REVIEW_OPTIONS = [
+  { value: '1', label: 'Auto-created — needs review' },
+] as const
+
+function parseMulti(raw: string | null): string[] {
+  if (raw === null || raw === '') return []
+  return raw.split(',').filter(Boolean)
 }
 
-// V1 filter chips. status + journey_stage are toggle-on-single-value;
-// has_open_action_items and needs_review are boolean toggles. The
-// needs_review chip is the M2.3c hook for the auto-created review
-// queue — visually distinct so reviewers can find it at a glance.
-const STATUS_CHIPS: ChipDef[] = [
-  { paramKey: 'status', paramValue: 'active', label: 'Active' },
-  { paramKey: 'status', paramValue: 'paused', label: 'Paused' },
-  { paramKey: 'status', paramValue: 'ghost', label: 'Ghost' },
-  { paramKey: 'status', paramValue: 'leave', label: 'Leave' },
-  { paramKey: 'status', paramValue: 'churned', label: 'Churned' },
-]
+// Status sentinel parsing: absent → pre-check the default trio; explicit
+// empty → no checks (no filter); else parse comma-separated. Mirror in
+// readFilters on the page so the server-side default matches the
+// client-side UI.
+function readStatusSelection(raw: string | null): string[] {
+  if (raw === null) return [...STATUS_DEFAULT_SELECTED]
+  if (raw === '') return []
+  return raw.split(',').filter(Boolean)
+}
 
-const JOURNEY_CHIPS: ChipDef[] = [
-  { paramKey: 'journey_stage', paramValue: 'onboarding', label: 'Onboarding' },
-  { paramKey: 'journey_stage', paramValue: 'active', label: 'Journey: active' },
-  { paramKey: 'journey_stage', paramValue: 'churning', label: 'Churning' },
-  { paramKey: 'journey_stage', paramValue: 'churned', label: 'Journey: churned' },
-  { paramKey: 'journey_stage', paramValue: 'alumni', label: 'Alumni' },
-]
-
-const BOOLEAN_CHIPS: ChipDef[] = [
-  {
-    paramKey: 'has_open_action_items',
-    paramValue: '1',
-    label: 'Has open action items',
-  },
-  {
-    paramKey: 'needs_review',
-    paramValue: '1',
-    label: 'Auto-created (needs review)',
-    className: 'bg-amber-100 text-amber-900 border-amber-200',
-  },
-  {
-    paramKey: 'show_archived',
-    paramValue: '1',
-    label: 'Show churned & leave',
-  },
-]
+// Set equality, not array equality — so re-checking the default trio in
+// any click order collapses back to a clean URL.
+function isStatusDefault(values: string[]): boolean {
+  if (values.length !== STATUS_DEFAULT_SELECTED.length) return false
+  const set = new Set(values)
+  return STATUS_DEFAULT_SELECTED.every((v) => set.has(v))
+}
 
 export function FilterBar({
   primaryCsmOptions,
@@ -62,8 +80,6 @@ export function FilterBar({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Search input is debounced separately from the URL state; otherwise
-  // every keystroke would refetch the page.
   const [searchValue, setSearchValue] = useState(searchParams.get('q') ?? '')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const initialMount = useRef(true)
@@ -86,32 +102,79 @@ export function FilterBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchValue])
 
-  function toggleChip(chip: ChipDef) {
+  const statusSelected = readStatusSelection(searchParams.get('status'))
+  const primaryCsmSelected = parseMulti(searchParams.get('primary_csm'))
+  const csmStandingSelected = parseMulti(searchParams.get('csm_standing'))
+  const npsStandingSelected = parseMulti(searchParams.get('nps_standing'))
+  const trustpilotSelected = parseMulti(searchParams.get('trustpilot'))
+  const needsReviewSelected =
+    searchParams.get('needs_review') === '1' ? ['1'] : []
+
+  const primaryCsmDropdownOptions = primaryCsmOptions.map((o) => ({
+    value: o.id,
+    label: o.label,
+  }))
+
+  function writeParams(updater: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString())
-    if (params.get(chip.paramKey) === chip.paramValue) {
-      params.delete(chip.paramKey)
-    } else {
-      params.set(chip.paramKey, chip.paramValue)
-    }
-    router.replace(`${pathname}?${params.toString()}`)
+    updater(params)
+    const queryString = params.toString()
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname)
   }
 
-  function setPrimaryCsm(value: string) {
-    const params = new URLSearchParams(searchParams.toString())
-    if (value === 'all') params.delete('primary_csm_id')
-    else params.set('primary_csm_id', value)
-    router.replace(`${pathname}?${params.toString()}`)
+  function setStatus(values: string[]) {
+    writeParams((params) => {
+      if (values.length === 0) {
+        // Explicit-empty sentinel: user unchecked everything. Don't
+        // collapse to "absent" (which would re-apply the default trio).
+        params.set('status', '')
+      } else if (isStatusDefault(values)) {
+        params.delete('status')
+      } else {
+        params.set('status', values.join(','))
+      }
+    })
+  }
+
+  function setMulti(key: string, values: string[]) {
+    writeParams((params) => {
+      if (values.length === 0) params.delete(key)
+      else params.set(key, values.join(','))
+    })
+  }
+
+  function setNeedsReview(values: string[]) {
+    writeParams((params) => {
+      if (values.includes('1')) params.set('needs_review', '1')
+      else params.delete('needs_review')
+    })
   }
 
   function clearAll() {
     setSearchValue('')
-    router.replace(pathname)
+    // Preserve sort/dir; drop everything else (status back to default
+    // means absent param, not the explicit-empty sentinel — so clear
+    // brings the user back to the natural default state).
+    const sort = searchParams.get('sort')
+    const dir = searchParams.get('dir')
+    const next = new URLSearchParams()
+    if (sort) next.set('sort', sort)
+    if (dir) next.set('dir', dir)
+    const queryString = next.toString()
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname)
   }
 
   const hasAnyFilter =
-    Array.from(searchParams.entries()).some(
-      ([key]) => !['sort', 'dir'].includes(key),
-    )
+    searchValue.length > 0 ||
+    // Status is non-default when the param is present at all (the
+    // setStatus collapse above guarantees we never write the default
+    // trio verbatim — so any presence indicates explicit divergence).
+    searchParams.has('status') ||
+    primaryCsmSelected.length > 0 ||
+    csmStandingSelected.length > 0 ||
+    npsStandingSelected.length > 0 ||
+    trustpilotSelected.length > 0 ||
+    needsReviewSelected.length > 0
 
   return (
     <div className="space-y-3">
@@ -122,18 +185,6 @@ export function FilterBar({
           onChange={(event) => setSearchValue(event.target.value)}
           className="max-w-sm"
         />
-        <select
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-          value={searchParams.get('primary_csm_id') ?? 'all'}
-          onChange={(event) => setPrimaryCsm(event.target.value)}
-        >
-          <option value="all">All CSMs</option>
-          {primaryCsmOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
         {hasAnyFilter ? (
           <Button variant="outline" size="sm" onClick={clearAll}>
             Clear filters
@@ -141,30 +192,68 @@ export function FilterBar({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {STATUS_CHIPS.concat(JOURNEY_CHIPS, BOOLEAN_CHIPS).map((chip) => {
-          const active = searchParams.get(chip.paramKey) === chip.paramValue
-          return (
-            <button
-              key={`${chip.paramKey}=${chip.paramValue}`}
-              onClick={() => toggleChip(chip)}
-              className="cursor-pointer"
-              type="button"
-            >
-              <Badge
-                className={cn(
-                  'border font-normal',
-                  active
-                    ? chip.className ??
-                        'bg-primary text-primary-foreground border-primary'
-                    : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100',
-                )}
-              >
-                {chip.label}
-              </Badge>
-            </button>
-          )
-        })}
+      <div className="flex flex-wrap gap-2">
+        <MultiSelectDropdown
+          label="Status"
+          options={STATUS_OPTIONS}
+          selected={statusSelected}
+          onChange={setStatus}
+        />
+        <MultiSelectDropdown
+          label="Primary CSM"
+          options={primaryCsmDropdownOptions}
+          selected={primaryCsmSelected}
+          onChange={(values) => setMulti('primary_csm', values)}
+        />
+        <MultiSelectDropdown
+          label="CSM Standing"
+          options={CSM_STANDING_OPTIONS}
+          selected={csmStandingSelected}
+          onChange={(values) => setMulti('csm_standing', values)}
+        />
+        <MultiSelectDropdown
+          label="NPS Standing"
+          options={NPS_STANDING_OPTIONS}
+          selected={npsStandingSelected}
+          onChange={(values) => setMulti('nps_standing', values)}
+        />
+        <MultiSelectDropdown
+          label="Trustpilot"
+          options={TRUSTPILOT_OPTIONS}
+          selected={trustpilotSelected}
+          onChange={(values) => setMulti('trustpilot', values)}
+        />
+        <MultiSelectDropdown
+          label="Needs review"
+          options={NEEDS_REVIEW_OPTIONS}
+          selected={needsReviewSelected}
+          onChange={setNeedsReview}
+          mode="toggle"
+        />
+        <MultiSelectDropdown
+          label="Accountability"
+          options={[]}
+          selected={[]}
+          onChange={() => {}}
+          disabled
+          disabledTooltip="Coming with status cascade — auto-on for active, auto-off for paused"
+        />
+        <MultiSelectDropdown
+          label="NPS toggle"
+          options={[]}
+          selected={[]}
+          onChange={() => {}}
+          disabled
+          disabledTooltip="Coming with status cascade — per-client NPS opt-out"
+        />
+        <MultiSelectDropdown
+          label="Country"
+          options={[]}
+          selected={[]}
+          onChange={() => {}}
+          disabled
+          disabledTooltip="Coming once country is populated as a dedicated column (currently a tag)"
+        />
       </div>
     </div>
   )

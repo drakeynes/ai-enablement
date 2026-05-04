@@ -93,14 +93,26 @@ export const GHL_ADOPTION_VALUES = [
   'inactive',
 ] as const
 
+// M5.5 multi-select filter shape. Each array represents OR-within;
+// across-fields is AND. Empty arrays = no filter from that field.
+//
+// Status semantics:
+//   - status === undefined / [] → no DB filter (show every status)
+//   - status === ['active','paused','ghost', ...] → .in() clause
+//
+// The page-level readFilters injects the default trio
+// (['active','paused','ghost']) when the URL param is absent — so the
+// "default visit" call lands here with status populated. The explicit-
+// empty UI state (?status=) lands here as []. Both cases are correct
+// without extra logic in this file.
 export type ClientsListFilters = {
-  status?: string
-  journey_stage?: string
-  primary_csm_id?: string
-  has_open_action_items?: boolean
-  needs_review_only?: boolean
+  status?: string[]
+  primary_csm_ids?: string[]
+  csm_standing?: string[]
+  nps_standing?: string[]
+  trustpilot_status?: string[]
+  needs_review?: boolean
   search?: string
-  show_archived?: boolean
 }
 
 export type ClientsListRow = ClientRow & {
@@ -120,13 +132,16 @@ export type ClientsListRow = ClientRow & {
 // Single round trip to PostgREST with nested selects, then JS-side
 // derivation of the per-row aggregates the list view needs (latest
 // health score, last call date, open / overdue action item counts,
-// active primary CSM). DB-side filters cover the cheap ones (status,
-// journey_stage, tag membership, search). JS-side filters cover the
-// derived ones (primary_csm_id, has_open_action_items).
+// active primary CSM). DB-side filters: status / csm_standing /
+// nps_standing / trustpilot_status (.in()), needs_review (tag
+// containment), search (or-ilike on full_name + email). JS-side filter:
+// primary_csm_ids (matched against the active primary CSM derived from
+// the client_team_assignments join — can't be expressed as a PostgREST
+// .in() because the value lives in a nested select).
 //
-// Volume note: ~134 clients, each with ~10 calls + a handful of action
-// items, comfortably fits in one PostgREST round trip. If volume grows
-// past ~1000 clients or the join arrays balloon, swap this for a
+// Volume note: ~197 active clients, each with ~10 calls + a handful of
+// action items, comfortably fits in one PostgREST round trip. If volume
+// grows past ~1000 clients or the join arrays balloon, swap this for a
 // Postgres view or RPC — the call sites won't change.
 export async function getClientsList(
   filters: ClientsListFilters = {},
@@ -151,22 +166,24 @@ export async function getClientsList(
     )
     .is('archived_at', null)
 
-  if (filters.status) {
-    // Explicit status filter wins — show that status regardless of
-    // show_archived. Lets users land on "churned only" or "leave only"
-    // without first toggling the archived view.
-    query = query.eq('status', filters.status)
-  } else if (!filters.show_archived) {
-    // Default-hide: when no explicit filter and the toggle is off, the
-    // list excludes 'churned' and 'leave' so CSMs see only the live
-    // book by default. Negative form is forward-compat — new statuses
-    // added later will appear by default unless explicitly excluded here.
-    query = query.not('status', 'in', '(churned,leave)')
+  // Status: when populated, .in() across the selected values.
+  // Default-hide of churned/leave is now expressed by the UI's
+  // STATUS_DEFAULT_SELECTED (active+paused+ghost) being injected at
+  // readFilters time when the param is absent. An empty array here
+  // means the user explicitly cleared all status checks → show all.
+  if (filters.status && filters.status.length > 0) {
+    query = query.in('status', filters.status)
   }
-  if (filters.journey_stage) {
-    query = query.eq('journey_stage', filters.journey_stage)
+  if (filters.csm_standing && filters.csm_standing.length > 0) {
+    query = query.in('csm_standing', filters.csm_standing)
   }
-  if (filters.needs_review_only) {
+  if (filters.nps_standing && filters.nps_standing.length > 0) {
+    query = query.in('nps_standing', filters.nps_standing)
+  }
+  if (filters.trustpilot_status && filters.trustpilot_status.length > 0) {
+    query = query.in('trustpilot_status', filters.trustpilot_status)
+  }
+  if (filters.needs_review === true) {
     query = query.contains('tags', ['needs_review'])
   }
   if (filters.search) {
@@ -245,11 +262,11 @@ export async function getClientsList(
     }
   })
 
-  if (filters.primary_csm_id !== undefined) {
-    rows = rows.filter((r) => r.primary_csm_id === filters.primary_csm_id)
-  }
-  if (filters.has_open_action_items === true) {
-    rows = rows.filter((r) => r.open_action_items_count > 0)
+  if (filters.primary_csm_ids && filters.primary_csm_ids.length > 0) {
+    const allowed = new Set(filters.primary_csm_ids)
+    rows = rows.filter(
+      (r) => r.primary_csm_id !== null && allowed.has(r.primary_csm_id),
+    )
   }
 
   return rows
