@@ -11,6 +11,13 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## STATUS_DEFAULT_SELECTED duplicated across client/server boundary
+
+- **What:** the M5.5 filter bar's default-status trio (`['active','paused','ghost']`) is hard-coded twice — once in `app/(authenticated)/clients/filter-bar.tsx` (Client Component, used to pre-check the Status dropdown when the URL param is absent) and once in `app/(authenticated)/clients/page.tsx` (Server Component, used by `readFilters` to inject the same default into the DB query). Both copies are identical; neither imports from the other because the `'use client'` boundary made a shared module path awkward at M5.5 ship time.
+- **Why it matters:** if the default trio ever changes (e.g. Scott decides Ghost shouldn't be on by default, or Leave should be), two files need editing. Drift between them produces a silent UX bug — the dropdown UI shows one default while the server query applies a different one, and a fresh page load looks like the filter is "checked but ignored."
+- **Next action:** extract to a third file like `lib/clients-filter-defaults.ts` (or fold into `lib/client-vocab.ts` since it's adjacent to the status vocab). Both call sites import the constant. ~5-line refactor, zero behavior change. Worth doing alongside any future filter-default tweak; not urgent on its own.
+- **Logged:** 2026-05-03 (M5.5 close-out — intentional defer at ship time).
+
 ## NPS backfill 404s — Jonathan Duran-Rojas + Luis Malo email mismatches
 
 - **What:** M5.4 backfill surfaced 2 of 61 clients where Airtable's NPS Clients email doesn't match Gregory's `clients.email` or `metadata.alternate_emails`. Jonathan Duran-Rojas: Airtable has `wetasspressurewasher04@gmail.com`; Gregory has two rows (`Jonathan Duran` / `j05832952@gmail.com` and `Jonathan Duran-Rojas` / `jonathan@luxrevo.com`), neither in alternates. Luis Malo: Airtable has `lmalo721@yahoo.com`; needs the same lookup. Both visible in `webhook_deliveries.processing_error` from the M5.4 backfill run.

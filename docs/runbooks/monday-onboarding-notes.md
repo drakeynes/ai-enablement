@@ -1,0 +1,5 @@
+# Monday onboarding notes (Scott — 2026-05-04)
+
+Short list of things worth surfacing during Scott's first dashboard session as he transitions off the Financial Master Sheet onto Gregory. Each bullet describes a small UX shift Scott may notice and how to address it in the moment.
+
+- **Per-CSM bookmark URLs from M3 walkthrough are stale.** M5.5 renamed the filter-bar URL param `primary_csm_id` → `primary_csm` for consistency with the other multi-value filter params. Effect on a stale bookmark: instead of showing only that CSM's clients, the page will show all clients (the old param is silently ignored). Failure mode is soft — no error, just unexpected breadth — but worth flagging if Scott opens a saved link and the count looks off. Fix on the spot: re-bookmark from the new Primary CSM dropdown. (Logged: 2026-05-03.)
