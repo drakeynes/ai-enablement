@@ -557,6 +557,24 @@ def load_active_primary_csm(db) -> dict[str, str]:
     return {r["client_id"]: r["team_member_id"] for r in (resp.data or [])}
 
 
+def load_slack_channels_by_client(db) -> dict[str, list[str]]:
+    """Map client_id → list[slack_channel_id] for non-archived channels.
+    Used to filter the slack_channel_id Tier 2 surfacing — only flag
+    rows where Gregory has zero channels for the client."""
+    resp = (
+        db.table("slack_channels")
+        .select("client_id, slack_channel_id, is_archived")
+        .eq("is_archived", False)
+        .execute()
+    )
+    out: dict[str, list[str]] = {}
+    for row in resp.data or []:
+        cid = row.get("client_id")
+        if cid:
+            out.setdefault(cid, []).append(row["slack_channel_id"])
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Diff data structures
 # ---------------------------------------------------------------------------
@@ -602,6 +620,9 @@ class DiffResult:
     handover_unresolved: list[str]  # spec names that couldn't be resolved (e.g. "Lou")
     name_ambiguous: list[CsvRow]
     duplicate_csv_emails: list[tuple[str, list[CsvRow]]]
+    redundant_with_cascade: list[
+        tuple[str, Any, Any]
+    ]  # (client_name, current_csm, csv_csm) — skipped because cascade does it
     generated_at: str
 
 
@@ -619,14 +640,24 @@ def compute_diff(
     resolver: ClientResolver,
     team_members_by_name: dict[str, str],
     active_primary_csm: dict[str, str],
+    slack_channels_by_client: dict[str, list[str]] | None = None,
     is_post_apply: bool = False,
 ) -> DiffResult:
     """Build the full diff. is_post_apply=True flags every Tier 1 to be
     re-classified as 'post-apply mismatch' if it surfaces — used by the
-    re-diff after Phase 2 writes to populate scott_notes Bucket B."""
+    re-diff after Phase 2 writes to populate scott_notes Bucket B.
+
+    slack_channels_by_client: client_id → list[active slack_channel_id].
+    Used to filter the CSV slack_channel_id surfacing — only flag CSV
+    rows where Gregory has NO active channel for that client. Empty
+    dict / None disables the filter (legacy behavior — surfaces every
+    CSV channel ID)."""
+    if slack_channels_by_client is None:
+        slack_channels_by_client = {}
     field_changes: list[FieldChange] = []
     unmatched: list[CsvRow] = []
     name_ambiguous: list[CsvRow] = []
+    redundant_with_cascade: list[tuple[str, Any, Any]] = []
     matched_rows = 0
     skipped_drake_rows = 0
 
@@ -750,27 +781,54 @@ def compute_diff(
                 )
             )
         elif csm_value is not None and csm_value != current.get("csm_standing"):
-            # The cascade-vs-CSV contradiction case: if status is moving
-            # negative AND CSV csm_standing is non-at_risk, the cascade
-            # will overwrite our csm_standing write to at_risk. We still
-            # record the CSV-proposed value here (Tier 1) — the apply
-            # phase's re-diff catches the cascade override and surfaces
-            # it as Bucket B.
-            tier_note = ""
-            if _is_negative_status(status_value) and csm_value != "at_risk":
-                tier_note = " (cascade will likely overwrite to at_risk)"
-            field_changes.append(
-                FieldChange(
-                    csv_row=row,
-                    client_id=client_id,
-                    client_name=gregory_name,
-                    field="csm_standing",
-                    current_value=current.get("csm_standing"),
-                    proposed_value=csm_value,
-                    tier=1,
-                    reason=f"csm_standing flip{tier_note}",
-                )
+            # Cascade-redundancy filter (Drake's adjustment). Three cases:
+            #
+            # 1) status going negative AND CSV csm_standing == 'at_risk':
+            #    SKIP the explicit write. The cascade trigger sets
+            #    csm_standing='at_risk' for free; an extra RPC produces
+            #    a duplicate history row for no behavior delta.
+            #
+            # 2) status going negative AND CSV csm_standing != 'at_risk'
+            #    (e.g. CSV says 'happy'): KEEP the write. The cascade
+            #    will overwrite to 'at_risk' anyway, but the post-apply
+            #    re-diff surfaces this as a Bucket B contradiction Scott
+            #    confirms — that's signal, not noise.
+            #
+            # 3) status NOT going negative (positive or no-change): KEEP
+            #    the write. The cascade does NOT auto-revert csm_standing
+            #    on positive transitions, so we MUST write CSV's value
+            #    explicitly. This is Marcus Miller (ghost→active) and
+            #    Allison Jayme Boeshans (paused→active).
+            status_now_negative = _is_negative_status(status_value) and (
+                status_value != current.get("status")
             )
+            if status_now_negative and csm_value == "at_risk":
+                redundant_with_cascade.append(
+                    (gregory_name, current.get("csm_standing"), csm_value)
+                )
+                # Don't add to field_changes — the cascade does it.
+            else:
+                tier_note = ""
+                if status_now_negative and csm_value != "at_risk":
+                    tier_note = (
+                        " (cascade will overwrite to at_risk — Bucket B contradiction)"
+                    )
+                elif not _is_negative_status(status_value) and _is_negative_status(
+                    current.get("status")
+                ):
+                    tier_note = " (positive transition — cascade does NOT auto-revert; explicit write required)"
+                field_changes.append(
+                    FieldChange(
+                        csv_row=row,
+                        client_id=client_id,
+                        client_name=gregory_name,
+                        field="csm_standing",
+                        current_value=current.get("csm_standing"),
+                        proposed_value=csm_value,
+                        tier=1,
+                        reason=f"csm_standing flip{tier_note}",
+                    )
+                )
 
         # ----- primary_csm (owner) -----
         owner_full_name, owner_class = normalize_owner(row.raw_owner)
@@ -918,23 +976,27 @@ def compute_diff(
                     reason="CSV has slack_user_id; Gregory does not",
                 )
             )
-        # slack_channel_id is on slack_channels, not clients — surface
-        # as Tier 2 informational only. We don't load slack_channels
-        # state here (would balloon the script); Drake checks via
-        # dashboard.
+        # slack_channel_id (Tier 2 — coverage gap signal). slack_channels
+        # is a separate table per migration 0002; we loaded the
+        # client_id → [channel_ids] map via load_slack_channels_by_client.
+        # Only flag rows where CSV has a channel ID AND Gregory has zero
+        # channels for the client. Drake's adjustment: previously this
+        # surfaced every CSV channel which was 126 rows of mostly noise.
         if row.slack_channel_id:
-            field_changes.append(
-                FieldChange(
-                    csv_row=row,
-                    client_id=client_id,
-                    client_name=gregory_name,
-                    field="slack_channel_id",
-                    current_value="(not loaded — see slack_channels table)",
-                    proposed_value=row.slack_channel_id,
-                    tier=2,
-                    reason="CSV has slack_channel_id; verify against slack_channels table",
+            existing_channels = slack_channels_by_client.get(client_id) or []
+            if not existing_channels:
+                field_changes.append(
+                    FieldChange(
+                        csv_row=row,
+                        client_id=client_id,
+                        client_name=gregory_name,
+                        field="slack_channel_id",
+                        current_value="(none — no slack_channels row)",
+                        proposed_value=row.slack_channel_id,
+                        tier=2,
+                        reason="Gregory has no slack_channels row for this client; CSV has one",
+                    )
                 )
-            )
 
         # ----- NPS Standing (Tier 3 — never auto-apply) -----
         if row.raw_nps_standing.strip():
@@ -968,6 +1030,7 @@ def compute_diff(
         handover_unresolved=handover_unresolved,
         name_ambiguous=name_ambiguous,
         duplicate_csv_emails=duplicate_csv_emails,
+        redundant_with_cascade=redundant_with_cascade,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -1062,6 +1125,9 @@ def render_diff_md(diff: DiffResult) -> str:
     )
     lines.append(
         f"- Handover note appends: **{len(diff.handover_plans)}** ({sum(1 for p in diff.handover_plans if p.will_skip_idempotent)} idempotent skips)"
+    )
+    lines.append(
+        f"- Cascade-redundant csm_standing skips: **{len(diff.redundant_with_cascade)}** (cascade sets at_risk; explicit RPC would duplicate the history row)"
     )
     lines.append("")
 
@@ -1337,21 +1403,65 @@ def render_scott_notes_md(
             )
         lines.append("")
 
-    # A8. Unmatched CSV rows.
-    if diff.unmatched_rows:
-        lines.append(f"### A8. Unmatched CSV rows ({len(diff.unmatched_rows)})")
+    # A8. Email mismatches surfaced as Tier 2 — handle per the M5.4
+    # backfill runbook (per-client triage to alternate_emails).
+    email_mismatches = [c for c in tier2 if c.field == "email"]
+    if email_mismatches:
+        lines.append(f"### A8. Email mismatches ({len(email_mismatches)})")
         lines.append("")
         lines.append(
-            "_(CSV rows that didn't resolve to any Gregory client by email or name. "
-            "Resolve manually or add to alternate_emails / alternate_names.)_"
+            "_(CSV email differs from Gregory primary AND not in `alternate_emails`. "
+            "Handle per `docs/runbooks/backfill_nps_from_airtable.md` § Failure modes — "
+            "per-client triage to alternate_emails. Don't bulk-apply.)_"
         )
         lines.append("")
-        for row in sorted(diff.unmatched_rows, key=lambda r: r.name.lower()):
+        for c in sorted(email_mismatches, key=lambda r: r.client_name.lower()):
             lines.append(
-                f"- **{_md_escape(row.name)}** ({row.tab} row {row.csv_row_number}) — "
-                f"email={row.email or '(none)'}, status={row.raw_status or '(blank)'}, owner={row.raw_owner or '(blank)'}"
+                f"- **{_md_escape(c.client_name)}** ({c.csv_row.tab}) — "
+                f"Gregory `{_md_inline(c.current_value)}`, CSV `{_md_inline(c.proposed_value)}`"
             )
         lines.append("")
+
+    # A9 + A10. Unmatched CSV rows split by whether they have an email.
+    # Drake's adjustment: rows with emails are likely real new clients
+    # (manual create-or-merge); rows without emails are Scott-decision.
+    if diff.unmatched_rows:
+        with_email = [r for r in diff.unmatched_rows if r.email]
+        without_email = [r for r in diff.unmatched_rows if not r.email]
+
+        if with_email:
+            lines.append(
+                f"### A9. Unmatched CSV rows WITH email — likely new clients ({len(with_email)})"
+            )
+            lines.append("")
+            lines.append(
+                "_(These have emails but no matching Gregory client. Likely real "
+                "new clients that need a manual create-or-merge decision.)_"
+            )
+            lines.append("")
+            for row in sorted(with_email, key=lambda r: r.name.lower()):
+                lines.append(
+                    f"- **{_md_escape(row.name)}** ({row.tab} row {row.csv_row_number}) — "
+                    f"email={row.email}, status={row.raw_status or '(blank)'}, owner={row.raw_owner or '(blank)'}"
+                )
+            lines.append("")
+
+        if without_email:
+            lines.append(
+                f"### A10. Unmatched CSV rows WITHOUT email — Scott decision ({len(without_email)})"
+            )
+            lines.append("")
+            lines.append(
+                "_(No email in CSV — match-by-name failed. Scott decides whether each "
+                "is a real client to create, a duplicate to merge, or noise to skip.)_"
+            )
+            lines.append("")
+            for row in sorted(without_email, key=lambda r: r.name.lower()):
+                lines.append(
+                    f"- **{_md_escape(row.name)}** ({row.tab} row {row.csv_row_number}) — "
+                    f"status={row.raw_status or '(blank)'}, owner={row.raw_owner or '(blank)'}"
+                )
+            lines.append("")
 
     # ---------- Bucket B ----------
     lines.append("## Bucket B — post-apply mismatches (Scott confirms)")
@@ -1714,17 +1824,28 @@ def main(argv: list[str] | None = None) -> int:
     resolver = build_resolver(db)
     team_by_name = load_team_members(db)
     active_primary = load_active_primary_csm(db)
+    slack_channels = load_slack_channels_by_client(db)
     print(f"  {len(resolver.clients_by_id)} non-archived clients")
     print(f"  {len(team_by_name)} team_members")
     print(f"  {len(active_primary)} active primary_csm assignments")
+    print(
+        f"  {sum(len(v) for v in slack_channels.values())} non-archived slack_channels rows ({len(slack_channels)} clients have ≥1)"
+    )
 
     # Phase 1 — diff.
     print("Computing diff...")
-    diff = compute_diff(csv_rows, resolver, team_by_name, active_primary)
+    diff = compute_diff(
+        csv_rows,
+        resolver,
+        team_by_name,
+        active_primary,
+        slack_channels_by_client=slack_channels,
+    )
     print(
         f"  Tier 1: {len(_tier_changes(diff, 1))}  "
         f"Tier 2: {len(_tier_changes(diff, 2))}  "
-        f"Tier 3: {len(_tier_changes(diff, 3))}"
+        f"Tier 3: {len(_tier_changes(diff, 3))}  "
+        f"Cascade-redundant skips: {len(diff.redundant_with_cascade)}"
     )
 
     # Write Phase 1 outputs (always).

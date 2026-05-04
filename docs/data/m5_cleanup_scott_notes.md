@@ -1,6 +1,8 @@
 # M5 cleanup — Scott meeting notes
 
-Generated: `2026-05-04T20:47:01.458309+00:00`
+Generated: `2026-05-04T21:18:46.008562+00:00`
+
+_Apply phase ran. Counts: status_applied=36, csm_applied=32, primary_csm_applied=16, primary_csm_already_match=6, trustpilot_applied=13, handover_applied=8_
 
 ## Bucket A — pre-apply ambiguities (Scott decides)
 
@@ -101,22 +103,34 @@ _(...truncated; 9 more — see full diff)_
 - **Matthew Gibson (in CSV row USA/180 but no Gregory client matches — needs to be created first)**
 - **Lou (no client by that name in either CSV — spec ambiguous)**
 
-### A8. Unmatched CSV rows (8)
+### A8. Email mismatches (2)
 
-_(CSV rows that didn't resolve to any Gregory client by email or name. Resolve manually or add to alternate_emails / alternate_names.)_
+_(CSV email differs from Gregory primary AND not in `alternate_emails`. Handle per `docs/runbooks/backfill_nps_from_airtable.md` § Failure modes — per-client triage to alternate_emails. Don't bulk-apply.)_
+
+- **Cheston Nguyen** (USA) — Gregory `cheston@395northai.com`, CSV `cheston.nguyen@gmail.com`
+- **Yeshlin Singh** (AUS) — Gregory `yeshlin_singh@yahoo.com`, CSV `yeshlinp@gmail.com`
+
+### A9. Unmatched CSV rows WITH email — likely new clients (3)
+
+_(These have emails but no matching Gregory client. Likely real new clients that need a manual create-or-merge decision.)_
 
 - **Anthony Huang** (AUS row 10) — email=anthony@techmanual.io, status=Churn (Aus), owner=Lou
-- **Clyde Vinson** (USA row 87) — email=(none), status=N/A, owner=N/A
 - **Matthew Gibson** (USA row 180) — email=leandeavor@gmail.com, status=Active, owner=Nico
 - **Melvin Dayal** (AUS row 2) — email=mel2.kar3@hotmail.com, status=Churn (Aus), owner=Lou
-- **Mishank** (AUS row 8) — email=(none), status=Churn (Aus), owner=N/A
-- **Rachelle Hernandez** (USA row 132) — email=(none), status=N/A, owner=N/A
-- **Scott Stauffenberg** (USA row 81) — email=(none), status=N/A, owner=Nabeel
-- **Vaishali Adla** (USA row 45) — email=(none), status=N/A, owner=Nabeel
+
+### A10. Unmatched CSV rows WITHOUT email — Scott decision (5)
+
+_(No email in CSV — match-by-name failed. Scott decides whether each is a real client to create, a duplicate to merge, or noise to skip.)_
+
+- **Clyde Vinson** (USA row 87) — status=N/A, owner=N/A
+- **Mishank** (AUS row 8) — status=Churn (Aus), owner=N/A
+- **Rachelle Hernandez** (USA row 132) — status=N/A, owner=N/A
+- **Scott Stauffenberg** (USA row 81) — status=N/A, owner=Nabeel
+- **Vaishali Adla** (USA row 45) — status=N/A, owner=Nabeel
 
 ## Bucket B — post-apply mismatches (Scott confirms)
 
-_(Phase 2 has not run yet. Run with `--apply` to populate this section.)_
+_(none — Gregory state matches CSV after apply)_
 
 ## Quick reference — status directives applied
 
