@@ -231,13 +231,13 @@
 <div class="wrap">
 
   <header class="session-head">
-    <div class="id">Session M5 — mid-day reframe</div>
-    <h1>V1 scope reset — match the Financial Master Sheet so Gregory gets adopted.</h1>
+    <div class="id">Session M5 — V1 adoption infrastructure shipped</div>
+    <h1>Cascade infrastructure landed; Path 2 outbound writeback is next.</h1>
     <div class="goal">
-      Scott's 1:1 (post-CSM-sync) reframed V1: the failure mode is "a fancier fulfillment master sheet" — i.e. shipping features Scott doesn't adopt. Adoption is the only metric that matters; the V2 vision (action item HITL, classifier extensions, summary backfill, Gregory concerns, archetypes) sits on top of an adopted V1, not underneath an unadopted one. New V1 scope is therefore "Gregory replaces the Financial Master Sheet, including the workflow automations Scott does between columns today" — not just matching the sheet's columns. Confirmed-in-V1: status vocab expansion (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">active/ghost/paused/leave/churn</span>) + default-hide churn/leave, status→accountability/NPS auto-toggle (depends on Zain+Nabeel's Airtable webhook), V1 filter set (Loom-driven, scope-pending), one-time owner+status final sync to trigger Scott's transition off the master sheet. Pre-pivot engineering chunks (summary backfill, classifier extension, manual reclassification, Gregory concerns deep-dive) defer to V2.
+      The V1 adoption thesis (post-Scott 1:1) is now backed by infrastructure: status vocab expansion (M5.3), trustpilot vocab rename (M5.3b), Airtable NPS Path 1 inbound receiver (M5.4), comprehensive filter bar on <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">/clients</span> (M5.5), and DB-level status cascade with Scott Chasing sentinel + accountability/NPS toggles (M5.6, with same-day hotfix for three regressions surfaced by visual smoke). Gregory now matches the Financial Master Sheet's daily workflow shape, including the automation Scott does between columns. Next priority is Path 2 outbound writeback — dashboard edits propagate back to upstream Airtable via a Make.com webhook listening on UPDATE of the cascade-owned columns. Make.com walkthrough with Zain is the gate.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — mid-day pivot, V1 scope reset post-Scott 1:1</span>
+      <span><strong>Last updated:</strong> Session M5 — M5.6 + hotfix close-out</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -251,31 +251,31 @@
       </header>
 
       <div class="card">
-        <div class="id">M5.3</div>
-        <div class="title">Status vocabulary expansion + default-hide churn/leave</div>
-        <div class="subtitle">Scott wants the status vocab to be <span style="font-family: var(--mono); font-size: 12.5px;">active / ghost / paused / leave / churn</span>. Two changes vs. today: rename <span style="font-family: var(--mono); font-size: 12.5px;">churned</span> → <span style="font-family: var(--mono); font-size: 12.5px;">churn</span> (data migration: <span style="font-family: var(--mono); font-size: 12.5px;">UPDATE clients SET status = 'churn' WHERE status = 'churned'</span> + same on <span style="font-family: var(--mono); font-size: 12.5px;">client_status_history</span> for consistency, though that table's status column is unconstrained), and add <span style="font-family: var(--mono); font-size: 12.5px;">leave</span> as a new value (clients we've decided to let go ghost without chasing). Migration drops the existing check constraint on <span style="font-family: var(--mono); font-size: 12.5px;">clients.status</span>, updates data, adds new check constraint. Plus UI: <span style="font-family: var(--mono); font-size: 12.5px;">/clients</span> list page defaults to hiding <span style="font-family: var(--mono); font-size: 12.5px;">churn</span> + <span style="font-family: var(--mono); font-size: 12.5px;">leave</span>, with a toggle to reveal. Hard-stop at the migration boundary — Drake applies via Studio + ledger registration + dual-verification per the standing migration norm.</div>
+        <div class="id">P1</div>
+        <div class="title">Path 2 outbound writeback architecture (TOP)</div>
+        <div class="subtitle">Make.com walkthrough with Zain happens during the next session — Zain will be active and working. Pre-meeting: scoping doc / question list ready. Path 1 (M5.4) is one-way Airtable → Gregory; Path 2 is the inverse — dashboard edits (cascade-fired or CSM-manual) propagate back to upstream Airtable. Architecture narrowed by M5.6: <span style="font-family: var(--mono); font-size: 12.5px;">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 12.5px;">nps_enabled</span> columns now exist; Path 2 listens on UPDATE via a Supabase Database Webhook (or parallel trigger). Both cascade and manual paths land in the same UPDATE so the receiver doesn't need to distinguish.</div>
+        <div class="pills"><span class="pill warn">walkthrough-gated</span><span class="pill">scoping doc needed</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">P2</div>
+        <div class="title">Trustpilot auto-correct + Country promotion (bundled)</div>
+        <div class="subtitle">Trustpilot auto-correct (Scott's Loom 2) sits on top of the M5.6 cascade infrastructure — same trigger pattern, different rule (<span style="font-family: var(--mono); font-size: 12.5px;">csm_standing</span> → certain transitions auto-flip <span style="font-family: var(--mono); font-size: 12.5px;">trustpilot_status</span>). Country is currently a tag on <span style="font-family: var(--mono); font-size: 12.5px;">clients.metadata.country</span> (USA/AUS); promote to a real column with display + filter surfaces, retiring the disabled "Country" placeholder dropdown from M5.5. Bundled — both touch client-page schema + the M5.5 filter bar.</div>
         <div class="pills"><span class="pill">schema-touch</span><span class="pill warn">migration boundary</span></div>
       </div>
 
       <div class="card">
-        <div class="id">M5.4</div>
-        <div class="title">Status → accountability/NPS auto-toggle wiring</div>
-        <div class="subtitle">The headliner workflow Scott called out. Today on the master sheet, when he changes a client's status he then has to manually update accountability + NPS toggles in Airtable. Gregory should do step two automatically. Rules: accountability auto-on for <span style="font-family: var(--mono); font-size: 12.5px;">active</span>, auto-off for <span style="font-family: var(--mono); font-size: 12.5px;">paused</span>, manual toggle available, off for Rick + Nate explicitly; NPS auto-off for <span style="font-family: var(--mono); font-size: 12.5px;">paused</span>, manual toggle available, same pattern as accountability for <span style="font-family: var(--mono); font-size: 12.5px;">ghost</span>. Two-part build: (1) receiver work for the Airtable webhook from Zain + Nabeel — a small Vercel serverless function in <span style="font-family: var(--mono); font-size: 12.5px;">api/</span> that validates payload + updates the client row; (2) toggle-automation logic on status change in the dashboard's status update path. Gated on Airtable webhook landing first; Drake working with Zain on the Airtable side at today's 3:30 sync.</div>
-        <div class="pills"><span class="pill warn">gated on Airtable webhook</span><span class="pill">two-part</span></div>
+        <div class="id">P3</div>
+        <div class="title">May meetings tracker + inactivity flag (bundled)</div>
+        <div class="subtitle">Both are aggregations on existing call data. Inactivity flag = end-of-week-2 monthly meeting count (Scott's Loom 2 framing); May meetings tracker = related view of who's met who in the current month. Bundled — underlying call-aggregation queries are the same shape.</div>
+        <div class="pills"><span class="pill">read-only / aggregation</span></div>
       </div>
 
       <div class="card">
-        <div class="id">M5.5</div>
-        <div class="title">V1 filter set on /clients list page</div>
-        <div class="subtitle">Scope is "everything Scott uses daily on the master sheet." Confirmed today: filter by owner + status, "every NPS-happy client that hasn't yet left a Trustpilot," "who haven't I spoken to in three weeks." Includes the deferred-from-M4 filter additions (<span style="font-family: var(--mono); font-size: 12.5px;">csm_standing</span>, <span style="font-family: var(--mono); font-size: 12.5px;">ghl_adoption</span>, <span style="font-family: var(--mono); font-size: 12.5px;">trustpilot_status</span>) plus combination/saved-filter patterns Scott will surface in his Loom walking through every master-sheet workflow. Loom IS the V1 spec — anything beyond what's listed here stays scope-pending until it lands. Loom timing uncertain; tracker not gated on it.</div>
-        <div class="pills"><span class="pill warn">scope pending — Loom-driven</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">M5.6</div>
-        <div class="title">Owner + status final sync from master sheet</div>
-        <div class="subtitle">One-time data task, not engineering. Scott is mid-handover; he'll update statuses + owners on the master sheet, send Drake the diff (or Drake reads the master sheet directly), Drake syncs to cloud one final time via the dashboard's existing primary-CSM dropdown (M3-shipped) + status field. After this sync lands, Scott transitions off the master sheet onto Gregory — the trigger for adoption.</div>
-        <div class="pills"><span class="pill">manual / one-time</span><span class="pill">adoption trigger</span></div>
+        <div class="id">P4</div>
+        <div class="title">Manual cleanup pass</div>
+        <div class="subtitle">Drake's full client-data cleanup — happens after all Scott features ship so cleanup runs against a stable feature set. Includes the M4 Chunk C carry-overs (21 non-churn auto-creates cross-check, 4 Aleks-orphan reassignments, 7 placeholder emails), the 32 currently-CSM-owned negative-status clients from M5.6 (Lou 18 / Scott Wilson 13 / Nabeel 1 — decide whether to reassign to Scott Chasing), and any field gaps surfacing in daily use.</div>
+        <div class="pills"><span class="pill">manual / no code</span></div>
       </div>
     </div>
 
@@ -288,7 +288,7 @@
       <div class="card">
         <div class="id">M5.1</div>
         <div class="title">Manual client data cleanup — 197-client walk-through</div>
-        <div class="subtitle">Pre-sync block continues post-pivot. Walk all 197 non-archived clients via the dashboard and resolve the three M4 Chunk C carry-overs from <span style="font-family: var(--mono); font-size: 12.5px;">docs/followups.md</span>: (a) cross-check the 21 non-churn auto-creates against existing-cloud-data-in-other-forms (any might already exist under a different identity — flag merge candidates); (b) reassign primary CSM on the 4 Aleks-orphan clients (Colin Hill, Ming-Shih Wang, Jose Trejo, Alex Crosby) via the dashboard's Primary CSM dropdown; (c) update the 7 placeholder emails (<span style="font-family: var(--mono); font-size: 12.5px;">&lt;slug&gt;+import@placeholder.invalid</span>) if real emails are known. Plus any field gaps the master sheet didn't cover. Goal: every active client up to date so the M5.6 owner+status final sync from Scott lands cleanly. Fully manual, no Code work.</div>
+        <div class="subtitle">Pre-sync block continues. Walk all 197 non-archived clients via the dashboard and resolve M4 Chunk C carry-overs from <span style="font-family: var(--mono); font-size: 12.5px;">docs/followups.md</span>: (a) 21 non-churn auto-creates cross-check; (b) 4 Aleks-orphan reassignments via Primary CSM dropdown; (c) 7 placeholder emails to update if real ones are known. Plus the 32 negative-status-CSM-owned clients from M5.6 backfill. Fully manual, no Code work.</div>
         <div class="pills"><span class="pill">manual / no code</span></div>
       </div>
     </div>
@@ -296,32 +296,68 @@
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">1</span>
+        <span class="count">6</span>
       </header>
+
+      <div class="card">
+        <div class="id">M5.6</div>
+        <div class="title">Status cascade + Scott Chasing + accountability/NPS toggles + same-day hotfix</div>
+        <div class="subtitle">DB-level cascade so when status moves to a negative value, <span style="font-family: var(--mono); font-size: 12.5px;">csm_standing → at_risk</span> + <span style="font-family: var(--mono); font-size: 12.5px;">accountability_enabled → false</span> + <span style="font-family: var(--mono); font-size: 12.5px;">nps_enabled → false</span> + <span style="font-family: var(--mono); font-size: 12.5px;">primary_csm</span> reassigned to Scott Chasing sentinel. One-directional (off-only); manual overrides not sticky. Migration 0022 (cascade + GUC attribution + Scott Chasing sentinel + <span style="font-family: var(--mono); font-size: 12.5px;">team_members.is_csm</span>). Same-day hotfix for three visual-smoke regressions: stale-closure bug in EditableField (pre-existed since M4) + change_primary_csm RPC unique-key violation (migration 0023, ON CONFLICT pattern).</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill warn">+ hotfix</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.5</div>
+        <div class="title">Comprehensive filter bar on /clients</div>
+        <div class="subtitle">9-dropdown row replaces the chip + single-CSM-dropdown layout: 5 active multi-selects (Status / Primary CSM / CSM Standing / NPS Standing / Trustpilot), 1 single-value toggle (Needs review), 3 disabled placeholders (Accountability / NPS toggle / Country) signaling next-slice work. New <span style="font-family: var(--mono); font-size: 12.5px;">lib/client-vocab.ts</span> vocab module + reusable <span style="font-family: var(--mono); font-size: 12.5px;">MultiSelectDropdown</span> primitive. URL state: comma-separated multi-values, OR-within / AND-across, status absent-vs-empty sentinel for default-trio pre-check.</div>
+        <div class="pills"><span class="pill">delivered</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.4</div>
+        <div class="title">Airtable NPS Path 1 — schema + receiver + 79-row backfill</div>
+        <div class="subtitle">Migration 0021 added <span style="font-family: var(--mono); font-size: 12.5px;">clients.nps_standing</span> + Gregory Bot sentinel team_member + <span style="font-family: var(--mono); font-size: 12.5px;">update_client_from_nps_segment</span> RPC. Vercel webhook receiver (<span style="font-family: var(--mono); font-size: 12.5px;">api/airtable_nps_webhook.py</span>) auths via shared secret, normalizes Airtable raw segment strings to lowercase, calls RPC. Override-sticky csm_standing semantics enforced inside RPC (auto-derive only when current is null OR most recent history row is Gregory Bot). Make.com automation enabled. Historical 79-row Survery table backfilled — 59 successes, 2 email-mismatch cleanup followups.</div>
+        <div class="pills"><span class="pill">delivered</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.3b</div>
+        <div class="title">Trustpilot vocab rename</div>
+        <div class="subtitle">Migration 0020 — <span style="font-family: var(--mono); font-size: 12.5px;">clients.trustpilot_status</span> 1:1 rename to match the master sheet vocab Scott uses daily (<span style="font-family: var(--mono); font-size: 12.5px;">given→yes / declined→no / not_asked→ask / pending→asked</span>). Pure structural rename, no logic changes. Imperative semantics on <span style="font-family: var(--mono); font-size: 12.5px;">ask</span> (call-to-action, not descriptive).</div>
+        <div class="pills"><span class="pill">delivered</span></div>
+      </div>
+
+      <div class="card">
+        <div class="id">M5.3</div>
+        <div class="title">Status vocabulary expansion (`leave` + first DB-level CHECK)</div>
+        <div class="subtitle">Migration 0019 added <span style="font-family: var(--mono); font-size: 12.5px;">leave</span> to the status vocabulary (active / paused / ghost / leave / churned) + first DB-level CHECK constraint on <span style="font-family: var(--mono); font-size: 12.5px;">clients.status</span>. Replaced <span style="font-family: var(--mono); font-size: 12.5px;">update_client_status_with_history</span> RPC to mirror the new allowlist. <span style="font-family: var(--mono); font-size: 12.5px;">leave</span> = CSM decision to let a client go ghost without chasing (distinct from <span style="font-family: var(--mono); font-size: 12.5px;">churned</span> = post-program).</div>
+        <div class="pills"><span class="pill">delivered</span></div>
+      </div>
 
       <div class="card">
         <div class="id">M5.2</div>
         <div class="title">11am EST CSM sync — dashboard onboarding + call titling rollout</div>
-        <div class="subtitle">Drake-led. Walked the team through the V1 client page (7 sections, inline-edit, NPS-entry form), the Calls pages (list + detail + edit-mode classification), and the merge feature. Rolled out the three call-title prefixes (<span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span>) per <span style="font-family: var(--mono); font-size: 12.5px;">docs/conventions/call_titling.md</span>. Passive verification queued: query <span style="font-family: var(--mono); font-size: 12.5px;">webhook_deliveries</span> at EOD for any <span style="font-family: var(--mono); font-size: 12.5px;">source='fathom_webhook'</span> rows — naturally exercises the M4.1-restored realtime webhook smoke test if any CSM recorded during/after the sync. Drake's follow-on 1:1 with Scott reset V1 scope (see header).</div>
-        <div class="pills"><span class="pill">delivered</span><span class="pill warn">webhook check pending EOD</span></div>
+        <div class="subtitle">Drake-led. Walked the team through the V1 client page (7 sections, inline-edit, NPS-entry form), the Calls pages, and the merge feature. Rolled out the three call-title prefixes (<span style="font-family: var(--mono); font-size: 12.5px;">[Client]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Discovery]</span>, <span style="font-family: var(--mono); font-size: 12.5px;">[Client x Prospect]</span>) per <span style="font-family: var(--mono); font-size: 12.5px;">docs/conventions/call_titling.md</span>. Drake's follow-on 1:1 with Scott reset V1 scope.</div>
+        <div class="pills"><span class="pill">delivered</span></div>
       </div>
+
     </div>
 
   </section>
 
   <section class="blockers">
-    <h2>Blockers / Needs from Nabeel</h2>
+    <h2>Blockers / Needs from Nabeel + Zain</h2>
     <ul>
       <li>
-        <strong>V1 scope reset — sequencing for adoption, not feature cuts.</strong> Drake will frame for Nabeel as "sequencing for adoption" rather than "cutting features." V2 vision (action item HITL, classifier work, Gregory concerns, archetypes, summary backfill) sits on top of adopted V1, not underneath unadopted V1. The adoption-or-failure framing came from Scott's 1:1 today; needs Nabeel-side alignment so the V1 scope reset doesn't surprise him at the next strategic check-in.
-        <div><span class="ref">Unblocks: confidence on the V2 deferral list; clean narrative for Nabeel's visibility cadence.</span></div>
+        <strong>Make.com walkthrough with Zain — gates Path 2 outbound writeback (top priority next session).</strong> Zain will be active in the next session; pre-meeting scoping doc / question list ready before. Path 2 architecture narrowed by M5.6 to "listen on UPDATE of the cascade-owned columns" — the walkthrough is for the Airtable side (which fields each Gregory column maps to, write semantics, conflict resolution, idempotency token shape).
+        <div><span class="ref">Unblocks: Path 2 receiver scope + first build chunk.</span></div>
       </li>
       <li>
         <strong>Read on M1.4.3:</strong> does the user-token reply path (Ella's response renders with no APP tag in <span class="ref">#ella-test-drakeonly</span>) address the "looks unprofessional" feedback? Inbound @-mention still targets the bot — Slack architectural constraint, not a code choice. <em>(Open since M1.4.3 ship; still pending.)</em>
         <div><span class="ref">Unblocks: M1.4.5 pilot rollout to Fernando G / Musa / Jenny / Dhamen / Trevor / Art channels.</span></div>
       </li>
       <li>
-        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. Now V2 territory per the adoption-first scope reset — reads as a Gregory-concerns piece that sits on top of adopted V1 rather than something to ship into an unadopted V1. Will revisit once Scott is on Gregory daily.
+        <strong>Decision on enabling <span class="ref">GREGORY_CONCERNS_ENABLED</span>:</strong> Gregory brain V1.1's Claude-driven concerns generation produces qualitative watchpoints from recent call summaries. Architecture is fully built and live; flipping the Vercel env var to <span class="ref">true</span> activates it on next Monday's cron run. V2 territory per the adoption-first scope reset — sits on top of adopted V1, not underneath. Revisit once Scott is on Gregory daily and call-summary coverage densifies.
         <div><span class="ref">Deferred to V2 alongside the rest of the Gregory-concerns surface area.</span></div>
       </li>
     </ul>
