@@ -11,6 +11,31 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## M5.6 silent-toggle backfill — 17 clients flipped accountability/nps without history row
+
+- **What:** the M5.6 migration 0022 backfilled `accountability_enabled` and `nps_enabled` to `false` on 82 negative-status clients. 65 of them got a `cascade:backfill:m5.6` row in `client_standing_history` (those whose `csm_standing` flipped from a non-`at_risk` value or NULL). The other 17 already had `csm_standing='at_risk'` from prior CSM judgment / master-sheet seed, so the backfill flipped the toggles without writing a history row — `csm_standing` didn't change, so the history insert (which is keyed on csm_standing transitions) had nothing to write. There is no `client_accountability_history` / `client_nps_enabled_history` table in V1 either, so the toggle change for these 17 is invisible in the audit trail.
+- **Why it matters:** if a CSM later asks "why is accountability off for client X?" and X is one of the 17, the only signal is the migration commit message + this entry. Most queries against the audit trail (e.g. the cascade-attribution query in `docs/schema/client_standing_history.md`) won't surface them. Static snapshot of the 17 client IDs is preserved at `docs/data/m5_6_silent_toggle_backfill.md`.
+- **Next action:** if Path 2 audit requirements OR a CSM workflow demands a per-toggle history table, build `client_accountability_history` and `client_nps_enabled_history` (mirror `client_status_history`'s shape: `id, client_id, value boolean, changed_at, changed_by, note`). Backfill from `webhook_deliveries` (post-Path-2 records) plus the 17-client snapshot above. Not urgent — V1 doesn't need toggle-level audit yet.
+- **Recovery SQL — identify the silent-toggle 17 post-hoc.** This query mirrors the snapshot file's set as long as none of the 17 has had `csm_standing` cleared+re-set OR a CSM has manually flipped the toggles back on:
+  ```sql
+  select c.id, c.full_name, c.status, c.csm_standing,
+         c.accountability_enabled, c.nps_enabled
+  from clients c
+  where c.archived_at is null
+    and c.status in ('ghost','paused','leave','churned')
+    and c.csm_standing = 'at_risk'
+    and c.accountability_enabled = false
+    and c.nps_enabled = false
+    and not exists (
+      select 1 from client_standing_history csh
+      where csh.client_id = c.id
+        and csh.note = 'cascade:backfill:m5.6'
+    )
+  order by c.status, c.full_name;
+  ```
+  Cross-check against `docs/data/m5_6_silent_toggle_backfill.md` — divergence means one of: (a) a client had csm_standing cleared and re-set (creating a real history row, removing them from this query's set), (b) a CSM has manually flipped a toggle back to true (the row no longer matches the toggle filter), or (c) a future cascade re-fire wrote a fresh history row. All three are expected lifecycle outcomes; the snapshot file is the immutable "as of M5.6 apply" reference.
+- **Logged:** 2026-05-04 (M5.6 close-out — 17 silent toggles accepted per Drake's (a)+(d) call instead of building toggle-level history tables now).
+
 ## STATUS_DEFAULT_SELECTED duplicated across client/server boundary
 
 - **What:** the M5.5 filter bar's default-status trio (`['active','paused','ghost']`) is hard-coded twice — once in `app/(authenticated)/clients/filter-bar.tsx` (Client Component, used to pre-check the Status dropdown when the URL param is absent) and once in `app/(authenticated)/clients/page.tsx` (Server Component, used by `readFilters` to inject the same default into the DB query). Both copies are identical; neither imports from the other because the `'use client'` boundary made a shared module path awkward at M5.5 ship time.

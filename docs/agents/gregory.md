@@ -489,3 +489,66 @@ Deviations from the M5.5 spec:
 **Smoke checkpoint passed 2026-05-03.** `next build` clean (0 type errors, 8/8 static pages, `/clients` route bundle 32.1 kB). 7 URL-equivalent SQL count probes against cloud all sensible: default trio = 145 (matches 145 + 52 churned = 197 non-archived from CLAUDE.md exactly); explicit-empty status = 197 (✓ all non-archived); `?needs_review=1` under default status = 24 (matches followups.md's "24 auto-created clients" exactly); `?nps_standing=promoter,neutral` under default = 48 ≈ 49 (CLAUDE.md's 27 promoter + 22 neutral; -1 for one outside default-visible — consistent); `?trustpilot=yes,no` under default = 82 ≤ 90 (-8 for ones in churned/leave — consistent); two-dropdown intersection `?status=active&csm_standing=at_risk` = 16 (subset of 145 default). Risks from the pre-build report: (1) default-state-vs-explicit-empty sentinel implemented per spec, (2) `DropdownMenuCheckboxItem` close-on-click neutralized at probe time — base-ui's default is `closeOnClick: false`, opposite of Radix, no special-case needed, (3) `primary_csm_id` rename shipped per Drake's confirmation. Visual eyeball on the auth-gated dashboard pending Drake's push + browser session.
 
 **Pushed during the smoke greenlight window.** Three commits at `c761207` (vocab module + nps-standing-pill refactor) → `d8febaa` (MultiSelectDropdown) → `4059602` (FilterBar + page + getClientsList). Vercel auto-deploy follows the push. Visual smoke through the auth-gated dashboard UI is the remaining verification step — pending Drake's eyeball.
+
+### M5.6 — Status cascade + Scott Chasing + accountability/NPS toggles (built 2026-05-04, awaiting visual smoke)
+
+Shipped: DB-level cascade so when a client's `clients.status` moves to a negative value (`ghost` / `paused` / `leave` / `churned`), a coordinated set of derived field changes auto-fire in one transaction:
+
+1. `csm_standing` → `'at_risk'` (history row written, attributed to Gregory Bot)
+2. `accountability_enabled` → `false`
+3. `nps_enabled` → `false`
+4. `primary_csm` reassigned to the **Scott Chasing** sentinel team_member
+5. `trustpilot_status` — explicitly NOT touched (Scott was clear)
+
+Implements Scott's Loom 1 + Loom 3 walkthroughs ("safer to default off whenever unsure"). Cascade is **one-directional** — there is no symmetric trigger for `active`. CSMs can manually flip `accountability_enabled` / `nps_enabled` back to `true` via the dashboard; the override is **not sticky** — a future negative-going status transition re-fires the cascade and flips them back to false. The dashboard surfaces an `active+off` amber hint on the toggles so re-activations don't go un-noticed.
+
+Pieces:
+
+- **Migration `0022_status_cascade.sql`.** Schema additions: `clients.accountability_enabled boolean not null default true`, `clients.nps_enabled boolean not null default true`, `team_members.is_csm boolean not null default false`. Sentinel: `Scott Chasing` team_member, UUID `ccea0921-7fc1-4375-bcc7-1ab91733be73`, `role='csm'`, `is_csm=true`, `metadata.sentinel=true`. Triggers: `clients_status_cascade_before` (BEFORE UPDATE — mutates NEW row in-flight) + `clients_status_cascade_after` (AFTER UPDATE — writes history row + reassigns primary_csm). Both gated on `OLD.status IS DISTINCT FROM NEW.status AND NEW.status IN ('ghost','paused','leave','churned')`. The AFTER trigger handles primary_csm reassignment via `INSERT ... ON CONFLICT (client_id, team_member_id, role) DO UPDATE SET unassigned_at = NULL, assigned_at = now()` — the unique-key collision case fires when a client gets cascaded → manually reassigned to a real CSM → cascaded again, leaving the original Scott-Chasing assignment archived but present.
+- **Updated `update_client_status_with_history` RPC.** Same signature, same allowlist. Adds `set_config('app.current_user_id', p_changed_by::text, true)` at the top of the function body (when `p_changed_by IS NOT NULL`) so the AFTER trigger can read the human attribution via `current_setting('app.current_user_id', true)`. SET LOCAL via `set_config(_, _, true)` is transaction-scoped; clears on COMMIT/ROLLBACK. Verified at smoke: probe A (RPC with GUC) landed Lou's UUID in the note; probe B (direct UPDATE in a fresh transaction immediately after A) landed `:by:NULL` — no leak.
+- **Structured note format on cascade-induced rows.** `cascade:status_to_<status>:by:<uuid_or_NULL>` for transition-fired rows; `cascade:backfill:m5.6` for the migration's data backfill. SQL-side joinable to recover "which human triggered this cascade" — see audit query below.
+- **Data backfill for current negative-status clients.** Two passes (history insert before UPDATE so the SELECT reads pre-update state). 82 clients in negative status flipped: 65 got `cascade:backfill:m5.6` history rows; 17 are silent toggles where `csm_standing` was already `'at_risk'` so no history row was written (snapshot at `docs/data/m5_6_silent_toggle_backfill.md`; recovery query in `docs/followups.md`). Primary_csm reassignment intentionally skipped for the backfill — the 32 currently-CSM-owned negative-status clients (Lou 18, Scott Wilson 13, Nabeel 1) keep their assignments. Drake decides manual cleanup post-apply.
+- **`is_csm` backfill + dashboard dropdown filter.** `is_csm = true` set on the four real CSMs (Lou Perez, Nico Sandoval, Scott Wilson, Nabeel Junaid) + Scott Chasing sentinel. Both team_members SELECT sites in the dashboard now filter on `is_csm = true`: the M5.5 filter bar's `primaryCsmOptions` query in `app/(authenticated)/clients/page.tsx`, and the swap-CSM dialog's team_members fetch in `lib/db/clients.ts:getClientById`. Post-M5.6 the Primary CSM dropdowns show 5 options (the four CSMs + Scott Chasing); engineering / ops / sales / Gregory Bot are excluded.
+- **`BooleanToggleField` in `components/client-detail/adoption-section.tsx`.** Small custom component for the two new toggles. Built rather than extending `EditableField` because the active+off warning hint depends on a sibling field (`client.status`) the generic component doesn't see. Visual treatment: amber border + ⚠ icon + `title` attribute tooltip on the trigger when `client.status === 'active' && client.<toggle> === false`. Same amber palette as the existing `needs_review` pill — reusing rather than introducing a new warning-color convention.
+- **`UPDATABLE_FIELDS` + `FIELD_TYPES` extended in `lib/db/clients.ts`.** New `'boolean_toggle'` field type added to the `FieldType` union; Server Action narrowing accepts `true` / `false` / `'true'` / `'false'`, rejects null (the columns are `NOT NULL DEFAULT true`).
+- **`lib/supabase/types.ts` hand-edits.** `accountability_enabled` + `nps_enabled` added to clients Row/Insert/Update + the three RPC `Returns` types that mirror clients shape (status / journey_stage / csm_standing). `is_csm` added to team_members Row/Insert/Update. Per CLAUDE.md the Supabase types regen path is broken; the standing followup tracks the manual-edit gap.
+
+Audit-trail SQL query — find cascade-induced standing changes by who triggered them:
+
+```sql
+select
+  c.full_name,
+  csh.changed_at,
+  split_part(csh.note, ':', 4) as triggered_by_user_uuid,
+  tm.full_name                  as triggered_by_name,
+  csh.csm_standing              as cascade_set_to,
+  csh.note
+from client_standing_history csh
+join clients c on c.id = csh.client_id
+left join team_members tm on tm.id::text = split_part(csh.note, ':', 4)
+where csh.note like 'cascade:status_to_%'
+order by csh.changed_at desc;
+```
+
+Notes on the query: `split_part(note, ':', 4)` returns the literal string `'NULL'` for cascade rows where no GUC was set (direct UPDATE via Studio, or a calling RPC that didn't set the GUC). The LEFT JOIN handles that — rows with `:by:NULL` show `triggered_by_name = NULL` (no UUID matches the literal string `'NULL'`). Future-proofing if the literal-NULL convention proves annoying: wrap with `nullif(split_part(note, ':', 4), 'NULL')` before the join.
+
+Spec deviations:
+
+- **17 silent-toggle clients accepted with snapshot + recovery query** (Drake call (a)+(d)). Pre-apply count was 17, above the spec's single-digit acceptance threshold. Drake confirmed accept-and-document path: `docs/data/m5_6_silent_toggle_backfill.md` carries the static UUID list; `docs/followups.md` carries the recovery query for re-derivation post-hoc.
+- **Scott Chasing sentinel `role='csm'`** (Drake call). Distinct from Gregory Bot's `role='system_bot'` — Scott Chasing functions as a CSM placeholder from the dashboard's perspective (clients get assigned to it like any real CSM). The orthogonal `metadata.sentinel=true` flag remains the "exclude from real-team listings" filter.
+- **Primary_csm reassignment skipped for backfill** (per spec). 32 currently-CSM-owned negative-status clients (Lou 18 / Scott Wilson 13 / Nabeel 1) keep their existing primary_csm assignments. Drake decides manual cleanup post-apply via the dashboard's swap-CSM dialog.
+- **Custom `BooleanToggleField` over EditableField extension.** The active+off warning hint depends on `client.status`, which the generic EditableField doesn't carry. Adding the warning to EditableField would couple it to the parent client shape. Contained in adoption-section.tsx; ~70 lines.
+- **stale `team_members.md` flagged + backfilled.** Doc listed only V1 seed (Scott / Lou / Nico / Drake / Nabeel / Zain) but live cloud has 11 rows including Aman (sales), Ellis (ops), Huzaifa (ops). Doc updated as part of Step 5 to mirror live state + add Scott Chasing to the sentinel table.
+
+**Migration count: 1** (`0022_status_cascade.sql`).
+
+**Smoke checkpoint passed 2026-05-04.** Migration applied to cloud via psycopg2; dual-verified (11/11 schema + ledger checks). Four SQL probes: A — RPC with GUC landed `:by:<lou-uuid>`. B — direct UPDATE in fresh transaction immediately after A landed `:by:NULL` (no GUC leak — the SECURITY DEFINER + SET LOCAL pattern works as designed; this was the highest-priority verification per Drake's pre-apply condition). C — re-fire idempotency on client_a (paused → ghost) wrote a new history row, did not double-swap primary_csm (correctly stayed Scott Chasing). D — both probe clients fully reset to pre-state (history rows preserved per immutability). `next build` clean: 0 type errors, 8/8 static pages, `/clients/[id]` route bundle 10.4 → 10.8 kB.
+
+Risks post-build:
+
+1. **GUC under SECURITY DEFINER + SET LOCAL** — *did not materialize* (probes A + B confirmed no leak).
+2. **`UNIQUE` collision on re-cascade** — *not yet exercised in smoke.* Probe C re-fired the cascade on client_a, but client_a's active assignment was already Scott Chasing so the no-op-when-already-Scott-Chasing branch fired. The `ON CONFLICT (client_id, team_member_id, role) DO UPDATE` path will be exercised the first time a CSM manually reassigns a cascaded client back to a real CSM and that client subsequently gets cascaded again. Worth a follow-up live verification once a real cascade-then-reassign-then-recascade pattern surfaces.
+3. **Backfill UPDATE accidentally firing the cascade** — *did not materialize.* The backfill UPDATE doesn't touch status; the trigger's `OLD.status IS DISTINCT FROM NEW.status` guard correctly evaluates false. 65 cascade:backfill:m5.6 rows landed via the explicit INSERT path; no surprise extras.
+4. **active+off UI hint requires `client.status` in the toggle's data flow** — *resolved at design time* by building a custom `BooleanToggleField` rather than extending `EditableField`. Section reads `client.status` and `client.<toggle>` together at the call site; passes computed `warn` boolean down. EditableField stays unchanged.
+
+**Local commits ready, push pending Drake's visual smoke.** `fe51fec` (M5.5 carryover docs) → `4f8811f` (migration 0022) → `7251906` (dashboard wiring) → next: docs commit (this build-log entry + schema doc updates + CLAUDE.md sync + future-ideas.md narrowing + 17-client snapshot + followups recovery query).

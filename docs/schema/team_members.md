@@ -13,9 +13,10 @@ Identify agency staff (CSMs, leadership, engineering, ops) so agents can attribu
 | `id` | `uuid` | PK, default `gen_random_uuid()` |
 | `email` | `text` | Not null. Partial-unique where `archived_at is null`. Primary join key for inbound sources (Fathom, Slack Connect emails) |
 | `full_name` | `text` | Not null |
-| `role` | `text` | Free-form: `csm`, `leadership`, `engineering`, `ops` |
+| `role` | `text` | Free-form: `csm`, `leadership`, `engineering`, `ops`, `sales`, `system_bot` |
 | `slack_user_id` | `text` | Partial-unique where `archived_at is null`. Slack `U...` id for mentions and matching |
 | `is_active` | `boolean` | Default `true`. Cheap filter; `archived_at` is the durable signal |
+| `is_csm` | `boolean` | Added in 0022. Not null, default `false`. Marks a team_member as eligible for `primary_csm` assignments. Surfaces in dashboard Primary CSM dropdowns (filter dropdown on `/clients`, swap dialog on `/clients/[id]` — both filter `is_csm = true`). Default `false` so non-CSM team_members (engineering, ops, sales) are excluded; flipping to `true` is an explicit choice. Orthogonal to the free-text `role` column — Scott Wilson and Nabeel Junaid carry `role='leadership'` but `is_csm=true` because they actively own clients. The Scott Chasing sentinel carries `is_csm=true` so it appears in the dropdowns alongside the four real CSMs |
 | `metadata` | `jsonb` | Extensible blob for attributes we haven't promoted to columns |
 | `created_at` | `timestamptz` | Default `now()` |
 | `updated_at` | `timestamptz` | Default `now()`, bumped by trigger on update |
@@ -36,18 +37,17 @@ Identify agency staff (CSMs, leadership, engineering, ops) so agents can attribu
 
 ## Populated By
 
-- Manual seed for V1 (Scott, Lou, Nico, Drake, Nabeel, Zain)
-- Later: programmatic sync from the CRM or an internal admin UI
+- Manual seed for V1. Live cloud roster as of 2026-05-04: Scott Wilson, Nabeel Junaid (both `role='leadership'`, `is_csm=true`), Lou Perez, Nico Sandoval (both `role='csm'`, `is_csm=true`), Drake (engineering), Aman (sales), Ellis, Huzaifa, Zain (ops). All `is_csm=false` except the four CSMs above and the Scott Chasing sentinel.
+- Later: programmatic sync from the CRM or an internal admin UI.
 
 ## Sentinel rows
 
-A small number of `team_members` rows aren't humans — they're system identities used for attribution on automated writes. They carry `role = 'system_bot'` so a future `WHERE role IN ('csm', 'leadership', ...)` filter excludes them naturally; their UUIDs are pinned literals in the migration that creates them so the value is stable across environments.
+A small number of `team_members` rows aren't humans — they're system identities used for attribution or assignment-target purposes. Their UUIDs are pinned literals in the migration that creates them so the value is stable across environments. They carry `metadata.sentinel = true` so they can be excluded from any "real team member" listing via `WHERE NOT (metadata ? 'sentinel') OR metadata->>'sentinel' <> 'true'`.
 
-| Sentinel | UUID | Migration | Purpose |
-|---|---|---|---|
-| Gregory Bot | `cfcea32a-062d-4269-ae0f-959adac8f597` | 0021 | `changed_by` attribution for auto-derived `clients.csm_standing` writes from `update_client_from_nps_segment`. The presence of Gregory Bot's UUID on the most recent `client_standing_history` row is what makes the manual-vs-auto distinction queryable — and is the gate for whether the next NPS segment update is allowed to auto-derive over the column (override-sticky semantics: only Gregory Bot's prior writes are clobberable, manual CSM judgment is sticky). |
-
-Sentinel rows have a non-null `metadata.sentinel = true` flag so they can be excluded from any "real team member" listing with `WHERE NOT (metadata ? 'sentinel') OR metadata->>'sentinel' <> 'true'`.
+| Sentinel | UUID | Migration | role | is_csm | Purpose |
+|---|---|---|---|---|---|
+| Gregory Bot | `cfcea32a-062d-4269-ae0f-959adac8f597` | 0021 | `system_bot` | false | `changed_by` attribution for auto-derived `clients.csm_standing` writes from `update_client_from_nps_segment` and the M5.6 status cascade trigger. The presence of Gregory Bot's UUID on the most recent `client_standing_history` row is what makes the manual-vs-auto distinction queryable. For NPS auto-derive, it's the gate for override-sticky semantics: only Gregory Bot's prior writes are clobberable, manual CSM judgment is sticky. |
+| Scott Chasing | `ccea0921-7fc1-4375-bcc7-1ab91733be73` | 0022 | `csm` | true | `primary_csm` assignment target for clients in negative status. The M5.6 status cascade reassigns `primary_csm` to this UUID when status moves to ghost/paused/leave/churned. Distinct from Gregory Bot in `role` and `is_csm` because Scott Chasing functions as a CSM placeholder from the dashboard's perspective — clients here are "the system is chasing them," not "this person is actively managing them." `is_csm=true` so it surfaces in the Primary CSM dropdowns alongside the four real CSMs. |
 
 ## Read By
 

@@ -13,10 +13,10 @@ Lightweight log for ideas we've considered but haven't built. If it resolves int
 
 ## Path 2 outbound writeback architecture
 
-- **What:** Gregory writes back to upstream sources (Airtable, future master-sheet replacement) when CSM-driven dashboard edits should propagate. Today's M5.4 Path 1 is one-way (Airtable → Gregory). Path 2 is the inverse: dashboard edits → Make.com webhook → Airtable mutation. Architecture pending — likely a small Vercel serverless function in `api/` that fires on relevant `clients` UPDATE events (via Supabase webhook? Server Action hook?), normalizes payload to Airtable's expected shape, POSTs to Make.com.
-- **Why deferred:** waiting on Make.com walkthrough with Zain Monday to scope the Airtable side (which fields, write semantics, conflict resolution if both sides edit the same field, idempotency token shape).
-- **Revisit trigger:** Monday Make.com walkthrough complete + scope decision on which fields are write-back-eligible.
-- **Logged:** 2026-05-03.
+- **What:** Gregory writes back to upstream sources (Airtable, future master-sheet replacement) when CSM-driven dashboard edits should propagate. Today's M5.4 Path 1 is one-way (Airtable → Gregory). Path 2 is the inverse: dashboard edits → Make.com webhook → Airtable mutation. Post-M5.6 the columns Path 2 needs to listen on exist: `clients.accountability_enabled` and `clients.nps_enabled` (added in 0022). Both the cascade trigger and CSM manual flips land in the same `UPDATE clients`, so a single Supabase Database Webhook on UPDATE of these columns (or a parallel `clients_path2_writeback_after` trigger that POSTs to Make.com) fires correctly for both code paths — the receiver doesn't need to distinguish "cascade-fired" from "CSM-manual." Architecture narrows from "design the column set + trigger + webhook" to "wire Make.com onto an UPDATE-trigger we can build in ~50 lines."
+- **Why deferred:** waiting on Make.com walkthrough with Zain (target Monday 2026-05-04) to scope the Airtable side (which Airtable fields each Gregory column maps to, write semantics, conflict resolution if both sides edit the same field within a window, idempotency token shape — likely a `webhook_deliveries.webhook_id` mirror).
+- **Revisit trigger:** Make.com walkthrough complete + scope decision on which fields are write-back-eligible. Initial scope likely the M5.6 toggles; status / csm_standing / trustpilot follow if Scott wants the Airtable side to mirror Gregory beyond the toggles.
+- **Logged:** 2026-05-03. Updated 2026-05-04 (M5.6 narrowed the architecture — columns exist, listen-on-UPDATE pattern unchanged).
 
 ## Filter framework extensibility for Scott Chasing column
 
