@@ -267,6 +267,8 @@ Unrecognized → 400 with `{"error": "invalid_segment", "accepted": ["Strong / P
 
 **Local test harness:** `scripts/test_airtable_nps_webhook_locally.py` spins up the real `handler` class via `http.server.HTTPServer` in a background thread (same pattern Vercel uses), fires 8 paths (2 happy + 6 negative), verifies HTTP responses + cloud DB state via direct psycopg2, cleans up the test client (Branden Bledsoe — selected as a low-profile active client with null csm_standing and no history rows pre-test) in try/finally. Run via `.venv/bin/python scripts/test_airtable_nps_webhook_locally.py`. Sets a test secret if `AIRTABLE_NPS_WEBHOOK_SECRET` is unset.
 
+**Historical backfill (one-shot):** `scripts/backfill_nps_from_airtable.py` walks the Airtable NPS Survery table, dedupes to the latest Survey Date per linked NPS Clients record, and POSTs each surviving row through the production receiver — same code path as Airtable's automation, same audit trail. Default mode is dry-run; `--apply` fires real requests. First run: 2026-05-03 (M5.4 follow-up after the receiver went live). Runbook at `docs/runbooks/backfill_nps_from_airtable.md` covers modes, report buckets, and the 404 triage flow (the `sent_404_client_not_found` bucket surfaces email mismatches between Airtable and Gregory — useful signal for `clients.metadata.alternate_emails` cleanup). Idempotent — re-runs land identical end states modulo extra `webhook_deliveries` audit rows.
+
 ## Repo location
 
 Next.js at repo root, alongside the existing Python serverless functions in `api/`. The "dashboard" label survives as a conceptual grouping (Next.js routes live under `app/`, dashboard helpers under `components/` and `lib/`) rather than a literal top-level directory.
