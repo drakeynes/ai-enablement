@@ -1,70 +1,21 @@
 # M5 cleanup — master sheet vs Gregory diff
 
-Generated: `2026-05-04T23:05:43.864271+00:00`
+Generated: `2026-05-04T23:18:17.158174+00:00`
 
 ## Summary
 
 - CSV rows total (after blank-name filter): **188**
-- Matched to Gregory clients: **180**
-- Unmatched: **8**
+- Matched to Gregory clients: **188**
+- Unmatched: **0**
 - Drake silent-skipped: **0**
 - Name-ambiguous (>1 Gregory match): **0**
-- Field changes proposed: **131** (Tier 1: 24 / Tier 2: 44 / Tier 3: 63)
-- Handover note appends: **8** (8 idempotent skips)
+- Field changes proposed: **85** (Tier 1: 0 / Tier 2: 18 / Tier 3: 67)
+- Handover note appends: **9** (8 idempotent skips)
 - Cascade-redundant csm_standing skips: **0** (cascade sets at_risk; explicit RPC would duplicate the history row)
 
 ## Tier 1 — high-confidence auto-applies
 
-### primary_csm (24)
-
-| Client | Tab | Current | → Proposed | Reason |
-|---|---|---|---|---|
-| Ameet Kumar | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Andy V | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Cheston Nguyen | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Christian Brooks | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Eric Brown | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Eric Washington | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Evan Bautista | USA | `Scott Chasing` | `Nabeel Junaid` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Giovanni Gregorio | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Hannah Carter | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Justin J. Fogg | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Kevin Black | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Kylie Goldsmith | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Mubeen Siddiqui | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Nate Simon | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Raga Mamidipaka | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Rob Traffie | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| samhealy09@gmail.com | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Samuel Michel | AUS | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Sarah Cherney | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Sean Rounds | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Sonal Patel | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Sunny Ghanathey | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Temitomi Arenyeka | USA | `Scott Chasing` | `Lou Perez` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-| Zach Roberts | USA | `Scott Chasing` | `Scott Wilson` | primary_csm reassignment (cascade will likely set to Scott Chasing) |
-
-### handover note append (8)
-
-Each listed client gets the following text appended to `clients.notes`:
-
-```
-These clients have been handed over to advisors.
-Nico-owned handovers: Marcus Miller, Mac McLaughlin, Srilekha Sikhinam, Kurt Buechler, Michael Garner, Sierra Waldrep, Matthew Gibson
-Lou-owned handover: Shivam Patel
-```
-
-| Client | Existing notes? | Idempotent skip? |
-|---|---|---|
-| Marcus Miller | yes | yes (already contains the text) |
-| Mac McLaughlin | yes | yes (already contains the text) |
-| Srilekha Sikhinam | yes | yes (already contains the text) |
-| Kurt Buechler | yes | yes (already contains the text) |
-| Michael Garner | yes | yes (already contains the text) |
-| Sierra Waldrep | yes | yes (already contains the text) |
-| Shivam Patel | yes | yes (already contains the text) |
-| Nico Bubalo | yes | yes (already contains the text) |
-
+_(none)_
 
 ## Tier 2 — eyeball required
 
@@ -75,38 +26,7 @@ Lou-owned handover: Shivam Patel
 | Cheston Nguyen | USA | `cheston@395northai.com` | `cheston.nguyen@gmail.com` | CSV email differs from Gregory primary; not in alternate_emails |
 | Yeshlin Singh | AUS | `yeshlin_singh@yahoo.com` | `yeshlinp@gmail.com` | CSV email differs from Gregory primary; not in alternate_emails |
 
-### slack_channel_id (26)
-
-| Client | Tab | Current | CSV value | Reason |
-|---|---|---|---|---|
-| Basem Romio | USA | `(none — no slack_channels row)` | `C09CKPWPMC4` | Gregory has no slack_channels row for this client; CSV has one |
-| Braden Threlkeld | USA | `(none — no slack_channels row)` | `C097Q3KV1PW` | Gregory has no slack_channels row for this client; CSV has one |
-| Cheston Nguyen | USA | `(none — no slack_channels row)` | `C095M97K4UT` | Gregory has no slack_channels row for this client; CSV has one |
-| Chris Hainlen | USA | `(none — no slack_channels row)` | `C0AVDP5R9H9` | Gregory has no slack_channels row for this client; CSV has one |
-| connor savage | USA | `(none — no slack_channels row)` | `C097VJRM9T2` | Gregory has no slack_channels row for this client; CSV has one |
-| DeJuan Buchanan | USA | `(none — no slack_channels row)` | `Brendan Groves` | Gregory has no slack_channels row for this client; CSV has one |
-| Emmanuel DharaCharles | USA | `(none — no slack_channels row)` | `C09FC41H3C4` | Gregory has no slack_channels row for this client; CSV has one |
-| Eric Brown | USA | `(none — no slack_channels row)` | `C09Q2KGFXEH` | Gregory has no slack_channels row for this client; CSV has one |
-| Eric Washington | USA | `(none — no slack_channels row)` | `C09J702HP8S` | Gregory has no slack_channels row for this client; CSV has one |
-| Evan Bautista | USA | `(none — no slack_channels row)` | `C09D5H0E14H` | Gregory has no slack_channels row for this client; CSV has one |
-| Fabio dirico | AUS | `(none — no slack_channels row)` | `C09S9MRHTK8` | Gregory has no slack_channels row for this client; CSV has one |
-| Giovanni Gregorio | USA | `(none — no slack_channels row)` | `C09AB9Q4S3G` | Gregory has no slack_channels row for this client; CSV has one |
-| Hannah Carter | USA | `(none — no slack_channels row)` | `C09A0SQPXL3` | Gregory has no slack_channels row for this client; CSV has one |
-| Isabel Bledsoe | USA | `(none — no slack_channels row)` | `C09KB99K4BW` | Gregory has no slack_channels row for this client; CSV has one |
-| Joel Barrera | USA | `(none — no slack_channels row)` | `C0B0L1D4REC` | Gregory has no slack_channels row for this client; CSV has one |
-| KEVIN ROY | USA | `(none — no slack_channels row)` | `C0AUF6DHG92` | Gregory has no slack_channels row for this client; CSV has one |
-| Krish Gopalani | USA | `(none — no slack_channels row)` | `C0AGYKHESUA` | Gregory has no slack_channels row for this client; CSV has one |
-| Mark Dawson | USA | `(none — no slack_channels row)` | `C0ASD3DLMSN` | Gregory has no slack_channels row for this client; CSV has one |
-| Mubeen Siddiqui | USA | `(none — no slack_channels row)` | `C097VJUBBDW` | Gregory has no slack_channels row for this client; CSV has one |
-| Rubin Linder | USA | `(none — no slack_channels row)` | `C0ADY6NTKHN` | Gregory has no slack_channels row for this client; CSV has one |
-| samhealy09@gmail.com | USA | `(none — no slack_channels row)` | `C09J5S16145` | Gregory has no slack_channels row for this client; CSV has one |
-| Sean Rounds | USA | `(none — no slack_channels row)` | `C09APUUGX5Y` | Gregory has no slack_channels row for this client; CSV has one |
-| Sierra Waldrep | USA | `(none — no slack_channels row)` | `C0AVBEBE5ND` | Gregory has no slack_channels row for this client; CSV has one |
-| Swapnil Napuri | USA | `(none — no slack_channels row)` | `C0B08QELQMD` | Gregory has no slack_channels row for this client; CSV has one |
-| Temitomi Arenyeka | USA | `(none — no slack_channels row)` | `C09FC41H3C3` | Gregory has no slack_channels row for this client; CSV has one |
-| Yogesh Dhaybar | USA | `(none — no slack_channels row)` | `C0AVD0D9ZPC` | Gregory has no slack_channels row for this client; CSV has one |
-
-### csm_standing (15)
+### csm_standing (16)
 
 | Client | Tab | Current | CSV value | Reason |
 |---|---|---|---|---|
@@ -119,18 +39,13 @@ Lou-owned handover: Shivam Patel
 | Grayson Carpenter | USA | `at_risk` | `Owing Money` | financial-only standing (no CSM tier) — eyeball |
 | Heath Perkins | USA | `at_risk` | `Owing Money` | financial-only standing (no CSM tier) — eyeball |
 | Jarrett Fortune | USA | `at_risk` | `Refunded` | financial-only standing (no CSM tier) — eyeball |
+| Mishank | AUS | `null` | `N/A (Churn)` | financial-only standing (no CSM tier) — eyeball |
 | Muhammad Omer Masood | USA | `at_risk` | `Chargeback` | financial-only standing (no CSM tier) — eyeball |
 | Muhammed Mudasser | USA | `at_risk` | `Full Refund` | financial-only standing (no CSM tier) — eyeball |
 | Patrick Tobin | USA | `at_risk` | `Partial Refund` | financial-only standing (no CSM tier) — eyeball |
 | roula deraz | USA | `at_risk` | `Full Refund` | financial-only standing (no CSM tier) — eyeball |
 | Steven Bass | USA | `at_risk` | `Chargeback` | financial-only standing (no CSM tier) — eyeball |
 | Taidhg Driscoll | USA | `at_risk` | `Full Refund` | financial-only standing (no CSM tier) — eyeball |
-
-### slack_user_id (1)
-
-| Client | Tab | Current | CSV value | Reason |
-|---|---|---|---|---|
-| Fabio dirico | AUS | `null` | `U09SBPR7H0A` | CSV has slack_user_id; Gregory does not |
 
 
 ## Tier 3 — Scott meeting items (defer auto-apply)
@@ -208,17 +123,13 @@ Lou-owned handover: Shivam Patel
 | Jose Trejo | USA | `Scott Chasing` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
 | Ming-Shih Wang | USA | `Scott Chasing` | `Aleks` | Aleks-owned (M4 Chunk C carry-over — Scott reassignment) |
 
+### status (4)
 
-## Unmatched CSV rows (8)
+| Client | Tab | Current | CSV value | Reason |
+|---|---|---|---|---|
+| Clyde Vinson | USA | `churned` | `N/A` | CSV status is blank or N/A — needs Scott decision |
+| Rachelle Hernandez | USA | `churned` | `N/A` | CSV status is blank or N/A — needs Scott decision |
+| Scott Stauffenberg | USA | `churned` | `N/A` | CSV status is blank or N/A — needs Scott decision |
+| Vaishali Adla | USA | `churned` | `N/A` | CSV status is blank or N/A — needs Scott decision |
 
-| Tab | CSV row | Name | Email |
-|---|---|---|---|
-| AUS | 10 | Anthony Huang | anthony@techmanual.io |
-| USA | 87 | Clyde Vinson | (none) |
-| USA | 180 | Matthew Gibson | leandeavor@gmail.com |
-| AUS | 2 | Melvin Dayal | mel2.kar3@hotmail.com |
-| AUS | 8 | Mishank | (none) |
-| USA | 132 | Rachelle Hernandez | (none) |
-| USA | 81 | Scott Stauffenberg | (none) |
-| USA | 45 | Vaishali Adla | (none) |
 

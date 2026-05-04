@@ -333,6 +333,7 @@ _USA_HEADER_KEYS: dict[str, str] = {
     "slack channel id": "slack_channel_id",
     "slack user id": "slack_user_id",
     "client phone no.": "phone",
+    "date": "date",
     "status": "status",
     "owner": "owner",
     "standing": "standing",
@@ -347,6 +348,7 @@ _AUS_HEADER_KEYS: dict[str, str] = {
     "client emails": "email",
     "slack channel id": "slack_channel_id",
     "slack user id": "slack_user_id",
+    "date": "date",
     "status": "status",
     "owner": "owner",
     "standing": "standing",
@@ -384,6 +386,7 @@ class CsvRow:
     raw_nps_standing: str
     raw_trustpilot: str
     raw_scott_notes: str  # USA only; AUS doesn't have this column
+    raw_date: str = ""  # CSV's Date column — start_date source for completeness pass
 
     def get(self, key: str, default: str = "") -> str:
         return getattr(self, key, default) or default
@@ -442,6 +445,7 @@ def load_csv(path: Path) -> tuple[CsvHeader, list[CsvRow]]:
                 raw_nps_standing=cell(raw, "nps_standing"),
                 raw_trustpilot=cell(raw, "trustpilot"),
                 raw_scott_notes=cell(raw, "scott_notes"),
+                raw_date=cell(raw, "date"),
             )
         )
     return hdr, out

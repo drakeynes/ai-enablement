@@ -1,14 +1,17 @@
 # M5 cleanup — Scott meeting notes
 
-Generated: `2026-05-04T23:05:43.864271+00:00`
-
-_Apply phase ran. Counts: primary_csm_applied=24, handover_already_present=8_
+Generated: `2026-05-04T23:18:17.158174+00:00`
 
 ## Bucket A — pre-apply ambiguities (Scott decides)
 
-### A1. Blank or N/A status (0)
+### A1. Blank or N/A status (4)
 
-_(none)_
+| Client | Tab | Current Gregory | CSV value |
+|---|---|---|---|
+| Clyde Vinson | USA | `churned` | `N/A` |
+| Rachelle Hernandez | USA | `churned` | `N/A` |
+| Scott Stauffenberg | USA | `churned` | `N/A` |
+| Vaishali Adla | USA | `churned` | `N/A` |
 
 ### A2. Aleks-owned rows (4)
 
@@ -80,7 +83,7 @@ _(Path 1 owns `clients.nps_standing`; CSV's NPS Standing column is Scott's read.
 
 _(...truncated; 9 more — see full diff)_
 
-### A5. "Owing Money" / unparseable standing (15)
+### A5. "Owing Money" / unparseable standing (16)
 
 - **Benjamin Baros** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
 - **Camilo Corona** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
@@ -91,6 +94,7 @@ _(...truncated; 9 more — see full diff)_
 - **Grayson Carpenter** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
 - **Heath Perkins** (USA) — CSV value `Owing Money`, current Gregory `at_risk`
 - **Jarrett Fortune** (USA) — CSV value `Refunded`, current Gregory `at_risk`
+- **Mishank** (AUS) — CSV value `N/A (Churn)`, current Gregory `null`
 - **Muhammad Omer Masood** (USA) — CSV value `Chargeback`, current Gregory `at_risk`
 - **Muhammed Mudasser** (USA) — CSV value `Full Refund`, current Gregory `at_risk`
 - **Patrick Tobin** (USA) — CSV value `Partial Refund`, current Gregory `at_risk`
@@ -98,9 +102,8 @@ _(...truncated; 9 more — see full diff)_
 - **Steven Bass** (USA) — CSV value `Chargeback`, current Gregory `at_risk`
 - **Taidhg Driscoll** (USA) — CSV value `Full Refund`, current Gregory `at_risk`
 
-### A6. Handover-note targets unresolved (2)
+### A6. Handover-note targets unresolved (1)
 
-- **Matthew Gibson (in CSV row USA/180 but no Gregory client matches — needs to be created first)**
 - **Lou (no client by that name in either CSV — spec ambiguous)**
 
 ### A8. Email mismatches (2)
@@ -110,27 +113,9 @@ _(CSV email differs from Gregory primary AND not in `alternate_emails`. Handle p
 - **Cheston Nguyen** (USA) — Gregory `cheston@395northai.com`, CSV `cheston.nguyen@gmail.com`
 - **Yeshlin Singh** (AUS) — Gregory `yeshlin_singh@yahoo.com`, CSV `yeshlinp@gmail.com`
 
-### A9. Unmatched CSV rows WITH email — likely new clients (3)
-
-_(These have emails but no matching Gregory client. Likely real new clients that need a manual create-or-merge decision.)_
-
-- **Anthony Huang** (AUS row 10) — email=anthony@techmanual.io, status=Churn (Aus), owner=Lou
-- **Matthew Gibson** (USA row 180) — email=leandeavor@gmail.com, status=Active, owner=Nico
-- **Melvin Dayal** (AUS row 2) — email=mel2.kar3@hotmail.com, status=Churn (Aus), owner=Lou
-
-### A10. Unmatched CSV rows WITHOUT email — Scott decision (5)
-
-_(No email in CSV — match-by-name failed. Scott decides whether each is a real client to create, a duplicate to merge, or noise to skip.)_
-
-- **Clyde Vinson** (USA row 87) — status=N/A, owner=N/A
-- **Mishank** (AUS row 8) — status=Churn (Aus), owner=N/A
-- **Rachelle Hernandez** (USA row 132) — status=N/A, owner=N/A
-- **Scott Stauffenberg** (USA row 81) — status=N/A, owner=Nabeel
-- **Vaishali Adla** (USA row 45) — status=N/A, owner=Nabeel
-
 ## Bucket B — post-apply mismatches (Scott confirms)
 
-_(none — Gregory state matches CSV after apply)_
+_(Phase 2 has not run yet. Run with `--apply` to populate this section.)_
 
 ## Quick reference — status directives applied
 
