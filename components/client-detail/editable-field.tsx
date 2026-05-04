@@ -116,8 +116,36 @@ export function EditableField({
     setError(undefined)
   }
 
-  function commit() {
-    const parsed = draftToRaw(draft, variant)
+  // commit accepts an optional draftOverride to fix a stale-closure bug
+  // on the enum / three_state_bool select onChange path. Background:
+  // those paths used to call setTimeout(commit, 0) right after
+  // setDraft(e.target.value). The setTimeout queues a macrotask that
+  // captures the THIS-render commit closure — but `draft` in that
+  // closure is still the OLD value. By the time the macrotask fires,
+  // React has re-rendered with the new draft, but the queued commit is
+  // a stale reference that reads the OLD draft via closure, computes
+  // parsed.value === committed, hits the "no change — exit cleanly"
+  // branch, and exits without calling onSave. The select-change appears
+  // to do nothing.
+  //
+  // Fix: callers that already know the new draft (the select onChange)
+  // pass it as draftOverride; commit reads it directly instead of from
+  // the closure-captured state. Callers that genuinely come from a
+  // stale-state-irrelevant context (e.g. text input onBlur, fired in a
+  // separate event handler after typing has settled) call commit() with
+  // no arg and fall back to the closure-captured draft, which is fine
+  // by then.
+  //
+  // Bug pre-existed M5.6 (since M4 commit 19f4e50, when EditableField
+  // was introduced); surfaced 2026-05-04 by the visual smoke that the
+  // M5.6 deploy triggered. Affected fields: status (Section 1),
+  // csm_standing (Section 2), trustpilot_status / ghl_adoption (Section
+  // 6), sales_group_candidate / dfy_setting (Section 6 three-state
+  // booleans). Drake confirmed status + csm_standing + trustpilot
+  // broken; the others were probably broken too but went untested.
+  function commit(draftOverride?: string) {
+    const effectiveDraft = draftOverride !== undefined ? draftOverride : draft
+    const parsed = draftToRaw(effectiveDraft, variant)
     if (!parsed.ok) {
       setStatus('error')
       setError(parsed.error)
@@ -233,7 +261,7 @@ function renderEditor({
   variant: FieldVariant
   draft: string
   setDraft: (s: string) => void
-  commit: () => void
+  commit: (draftOverride?: string) => void
   cancel: () => void
   options?: ReadonlyArray<{ readonly value: string; readonly label: string }>
   placeholder?: string
@@ -250,7 +278,7 @@ function renderEditor({
         value={draft}
         placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onBlur={() => commit()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault()
@@ -283,10 +311,13 @@ function renderEditor({
         onChange={(e) => {
           // Save immediately on select-change; no blur dance for a
           // dropdown — there's nothing to "abandon" when the choice
-          // itself is the input.
-          setDraft(e.target.value)
-          // Defer commit to next tick so React state has flushed.
-          setTimeout(commit, 0)
+          // itself is the input. Pass the new value to commit directly
+          // rather than going through `draft` state — that read would
+          // hit a stale closure (see commit's own comment for the full
+          // story).
+          const next = e.target.value
+          setDraft(next)
+          commit(next)
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -322,7 +353,7 @@ function renderEditor({
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => commit()}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault()
