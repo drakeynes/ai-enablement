@@ -254,10 +254,27 @@ def apply_calls(db, targets: list[ResolvedTarget]) -> dict[str, int]:
         "calls_repointed_primary_client": 0,
         "calls_already_correct": 0,
         "call_apply_errors": 0,
+        "documents_deactivated": 0,
+        "documents_already_inactive": 0,
+        "documents_kept_active": 0,
+        "document_apply_errors": 0,
     }
     for tgt in targets:
         if tgt.skip_reason or not tgt.calls:
             continue
+
+        # Belt-and-suspenders document suppression for category-change
+        # targets (Andy + Aman). The call-level is_retrievable flag is the
+        # primary gate; flipping is_active=false on the linked documents
+        # is a defensive over-suppress so the docs are excluded by every
+        # downstream filter (kb_query reads is_active before joining
+        # against calls).
+        #
+        # Branden's case (new_call_category is None) keeps documents
+        # active — the call IS legitimately Isabel's offboarding-call
+        # summary post-repoint; retrievability for her account is the
+        # right semantics.
+        deactivate_docs = tgt.spec.new_call_category is not None
 
         for call in tgt.calls:
             # Build the changes payload for update_call_classification RPC.
@@ -267,8 +284,8 @@ def apply_calls(db, targets: list[ResolvedTarget]) -> dict[str, int]:
                 # primary_client_id and sets is_retrievable=false.
                 if call["call_category"] == tgt.spec.new_call_category:
                     counts["calls_already_correct"] += 1
-                    continue
-                changes["call_category"] = tgt.spec.new_call_category
+                else:
+                    changes["call_category"] = tgt.spec.new_call_category
             else:
                 # Branden: repoint primary_client_id only.
                 if (
@@ -276,30 +293,61 @@ def apply_calls(db, targets: list[ResolvedTarget]) -> dict[str, int]:
                     and call["primary_client_id"] == tgt.reroute_client["id"]
                 ):
                     counts["calls_already_correct"] += 1
-                    continue
-                if tgt.reroute_client is None:
+                elif tgt.reroute_client is None:
                     counts["call_apply_errors"] += 1
                     continue
-                changes["primary_client_id"] = tgt.reroute_client["id"]
-
-            try:
-                db.rpc(
-                    "update_call_classification",
-                    {
-                        "p_call_id": call["id"],
-                        "p_changes": changes,
-                        "p_changed_by": GREGORY_BOT_UUID,
-                    },
-                ).execute()
-                if tgt.spec.new_call_category == "external":
-                    counts["calls_reclassified_external"] += 1
-                elif tgt.spec.new_call_category == "internal":
-                    counts["calls_reclassified_internal"] += 1
                 else:
-                    counts["calls_repointed_primary_client"] += 1
+                    changes["primary_client_id"] = tgt.reroute_client["id"]
+
+            if changes:
+                try:
+                    db.rpc(
+                        "update_call_classification",
+                        {
+                            "p_call_id": call["id"],
+                            "p_changes": changes,
+                            "p_changed_by": GREGORY_BOT_UUID,
+                        },
+                    ).execute()
+                    if tgt.spec.new_call_category == "external":
+                        counts["calls_reclassified_external"] += 1
+                    elif tgt.spec.new_call_category == "internal":
+                        counts["calls_reclassified_internal"] += 1
+                    else:
+                        counts["calls_repointed_primary_client"] += 1
+                except Exception as exc:
+                    print(f"  ERR call {call['id']}: {str(exc).splitlines()[0]}")
+                    counts["call_apply_errors"] += 1
+                    continue
+
+            # Document suppression: per Drake's adjustment, flip is_active
+            # on docs linked to category-changed calls (Andy + Aman). Skip
+            # for Branden (his call's docs are legitimately Isabel's now).
+            try:
+                docs_resp = (
+                    db.table("documents")
+                    .select("id, is_active")
+                    .filter("metadata->>call_id", "eq", call["id"])
+                    .execute()
+                )
+                docs = docs_resp.data or []
+                for doc in docs:
+                    if not deactivate_docs:
+                        counts["documents_kept_active"] += 1
+                        continue
+                    if not doc.get("is_active"):
+                        counts["documents_already_inactive"] += 1
+                        continue
+                    db.table("documents").update({"is_active": False}).eq(
+                        "id", doc["id"]
+                    ).execute()
+                    counts["documents_deactivated"] += 1
             except Exception as exc:
-                print(f"  ERR call {call['id']}: {str(exc).splitlines()[0]}")
-                counts["call_apply_errors"] += 1
+                print(
+                    f"  ERR doc suppression for call {call['id']}: "
+                    f"{str(exc).splitlines()[0]}"
+                )
+                counts["document_apply_errors"] += 1
 
     return counts
 
