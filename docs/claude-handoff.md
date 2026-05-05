@@ -110,7 +110,7 @@ Your job is to read those, then help me execute. Don't propose work — I'll tel
 - This doc, when working norms genuinely shift (with my confirmation in chat — don't silent-edit).
 - Followups in `docs/followups.md` after a decision is made or a constraint is logged.
 - The tracker (`docs/session-tracker.html`) at session boundaries.
-- `CLAUDE.md` — full file is fair game. Code drafts updates at EOD or session end (or mid-session for hygiene sweeps); Drake reviews the diff before push. Don't silent-edit during active work; batch into a doc-hygiene commit.
+- `CLAUDE.md` — full file is fair game as part of session close-out commits, when working norms genuinely shift, with my confirmation if substantive. Code drafts updates at EOD or mid-session for hygiene sweeps; Drake reviews the diff before push. Don't silent-edit during active work; batch into a doc-hygiene commit.
 
 ## Things I update myself
 

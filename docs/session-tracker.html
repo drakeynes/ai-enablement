@@ -237,7 +237,7 @@
       Today's four priorities follow M5.6's close-out. Path 2 was reshaped by the Zain conversation — it's a daily-pull GET endpoint Make.com hits for the active-client roster (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">nps_enabled</span> + Slack identifiers, joined per-client), not the event-driven UPDATE-listener architecture previously sketched; this replaces the Financial Master Sheet as Zain's daily source. P2 is the manual cleanup pass to land Gregory in a usable state by EOD, P3 is a Drake-led plan around base44 for Nabeel, and P4 is onboarding Scott tomorrow so he starts using Gregory in his daily workflow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — cleanup fully closed (188 clients ↔ 188 CSV rows, perfect 1:1)</span>
+      <span><strong>Last updated:</strong> Session M5 — end-of-day close-out (P1 Path 2 + P2 cleanup + P3 base44 done; only P4 Scott onboarding remains)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -247,20 +247,13 @@
     <div class="col planned">
       <header>
         <h2>Planned</h2>
-        <span class="count">2</span>
+        <span class="count">1</span>
       </header>
 
       <div class="card">
-        <div class="id">P1</div>
-        <div class="title">Plan around base44 for Nabeel</div>
-        <div class="subtitle">Drake-led planning task. Output is a plan for Nabeel's review.</div>
-        <div class="pills"><span class="pill">planning / no code</span></div>
-      </div>
-
-      <div class="card">
-        <div class="id">P2</div>
+        <div class="id">P4</div>
         <div class="title">Onboard Scott on Gregory for daily use starting tomorrow</div>
-        <div class="subtitle">Walkthrough so Scott can begin using Gregory in his daily workflow. Tier 1 cleanup landed; Tier 2 + Tier 3 ambiguities (slack_channel coverage, Owing Money standings, email mismatches, Aleks-owned, NPS divergences, unmatched CSV rows) live in <span style="font-family: var(--mono); font-size: 12.5px;">docs/data/m5_cleanup_scott_notes.md</span> for the meeting itself.</div>
+        <div class="subtitle">Walkthrough so Scott transitions off the master sheet onto Gregory. Cleanup is fully closed; Tier 2 + Tier 3 ambiguities (18 remaining Tier 2, 15 "Owing Money" standings, 4 Aleks-owned, 67 NPS Standing differences, 4 N/A-as-churned autocreates, 2 positive-transition toggle re-activations) live in <span style="font-family: var(--mono); font-size: 12.5px;">docs/data/m5_cleanup_scott_notes.md</span> for the meeting itself.</div>
         <div class="pills"><span class="pill">walkthrough</span></div>
       </div>
     </div>
@@ -277,8 +270,15 @@
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">10</span>
+        <span class="count">11</span>
       </header>
+
+      <div class="card">
+        <div class="id">P3</div>
+        <div class="title">base44 plan for Nabeel</div>
+        <div class="subtitle">Drake-led planning task — output is a plan for Nabeel's review. Lives outside the repo (Drake-driven; not a code commit). Marked done at end-of-day close-out.</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill">planning / no code</span></div>
+      </div>
 
       <div class="card">
         <div class="id">Cleanup III</div>
