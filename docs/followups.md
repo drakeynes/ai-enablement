@@ -11,6 +11,20 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 
 ---
 
+## NPS harness fixture (`Branden Bledsoe`) was archived 2026-05-05
+
+- **What:** `scripts/test_airtable_nps_webhook_locally.py` uses Branden Bledsoe (`brandenbledsoe@transcendcu.com`) as the test fixture for happy-path NPS update probes. Branden was soft-archived 2026-05-05 in the M5 misclassified-client cleanup (he was Isabel Bledsoe's representative, not a real client). The NPS receiver's `update_client_from_nps_segment` RPC filters on `archived_at IS NULL`, so any harness call against Branden now hits the 404 "no active client matches email" path rather than the happy update path. Discovered while writing the M5.9 onboarding harness — that harness initially mirrored the NPS pattern and surfaced the same break.
+- **Why it matters:** the NPS harness will start failing on tests 1 and 2 (the two happy paths). Tests 3–8 are negative paths and stay green. CI doesn't run the harness, so silent breakage is the realistic failure mode — Drake or someone running the harness manually will hit it.
+- **Next action:** refactor the NPS harness to use a self-seeded fixture (mirror M5.9's pattern in `scripts/test_airtable_onboarding_webhook_locally.py`: per-run unique email, hard-deleted in cleanup, no reliance on production data). One ~30-minute change. Alternatively pick a different stable client, but self-seeding is the more robust fix and matches the new convention.
+- **Logged:** 2026-05-05 (M5.9 onboarding receiver build surfaced this).
+
+## Country filter on /clients silently misses non-USA/AUS payload values
+
+- **What:** the M5.7 Country filter dropdown on `/clients` sources its options dynamically from `clients.country` distinct values (USA / AUS / null today). The M5.9 onboarding receiver passes the form's `country` field through to the column as-is, with no validation against a vocab. If Zain's onboarding payload ever sends a value outside `'USA'`/`'AUS'` (e.g. `'United States'`, `'Australia'`, `'UK'`, free-text variants), that client lands in the DB with the new value — then the filter dropdown surfaces it as a separate option, and any pre-existing filter URL bookmarked on `?country=USA,AUS` will silently miss the new client.
+- **Why it matters:** the failure mode is "client doesn't appear under a filter the CSM expected to be exhaustive" — soft, not loud. CSMs may not realize their saved-filter view is incomplete. Compounds if multiple variant strings accumulate.
+- **Next action:** revisit if it surfaces. Two paths: (a) add a CHECK constraint on `clients.country` enforcing the canonical short codes (USA / AUS / future codes), and have the receiver normalize at the boundary; (b) leave the column free-text but add a normalization layer in the receiver (`country.upper().strip()` plus a known-aliases map: "United States" → "USA", "Australia" → "AUS"). Lean: (b) — cheaper, doesn't require a migration, accommodates future Zain-side CSV drift.
+- **Logged:** 2026-05-05 (M5.9 onboarding receiver build).
+
 ## Fathom classifier false-positive: hiring interview classified as client
 
 - **What:** Andy Gonzalez (DB row was `Andrés González` / `andy@thecyberself.com`) was a hiring-interview series — Scott interviewed him as a potential teammate, NOT a sales prospect. Fathom's classifier auto-created him as a client and tagged 3 calls as `category='client'` because the conversation pattern (1:1 with Scott, professional tone, sales-flavored discussion of work and engagement) matched the client heuristic. Resolved 2026-05-05 via `scripts/archive_misclassified_clients.py` — 3 calls reclassified to `external`, client soft-archived with `metadata.misclassification_type='external_hiring'`.

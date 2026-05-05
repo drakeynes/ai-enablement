@@ -271,6 +271,118 @@ Unrecognized → 400 with `{"error": "invalid_segment", "accepted": ["Strong / P
 
 **Dashboard rendering:** `clients.nps_standing` renders in **Section 2 — Lifecycle & Standing** of the client detail page (`components/client-detail/lifecycle-section.tsx`) via the `NpsStandingPill` component (`components/client-detail/nps-standing-pill.tsx`). Replaced the prior `Latest NPS` field that read `nps_submissions.score`; that field is empty for nearly every client because score-piping is deferred to V1.5. The `NpsEntryForm` for manual NPS-score entry stays below the pill (different data source — writes `nps_submissions`, not `nps_standing`). Pill colors are deliberately distinct from status / health-tier palettes to avoid visual collision: `promoter` indigo, `neutral` slate, `at_risk` orange. Null renders as em-dash placeholder (138 of 197 active clients post-backfill have no Airtable submission yet).
 
+## Airtable onboarding integration (V1 — M5.9)
+
+Path 3 inbound. Zain's Make.com automation fires this once per new client when his existing onboarding flow (Slack channel created → client invited → onboarding form submitted in Airtable) completes. The receiver is the second inbound webhook on the Airtable side (after Path 1 NPS) and the dashboard's primary client-row birth path going forward.
+
+**Architecture — three layers, one direction:**
+
+1. **Airtable onboarding form + Make.com automation** (external) — Zain's existing flow captures full_name / email / phone / country / date_joined / slack_user_id / slack_channel_id at form submission. Make.com fires a webhook into the Vercel receiver. Source of truth for the form payload.
+2. **Receiver** (`api/airtable_onboarding_webhook.py`) — small Vercel serverless function. Validates auth + 7-field payload, parses `date_joined` (ISO date or ISO timestamp), then calls the combined RPC. No business logic at this layer; thin adapter.
+3. **`create_or_update_client_from_onboarding` RPC** (migration 0025) — does match-or-create + `*_with_history` audit writes + `slack_channels` insert + `needs_review` tag-append in one transaction.
+
+**Three branches (mirroring Fathom's `_lookup_or_create_auto_client`):**
+
+The RPC's match-or-create logic looks up by primary `clients.email` AND `clients.metadata.alternate_emails` (case-insensitive, whitespace-stripped — same pattern as `update_client_from_nps_segment`). The lookup hits one of three branches:
+
+| Branch | Match | Action | Response `action` |
+|---|---|---|---|
+| 1 | active row (`archived_at IS NULL`) | UPDATE in place | `updated` |
+| 2 | archived row (`archived_at IS NOT NULL`) | clear `archived_at`, then UPDATE | `reactivated` |
+| 3 | no row | INSERT new client | `created` |
+
+Branch 2 (reactivate) handles the legitimate case where a client churns, then re-signs months later. Mirrors `ingestion/fathom/pipeline.py:_lookup_or_create_auto_client`'s archived-row reactivation. Per migration 0007 the partial unique indexes on `clients.email` / `clients.slack_user_id` are scoped `WHERE archived_at IS NULL`, so reactivating doesn't collide.
+
+**Field semantics on update / reactivate (existing-non-null wins):**
+
+- `status` → `'active'` via `update_client_status_with_history` (Gregory Bot UUID, note `'onboarding form submission'`). Idempotent if already active.
+- `csm_standing` → `'content'` via `update_client_csm_standing_with_history` (same attribution + note). Idempotent if already content.
+- `tags` → append `'needs_review'` via DISTINCT-on-unnest. Idempotent (no duplicate tag).
+- `phone` / `country` / `start_date` / `slack_user_id` → backfill ONLY when current value is NULL. **Existing non-null values are NOT overwritten.** The form submission is one snapshot among potentially many; trust pre-existing data.
+- `email` (primary column) → never touched. When alternate-email match wins, the canonical email stays canonical; the form's email lives in `metadata.alternate_emails` already.
+
+**Field semantics on create:**
+
+- `clients` row INSERT with `full_name`, `email` (lowercased), `phone`, `country`, `start_date`, `slack_user_id`, `status='active'`, `tags=['needs_review']`, and metadata `{auto_created_from_onboarding_webhook: true, auto_created_from_delivery_id: <delivery>, auto_created_at: now()}`.
+- Status seeded via DIRECT INSERT into `client_status_history` (note `'onboarding form initial seed'`). The `*_with_history` RPC's idempotent-when-unchanged path skips writing for create-time `'active'` because the column is `NOT NULL DEFAULT 'active'` so current==new at row birth. Direct insert matches migration 0017's seed pattern.
+- `csm_standing` seeded via the RPC (column is nullable; `null → 'content'` is a real transition that writes a history row naturally).
+
+**Slack ID anti-overwrite (409 conflict):**
+
+The RPC raises three structured exceptions the receiver translates to HTTP 409. Conflict paths leave **zero state changes** — the RPC raises BEFORE any writes, and PostgreSQL rolls back the entire transaction.
+
+| Exception substring | Meaning | Response error code |
+|---|---|---|
+| `slack_user_id_conflict: existing=X new=Y` | Existing client has slack_user_id set, payload sends a different one | `slack_user_id_conflict` |
+| `slack_channel_id_conflict_for_client: existing=X new=Y` | Existing client has an active slack_channels row pointing at a different channel id | `slack_channel_id_conflict_for_client` |
+| `slack_channel_id_owned_by_different_client: client_id=X` | The payload's slack_channel_id exists in slack_channels but is already linked to a DIFFERENT client | `slack_channel_id_owned_by_different_client` |
+
+Per spec: never silently overwrite an established Slack identity. The 409 surfaces the conflict; CSMs (or Drake) reconcile manually before re-submitting.
+
+**slack_channels resolution (six branches inside the RPC):**
+
+`slack_channels.slack_channel_id` is full-table UNIQUE (not partial — different from `clients.email`'s active-only UNIQUE). The RPC handles the surfaces:
+
+| # | Pre-state | Action |
+|---|---|---|
+| A | row exists for this client + active + same channel id | no-op |
+| B | row exists for this client + active + different channel id | RAISE `slack_channel_id_conflict_for_client` |
+| C | no row anywhere with this channel id | INSERT (with `name` = client `full_name` + `is_private=false` + `metadata.created_via='onboarding_webhook'`) |
+| D | row exists with `client_id IS NULL` | UPDATE `client_id`, clear `is_archived` (reattach pattern from `cleanup_master_sheet_completeness.py`) |
+| E | row exists for this client + archived | UPDATE `is_archived=false` (unarchive) |
+| F | row exists for a different client | RAISE `slack_channel_id_owned_by_different_client` |
+
+### Receiver implementation (M5.9)
+
+Endpoint: `POST https://ai-enablement-sigma.vercel.app/api/airtable_onboarding_webhook`. Source: `api/airtable_onboarding_webhook.py`. Friendly `GET` returns 200 with `{"status": "ok", "endpoint": "airtable_onboarding_webhook", "accepts": "POST"}`.
+
+**Auth.** `X-Webhook-Secret` HTTP header against `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` env var via `hmac.compare_digest`. Missing/wrong → 401 `{"error": "unauthorized"}`, no DB write. Missing env var → 500 `{"error": "misconfigured"}`. Same shared-secret model as the NPS receiver.
+
+**Payload shape (Make.com → receiver):**
+
+```json
+{
+  "full_name":        "Jane Doe",
+  "email":            "jane@example.com",
+  "phone":            "+1 555-123-4567",
+  "country":          "USA",
+  "date_joined":      "2026-05-05",
+  "slack_user_id":    "U01ABC123",
+  "slack_channel_id": "C01ABC456"
+}
+```
+
+All 7 fields required (non-null, string-typed, non-empty after strip). `date_joined` accepts ISO date (`"2026-05-05"`) or ISO datetime (`"2026-05-05T14:30:00Z"`). Country isn't CHECK-constrained at this layer — Zain owns the contract on his side; today's expected values are `'USA'` / `'AUS'` but other strings pass through as-is.
+
+**Response shapes:**
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{"status": "ok", "delivery_id": "airtable_onboarding_<uuid>", "client_id": "<uuid>", "action": "created\|updated\|reactivated"}` | RPC succeeded |
+| 400 | `{"error": "invalid_json"}` | body not parseable JSON |
+| 400 | `{"error": "payload_not_object"}` | body parsed but isn't a JSON object |
+| 400 | `{"error": "missing_field", "detail": "<field> is required"}` | required field missing or empty |
+| 400 | `{"error": "wrong_type", "detail": "<field> must be a string..."}` | type mismatch on any field |
+| 400 | `{"error": "wrong_type", "detail": "date_joined: ..."}` | `date_joined` unparseable |
+| 401 | `{"error": "unauthorized"}` | missing or wrong `X-Webhook-Secret` |
+| 409 | `{"error": "slack_user_id_conflict\|slack_channel_id_conflict_for_client\|slack_channel_id_owned_by_different_client", "detail": "..."}` | Slack ID anti-overwrite conflict |
+| 500 | `{"error": "misconfigured"}` | env var unset |
+| 500 | `{"error": "rpc_failed"}` | RPC raised non-conflict exception |
+| 500 | `{"error": "rpc_returned_no_data"}` | RPC returned empty result (shouldn't happen) |
+| 500 | `{"error": "internal_error"}` | unhandled exception in handler |
+
+**Audit trail.** Every authed request lands a `webhook_deliveries` row with `source='airtable_onboarding_webhook'`. Status transitions: `received` → `processed` (200) | `failed` (409/500) | `malformed` (400 validation). 401s write NO row — gate-before-DB. The `webhook_id` PK is `airtable_onboarding_<uuid4>` per request. The delivery_id is also embedded into the new client's `metadata.auto_created_from_delivery_id` so a CSM looking at a fresh `needs_review` row can grep the payload + headers in `webhook_deliveries`.
+
+**Conflict-pattern matching order.** The receiver checks substring matches in this order (the `_owned_by_different_client` form must come BEFORE `_conflict_for_client` to avoid the longer string being misclassified by a shorter prefix match):
+
+1. `slack_channel_id_owned_by_different_client`
+2. `slack_channel_id_conflict_for_client`
+3. `slack_user_id_conflict`
+
+**Local test harness:** `scripts/test_airtable_onboarding_webhook_locally.py` spins up the real `handler` class via `http.server.HTTPServer` in a background thread; runs 11 paths (74 sub-checks) — happy create / update / reactivate / idempotent / 7 missing-field permutations / wrong-type / unparseable date / invalid JSON / wrong secret + no-delivery-row check / both Slack ID conflict cases. Self-seeds an `onboarding-test-update-<token>@nowhere.invalid` fixture for the update/idempotent/conflict tests rather than relying on a stable production client (the NPS harness's Branden Bledsoe pattern broke when Branden was archived 2026-05-05). Hard-deletes the synthetic fixture in cleanup; soft-archives the per-run created clients. Sets a test secret if `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` is unset.
+
+**Dashboard rendering.** Created clients land with `tags=['needs_review']`, surfacing immediately on `/clients` with the existing Needs Review filter (M5.5). The Section 5 (Profile & Background) and Section 6 (Adoption & Programs) fields stay null until a CSM fills them via the dashboard. Clients reactivated via Branch 2 also gain `needs_review` (Scott may want to confirm pre-archive details still apply).
+
 ## Repo location
 
 Next.js at repo root, alongside the existing Python serverless functions in `api/`. The "dashboard" label survives as a conceptual grouping (Next.js routes live under `app/`, dashboard helpers under `components/` and `lib/`) rather than a literal top-level directory.
@@ -816,3 +928,33 @@ Spec deviations:
 **Smoke checkpoint passed 2026-05-05.** Local harness 27/27 against cloud (was 23/23). Spot row: Kevin Black, country=USA, advisor=Scott. Live actionable count 128 / 188 non-archived (unchanged from M5.7 chunk 5 ship — the Slack-identity coverage gap stays static day-over-day at this scale).
 
 **Commit chain:** TBD — single commit ready-to-push, held for greenlight.
+
+### M5.9 — Path 3 inbound onboarding form receiver (shipped 2026-05-05)
+
+Shipped: third Airtable integration path. Path 1 (NPS) was inbound + segment-mirroring; Path 2 (accountability/NPS roster) was outbound + daily-pull. Path 3 closes the new-client provenance loop — Zain's existing onboarding flow (Slack channel created → client invited → Airtable form submitted) now fires a webhook into Gregory at submission time. Replaces the manual-or-via-Fathom-side-effect path that was the only way new clients landed in Gregory's `clients` table before today.
+
+Pieces:
+
+- **Migration `0025_create_or_update_client_from_onboarding.sql`** — single security-definer RPC `create_or_update_client_from_onboarding(p_full_name, p_email, p_phone, p_country, p_start_date, p_slack_user_id, p_slack_channel_id, p_delivery_id) returns jsonb`. Match-or-create on email + alternate_emails (case-insensitive) with three branches: active match → `updated`; archived match → `reactivated` (clears `archived_at`); no match → `created`. Mirrors `ingestion/fathom/pipeline.py:_lookup_or_create_auto_client`'s archived-row reactivation pattern. Uses `update_client_status_with_history` + `update_client_csm_standing_with_history` RPCs with Gregory Bot UUID attribution (note `'onboarding form initial seed'` for create, `'onboarding form submission'` for update/reactivate). Status seed on the create branch goes via DIRECT INSERT into `client_status_history` rather than the RPC because the column is `NOT NULL DEFAULT 'active'` and the RPC's idempotent-when-unchanged path skips at row birth. csm_standing seed goes via the RPC because the column is nullable. needs_review tag appended idempotently via `array(select distinct unnest(coalesce(tags, '{}') || array['needs_review']))`. slack_channels resolution handles 6 branches (active-same / active-different-conflict / no-row-INSERT / NULL-client_id-reattach / archived-unarchive / different-client-conflict) — see migration header for the full grid.
+
+- **Receiver `api/airtable_onboarding_webhook.py`** — Vercel Python serverless function. Auth via `X-Webhook-Secret` against `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` (gate-before-DB; 401s write no row). 7-field payload validation (all required, non-null, string-typed, non-empty after strip). `date_joined` accepts ISO date or ISO datetime. RPC's structured exception strings translate to HTTP 409: substring matching ordered to check the longer `_owned_by_different_client` form before the shorter `_conflict_for_client` to avoid prefix misclassification. webhook_deliveries audit lifecycle mirrors the M5.4 NPS receiver: `received` → `processed` | `failed` | `malformed`.
+
+- **Harness `scripts/test_airtable_onboarding_webhook_locally.py`** — 11 paths (74 sub-checks). Self-seeds an `onboarding-test-update-<token>@nowhere.invalid` fixture for the update / idempotent / conflict tests, hard-deleted in cleanup. Discontinued the NPS harness's stable-Branden pattern because Branden was archived 2026-05-05 in the M5 misclassification cleanup (followup logged). Uses DB's `now()` (not Python's `datetime.now()`) for history-row threshold queries to avoid cross-clock skew filtering out just-written rows by milliseconds.
+
+- **`vercel.json`** — added `api/airtable_onboarding_webhook.py` to the functions block. Seventh Python serverless function deployed.
+
+- **`.env.example`** — `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` documented with a 12-line block describing generation, secret rotation flow, and the runbook reference.
+
+- **Runbook `docs/runbooks/airtable_onboarding_webhook.md`** — endpoint URL, auth + rotation flow, payload + response shapes, three-action contract, `Debug a missing client` flow (find the webhook_deliveries row by source + email), `Debug a Slack ID conflict` flow (with SQL probes for each conflict type), failure modes table.
+
+Spec deviations:
+
+- **Status seed on create branch uses direct INSERT, not the RPC.** The RPC's idempotent path (`current_status == new_status` → no history row) means calling `update_client_status_with_history(id, 'active', ...)` on a freshly-INSERTed clients row writes zero history rows — the column is `NOT NULL DEFAULT 'active'` so current is already 'active' at row birth. Direct INSERT into `client_status_history` matches migration 0017's seed pattern and gives the audit row the spec asks for.
+- **Conflict-error pattern matching is substring-based.** Same brittle-but-honest pattern as the M5.4 NPS receiver's `'no active client matches email'` substring. The harness covers all three conflict types so a future RPC message change surfaces as a regression there. Order of checks is significant: `_owned_by_different_client` → `_conflict_for_client` → `slack_user_id_conflict`.
+- **First migration apply hit a `slack_channels.name NOT NULL` violation.** The initial RPC body INSERTed only `slack_channel_id`, `client_id`, `is_archived`. Caught by the smoke probe; the failed transaction rolled back atomically (zero cloud state change). Patched the INSERT to provide `name = p_full_name` (channel-name hint mirroring `cleanup_master_sheet_completeness.py`'s pattern), `is_private = false`, plus `metadata.created_via = 'onboarding_webhook'` for forensics. CREATE OR REPLACE re-apply landed clean. Smoke probe 13/13 on second apply.
+
+**Migration count: 1** (`0025_create_or_update_client_from_onboarding.sql`).
+
+**Smoke checkpoint passed 2026-05-05.** Migration applied to cloud via psycopg2; dual-verified (`pg_proc` confirms 8-arg signature; `supabase_migrations.schema_migrations` ledger row registered). RPC smoke probe 13/13 against cloud (synthetic guaranteed-no-match email → `action='created'`, all 7 fields persisted, status_history + standing_history seed rows attributed to Gregory Bot, slack_channels row inserted; client soft-archived in cleanup, history rows preserved). Local harness 74/74 against cloud — covers happy create / update / reactivate, idempotent re-fire, all 7 missing-field permutations, wrong-type, unparseable date, invalid JSON, wrong secret + no-delivery-row check, slack_user_id conflict, slack_channel_id conflict.
+
+**Commit chain:** TBD — held for greenlight at session end.
