@@ -795,3 +795,24 @@ Spec deviations:
 5. Path 2 payload `full_name` addition (handler + harness)
 
 Plus an M5.7 build log entry in this file + the CLAUDE.md migration count update.
+
+### M5.8 — Path 2 outbound roster grows country + advisor_first_name (shipped 2026-05-05)
+
+Shipped: two-field extension to the Path 2 payload per Zain's NPS-automation ask. `country` is a passthrough of `clients.country` (free-text today; USA / AUS / null in production). `advisor_first_name` is derived from the active primary_csm's `team_members.full_name` via `full_name.split()[0].capitalize()` — whitespace-split (hyphenated names like "Mary-Jane" stay whole), leading-cap-rest-lower for cosmetic consistency, null when no active primary_csm assignment. Existing eligibility filter unchanged — clients without a primary_csm still surface in the roster, they just emit `advisor_first_name: null`.
+
+Pieces:
+
+- **`api/accountability_roster.py`** — extended the `.select(...)` to add `country` plus `client_team_assignments(role,unassigned_at,team_members(full_name))`. New `_select_advisor_first_name` helper picks the `role='primary_csm' AND unassigned_at IS NULL` row from the embed list, takes `team_members.full_name`, returns the first whitespace-separated token capitalized. Mirrors the JS-side derivation in `lib/db/clients.ts:240-247` exactly. Module docstring's `Response shape (200 OK)` block updated with both new fields + a paragraph documenting the derivation rule and the null-when-no-CSM contract.
+- **`scripts/test_accountability_roster_locally.py`** — `expected_keys` set extended with `country` + `advisor_first_name` (8 total). Four new assertions: `1.row_country_str_or_null`, `1.row_advisor_str_or_null`, plus two conditional checks when advisor is non-null (`1.row_advisor_single_token`, `1.row_advisor_leading_cap`). 23/23 → 27/27.
+- **`docs/runbooks/accountability_roster.md`** — runbook doesn't spell out the response shape inline (references the docstring), so no shape edit. Stale "Expected output: 22/22 checks passed" line bumped to 27/27 (was already drifting from the M5.7 23/23).
+
+Spec deviations:
+
+- **`.capitalize()` mangles internally-cased names like "DeShawn" → "Deshawn".** Per Zain's spec; current CSMs (Lou / Nico / Scott / Nabeel + Scott Chasing) all clean. Logged followup if internally-cased CSMs ever appear.
+- **No primary_csm join added to eligibility filter.** Spec didn't ask for it; clients without a primary_csm legitimately surface with `advisor_first_name: null`. Adding eligibility-gating would silently shrink the roster.
+
+**Migration count: 0.** Pure payload-shape extension.
+
+**Smoke checkpoint passed 2026-05-05.** Local harness 27/27 against cloud (was 23/23). Spot row: Kevin Black, country=USA, advisor=Scott. Live actionable count 128 / 188 non-archived (unchanged from M5.7 chunk 5 ship — the Slack-identity coverage gap stays static day-over-day at this scale).
+
+**Commit chain:** TBD — single commit ready-to-push, held for greenlight.

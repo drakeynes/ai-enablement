@@ -101,7 +101,7 @@ Always safe to run — read-only, no DB mutations. Sets a per-run test secret in
 .venv/bin/python scripts/test_accountability_roster_locally.py
 ```
 
-Expected output: `22/22 checks passed`. The harness prints the live actionable count + the spot-check client name; useful for sanity-checking against expectations.
+Expected output: `27/27 checks passed`. The harness prints the live actionable count + the spot-check client name; useful for sanity-checking against expectations.
 
 ---
 

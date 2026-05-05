@@ -262,6 +262,8 @@ def test_1_happy_path(url: str) -> dict | None:
         expected_keys = {
             "client_email",
             "full_name",
+            "country",
+            "advisor_first_name",
             "slack_user_id",
             "slack_channel_id",
             "accountability_enabled",
@@ -282,6 +284,35 @@ def test_1_happy_path(url: str) -> dict | None:
             isinstance(first.get("full_name"), str) and first["full_name"],
             f"full_name={first.get('full_name')!r}",
         )
+        country_v = first.get("country")
+        _check(
+            "1.row_country_str_or_null",
+            country_v is None or (isinstance(country_v, str) and len(country_v) > 0),
+            f"country={country_v!r}",
+        )
+        advisor_v = first.get("advisor_first_name")
+        _check(
+            "1.row_advisor_str_or_null",
+            advisor_v is None or (isinstance(advisor_v, str) and len(advisor_v) > 0),
+            f"advisor_first_name={advisor_v!r}",
+        )
+        if isinstance(advisor_v, str):
+            # Single whitespace-separated token, leading capital. Internal
+            # caps and hyphens preserved per the receiver's spec (only the
+            # leading char is forced uppercase via .capitalize() — but
+            # .capitalize() also lowercases the rest of a single token,
+            # which is fine for current CSMs and acknowledged in the
+            # receiver docstring).
+            _check(
+                "1.row_advisor_single_token",
+                len(advisor_v.split()) == 1,
+                f"advisor_first_name={advisor_v!r}",
+            )
+            _check(
+                "1.row_advisor_leading_cap",
+                advisor_v[0].isupper(),
+                f"advisor_first_name={advisor_v!r}",
+            )
         _check(
             "1.row_slack_user_id_str",
             isinstance(first.get("slack_user_id"), str)

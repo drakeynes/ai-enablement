@@ -53,6 +53,8 @@ Response shape (200 OK):
       {
         "client_email": "...",
         "full_name": "...",
+        "country": "USA" | "AUS" | null,
+        "advisor_first_name": "Lou" | "Nico" | ... | null,
         "slack_user_id": "U...",
         "slack_channel_id": "C...",
         "accountability_enabled": <bool>,
@@ -61,6 +63,17 @@ Response shape (200 OK):
       ...
     ]
   }
+
+`country`: passthrough of clients.country (free-text today; USA / AUS /
+null in production data). No normalization; nulls emit as JSON null.
+
+`advisor_first_name`: derived from the active primary_csm's
+team_members.full_name via `full_name.split()[0].capitalize()`. Whitespace-
+split (hyphenated names like "Mary-Jane" stay whole); leading-cap-rest-
+lower for cosmetic consistency. Null when the client has no active
+primary_csm assignment — clients without an assigned CSM still surface
+in the roster (eligibility doesn't gate on primary_csm), they just
+emit null here.
 
 Note on filtered-out clients: rows excluded server-side (NULL
 slack_user_id, or no resolvable slack_channel_id) silently disappear
@@ -156,10 +169,14 @@ class handler(BaseHTTPRequestHandler):
                 .select(
                     "email,"
                     "full_name,"
+                    "country,"
                     "slack_user_id,"
                     "accountability_enabled,"
                     "nps_enabled,"
-                    "slack_channels(slack_channel_id,is_archived,created_at)"
+                    "slack_channels(slack_channel_id,is_archived,created_at),"
+                    "client_team_assignments("
+                    "role,unassigned_at,team_members(full_name)"
+                    ")"
                 )
                 .is_("archived_at", "null")
                 .execute()
@@ -192,10 +209,15 @@ class handler(BaseHTTPRequestHandler):
                 # practice (197 active clients all have emails today)
                 # but defensive against future seed/import edge cases.
                 continue
+            advisor_first_name = _select_advisor_first_name(
+                row.get("client_team_assignments")
+            )
             clients_payload.append(
                 {
                     "client_email": client_email,
                     "full_name": row.get("full_name"),
+                    "country": row.get("country"),
+                    "advisor_first_name": advisor_first_name,
                     "slack_user_id": slack_user_id,
                     "slack_channel_id": slack_channel_id,
                     "accountability_enabled": bool(
@@ -257,3 +279,38 @@ def _select_active_channel(channels: Any) -> str | None:
         return None
     active.sort(key=lambda c: c.get("created_at") or "", reverse=True)
     return active[0].get("slack_channel_id")
+
+
+def _select_advisor_first_name(assignments: Any) -> str | None:
+    """Mirror lib/db/clients.ts getClientsList's active-primary-csm
+    derivation: pick the client_team_assignments row with role='primary_csm'
+    AND unassigned_at IS NULL, take its team_members.full_name, and emit
+    the first whitespace-separated token capitalized.
+
+    Whitespace-split (not hyphen-split) so names like "Mary-Jane Smith"
+    emit "Mary-jane" (capitalized) rather than splitting on the hyphen.
+    .capitalize() forces leading-cap-rest-lower per Zain's spec — note
+    that this mangles internally-cased names like "DeShawn" → "Deshawn";
+    no production CSMs hit that case today (Lou / Nico / Scott / Nabeel +
+    Scott Chasing all clean), but logged as a followup if internally-cased
+    CSMs ever appear.
+
+    Returns None when no active primary_csm assignment exists."""
+    if not assignments or not isinstance(assignments, list):
+        return None
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            continue
+        if assignment.get("role") != "primary_csm":
+            continue
+        if assignment.get("unassigned_at") is not None:
+            continue
+        team_member = assignment.get("team_members")
+        if not isinstance(team_member, dict):
+            continue
+        full_name = team_member.get("full_name")
+        if not isinstance(full_name, str) or not full_name.strip():
+            continue
+        first_token = full_name.strip().split()[0]
+        return first_token.capitalize()
+    return None
