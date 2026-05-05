@@ -120,12 +120,15 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Next action:** extract to a third file like `lib/clients-filter-defaults.ts` (or fold into `lib/client-vocab.ts` since it's adjacent to the status vocab). Both call sites import the constant. ~5-line refactor, zero behavior change. Worth doing alongside any future filter-default tweak; not urgent on its own.
 - **Logged:** 2026-05-03 (M5.5 close-out — intentional defer at ship time).
 
-## NPS backfill 404s — Jonathan Duran-Rojas + Luis Malo email mismatches
+## Email-mismatch alternate_emails sync log (NPS backfill 404 + master sheet diff pattern)
 
-- **What:** M5.4 backfill surfaced 2 of 61 clients where Airtable's NPS Clients email doesn't match Gregory's `clients.email` or `metadata.alternate_emails`. Jonathan Duran-Rojas: Airtable has `wetasspressurewasher04@gmail.com`; Gregory has two rows (`Jonathan Duran` / `j05832952@gmail.com` and `Jonathan Duran-Rojas` / `jonathan@luxrevo.com`), neither in alternates. Luis Malo: Airtable has `lmalo721@yahoo.com`; needs the same lookup. Both visible in `webhook_deliveries.processing_error` from the M5.4 backfill run.
-- **Why it matters:** these clients' nps_standing stays NULL in Gregory until reconciled. Scott's Monday onboarding will see `—` placeholders for them in Section 2.
-- **Next action:** triage flow per `docs/runbooks/backfill_nps_from_airtable.md` § "Failure modes" — figure out the canonical Gregory row for each, add the Airtable email to `clients.metadata.alternate_emails` (via merge_clients RPC if there's a duplicate to clean up, else direct edit), re-run `scripts/backfill_nps_from_airtable.py --apply` to land their nps_standing. Drake handling over the weekend cleanup queue.
-- **Logged:** 2026-05-03 (M5.4 backfill — `wetasspressurewasher04@gmail.com` and `lmalo721@yahoo.com`).
+- **What:** Airtable / master-sheet emails that don't match Gregory's primary email get added to `clients.metadata.alternate_emails` per the canonical pattern in `docs/runbooks/backfill_nps_from_airtable.md` § Failure modes. Two surfaces feed this: M5.4 NPS backfill 404s (Airtable side) and master sheet reconcile A8 mismatches (CSV side). Same fix either way — single jsonb write closes the gap for every downstream resolver (NPS receiver, Fathom classifier, master sheet reconcile).
+- **Why it matters:** until the alternate is added, the affected clients can't receive auto-derived nps_standing from Path 1, won't match cleanly on master sheet re-runs, and surface as "unmatched" in Fathom call attribution. Dashboard surfaces `metadata.alternate_emails` read-only by design (M3.2 followup); the canonical write path is via script until that affordance lands.
+- **Resolution log:**
+  - **Jonathan Duran-Rojas** + **Luis Malo** (M5.4 backfill 404s, surfaced 2026-05-03): handled by Drake out-of-band.
+  - **Cheston Nguyen** (Gregory `cheston@395northai.com`, alt `cheston.nguyen@gmail.com`) + **Yeshlin Singh** (Gregory `yeshlin_singh@yahoo.com`, alt `yeshlinp@gmail.com`) — surfaced by `scripts/cleanup_master_sheet_completeness.py` as scott_notes A8; resolved via `scripts/add_alternate_emails_cheston_yeshlin.py --apply` on 2026-05-04. Idempotent on re-run.
+- **Next action:** none open. If a future NPS backfill / master sheet reconcile surfaces fresh email mismatches, edit the `MAPPINGS` constant at the top of `scripts/add_alternate_emails_cheston_yeshlin.py` (or rename it to drop the dated suffix once it's recognizably the canonical script for this pattern) and re-run.
+- **Logged:** 2026-05-03 (J + L); 2026-05-04 (C + Y resolved).
 
 ## NPS backfill — 4 manual-override-sticky divergences worth Scott discussion
 
