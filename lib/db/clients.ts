@@ -137,6 +137,11 @@ export type ClientsListRow = ClientRow & {
   last_call_date: string | null
   open_action_items_count: number
   overdue_action_items_count: number
+  // M5.7 — meetings_this_month: count of calls in the current calendar month
+  // (UTC). Computed JS-side from the existing nested calls select; no extra
+  // round trip. inactive: true when last_call_date is null OR > 30 days ago.
+  meetings_this_month: number
+  inactive: boolean
 }
 
 // ----------------------------------------------------------------------
@@ -222,6 +227,14 @@ export async function getClientsList(
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  // M5.7 — month start (UTC) for the meetings_this_month aggregation, and
+  // the 30-day-ago threshold for the inactivity flag. Both reuse the
+  // existing calls.started_at nested select; no extra round trip.
+  const now = new Date()
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  )
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
   let rows: ClientsListRow[] = data.map((row) => {
     const assignments = (row.client_team_assignments ?? []) as Array<{
@@ -253,6 +266,14 @@ export async function getClientsList(
         : calls.reduce((best, c) =>
             new Date(c.started_at) > new Date(best.started_at) ? c : best,
           )
+    const meetingsThisMonth = calls.filter(
+      (c) => new Date(c.started_at) >= monthStart,
+    ).length
+    // Inactive when there are no calls at all OR the most recent call is
+    // older than 30 days. Never-called clients land inactive a fortiori —
+    // "no recent meeting" trivially applies when there's no meeting at all.
+    const inactive =
+      latestCall === null || new Date(latestCall.started_at) < thirtyDaysAgo
 
     const actionItems = (row.call_action_items ?? []) as Array<{
       id: string
@@ -284,6 +305,8 @@ export async function getClientsList(
       last_call_date: latestCall?.started_at ?? null,
       open_action_items_count: openItems.length,
       overdue_action_items_count: overdueItems.length,
+      meetings_this_month: meetingsThisMonth,
+      inactive,
     }
   })
 
@@ -360,6 +383,11 @@ export type ClientDetail = ClientRow & {
   total_slack_messages: number // 0 if slack_user_id is null
   upsells: UpsellRow[] // sold_at desc nulls last
   slack_channel_id: string | null // most recently created active channel
+  // M5.7 — derived from all_calls (no extra round trip). Same semantics as
+  // ClientsListRow's fields: meetings_this_month is current calendar month
+  // (UTC); inactive is true when no calls or latest > 30 days ago.
+  meetings_this_month: number
+  inactive: boolean
 }
 
 export async function getClientById(id: string): Promise<ClientDetail | null> {
@@ -500,6 +528,21 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
   const allCalls = (callsRes.data ?? []) as CallSummary[]
   const totalCalls = callsRes.count ?? allCalls.length
   const recentCalls = allCalls.slice(0, 5)
+  // M5.7 — meetings_this_month + inactive. Same semantics as the list view.
+  const detailNow = new Date()
+  const detailMonthStart = new Date(
+    Date.UTC(detailNow.getUTCFullYear(), detailNow.getUTCMonth(), 1),
+  )
+  const detailThirtyDaysAgo = new Date(
+    detailNow.getTime() - 30 * 24 * 60 * 60 * 1000,
+  )
+  const meetingsThisMonth = allCalls.filter(
+    (c) => new Date(c.started_at) >= detailMonthStart,
+  ).length
+  const detailLatestStartedAt = allCalls[0]?.started_at ?? null
+  const inactive =
+    detailLatestStartedAt === null ||
+    new Date(detailLatestStartedAt) < detailThirtyDaysAgo
 
   const allActionItems = (actionItemsRes.data ?? []) as ActionItem[]
   const openActionItems = allActionItems.filter((item) => item.status === 'open')
@@ -540,6 +583,8 @@ export async function getClientById(id: string): Promise<ClientDetail | null> {
     total_slack_messages: slackMsgRes.count ?? 0,
     upsells,
     slack_channel_id: slackChannelId,
+    meetings_this_month: meetingsThisMonth,
+    inactive,
   }
 }
 

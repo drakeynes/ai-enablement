@@ -65,9 +65,26 @@ function daysBetween(start: Date, end: Date) {
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
 
-function LastCall({ value }: { value: string | null }) {
+function LastCall({
+  value,
+  meetingsThisMonth,
+  inactive,
+}: {
+  value: string | null
+  meetingsThisMonth: number
+  inactive: boolean
+}) {
+  // M5.7 — same primary label as before. Adds two visually-subordinate
+  // signals on the same line: "X this mo" (Chunk 3) and an Inactive pill
+  // (Chunk 4) when the flag is true. Inactive renders only on flag=true so
+  // the cell stays clean by default.
   if (!value) {
-    return <span className="text-muted-foreground">No calls yet</span>
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-sm text-muted-foreground">No calls yet</span>
+        {inactive ? <InactivePill /> : null}
+      </span>
+    )
   }
   const days = daysBetween(new Date(value), new Date())
   const cls =
@@ -78,7 +95,26 @@ function LastCall({ value }: { value: string | null }) {
         : 'text-rose-700'
   const label =
     days === 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`
-  return <span className={cn('text-sm font-medium', cls)}>{label}</span>
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={cn('text-sm font-medium', cls)}>{label}</span>
+      <span className="text-xs text-muted-foreground tabular-nums">
+        · {meetingsThisMonth} this mo
+      </span>
+      {inactive ? <InactivePill /> : null}
+    </span>
+  )
+}
+
+function InactivePill() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900"
+      title="No calls in the last 30 days"
+    >
+      Inactive
+    </span>
+  )
 }
 
 function HealthScoreCell({
@@ -206,7 +242,11 @@ export function ClientsTable({
               </TableCell>
               <TableCell>
                 <Link href={`/clients/${row.id}`} className="block">
-                  <LastCall value={row.last_call_date} />
+                  <LastCall
+                    value={row.last_call_date}
+                    meetingsThisMonth={row.meetings_this_month}
+                    inactive={row.inactive}
+                  />
                 </Link>
               </TableCell>
               <TableCell>

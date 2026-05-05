@@ -20,10 +20,15 @@ function StatBlock({
   label,
   value,
   note,
+  submeasure,
 }: {
   label: string
   value: string | number | null
   note?: string
+  // M5.7 — submeasure renders below the headline value as a real sub-line
+  // (not italicized like `note`, which is reserved for the "Pipeline pending"
+  // placeholder treatment). Used by Total calls to render "X this month".
+  submeasure?: string
 }) {
   const isEmpty = value === null || value === undefined || value === ''
   return (
@@ -36,6 +41,9 @@ function StatBlock({
       >
         {isEmpty ? '—' : value}
       </p>
+      {submeasure ? (
+        <p className="text-xs text-muted-foreground tabular-nums">{submeasure}</p>
+      ) : null}
       {note ? (
         <p className="text-xs text-muted-foreground italic">{note}</p>
       ) : null}
@@ -187,7 +195,11 @@ export function ActivitySection({ client }: { client: ClientDetail }) {
   return (
     <Section title="Activity & Action Items">
       <div className="grid grid-cols-3 gap-3">
-        <StatBlock label="Total calls" value={client.total_calls} />
+        <StatBlock
+          label="Total calls"
+          value={client.total_calls}
+          submeasure={`${client.meetings_this_month} this month`}
+        />
         <StatBlock label="Total Slack messages" value={slackMessagesDisplay} />
         <StatBlock label="Total NPS submissions" value={client.total_nps_submissions} />
         <StatBlock
@@ -203,7 +215,17 @@ export function ActivitySection({ client }: { client: ClientDetail }) {
       </div>
 
       <div className="space-y-2 pt-2">
-        <h3 className="text-sm font-medium text-muted-foreground">Recent calls</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Recent calls</h3>
+          {client.inactive ? (
+            <span
+              className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+              title="No calls in the last 30 days"
+            >
+              Inactive
+            </span>
+          ) : null}
+        </div>
         <CallsList calls={recentCalls} />
         {olderCalls.length > 0 ? (
           <details className="group space-y-2 pt-1">
