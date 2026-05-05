@@ -51,12 +51,26 @@ function readFilters(searchParams: Record<string, string | string[] | undefined>
         ? []
         : statusRaw.split(',').filter(Boolean)
 
+  // M5.7 — accountability / nps_toggle are 'on' | 'off' multi-selects; the
+  // data layer maps these to booleans before .in()-ing against the M5.6
+  // accountability_enabled / nps_enabled columns. Junk values are dropped at
+  // parse time so a crafted ?accountability=foo just no-ops.
+  const accountability = parseMulti(get('accountability')).filter(
+    (v): v is 'on' | 'off' => v === 'on' || v === 'off',
+  )
+  const npsToggle = parseMulti(get('nps_toggle')).filter(
+    (v): v is 'on' | 'off' => v === 'on' || v === 'off',
+  )
+
   return {
     status,
     primary_csm_ids: parseMulti(get('primary_csm')),
     csm_standing: parseMulti(get('csm_standing')),
     nps_standing: parseMulti(get('nps_standing')),
     trustpilot_status: parseMulti(get('trustpilot')),
+    country: parseMulti(get('country')),
+    accountability,
+    nps_toggle: npsToggle,
     needs_review: get('needs_review') === '1',
     search: get('q'),
   }
@@ -124,6 +138,23 @@ export default async function ClientsPage({
     label: member.full_name,
   }))
 
+  // M5.7 — distinct country values for the new Country filter dropdown.
+  // Sourced dynamically from current data (USA/AUS today, NULLs excluded
+  // server-side) rather than a static vocab — country isn't CHECK-constrained
+  // yet, so the DB is the only authority. When the column gets promoted to a
+  // CHECK-constrained vocab in a later slice, this can move into client-vocab.
+  const { data: countryRows } = await supabase
+    .from('clients')
+    .select('country')
+    .is('archived_at', null)
+    .not('country', 'is', null)
+    .order('country')
+  const countryOptions = Array.from(
+    new Set((countryRows ?? []).map((r) => r.country as string)),
+  )
+    .filter((c) => c.length > 0)
+    .sort()
+
   // Filter bar reads URL params directly via useSearchParams; we just
   // need to pass it the list of CSM options.
   // Pass the un-prefixed search params object as JSON so the table can
@@ -148,7 +179,10 @@ export default async function ClientsPage({
         </span>
       </div>
 
-      <FilterBar primaryCsmOptions={primaryCsmOptions} />
+      <FilterBar
+        primaryCsmOptions={primaryCsmOptions}
+        countryOptions={countryOptions}
+      />
 
       <ClientsTable
         rows={sorted}

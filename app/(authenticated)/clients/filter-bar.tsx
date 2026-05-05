@@ -48,6 +48,15 @@ const NEEDS_REVIEW_OPTIONS = [
   { value: '1', label: 'Auto-created — needs review' },
 ] as const
 
+// M5.7 — Accountability / NPS toggle dropdowns. Same OR-within multi-select
+// shape as the other filters even though there are only two values; users can
+// pick On, Off, or both. Mapping 'on'|'off' → boolean happens in the data
+// layer, not here.
+const TOGGLE_OPTIONS = [
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
+] as const
+
 function parseMulti(raw: string | null): string[] {
   if (raw === null || raw === '') return []
   return raw.split(',').filter(Boolean)
@@ -73,8 +82,10 @@ function isStatusDefault(values: string[]): boolean {
 
 export function FilterBar({
   primaryCsmOptions,
+  countryOptions,
 }: {
   primaryCsmOptions: Array<{ id: string; label: string }>
+  countryOptions: string[]
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -107,12 +118,20 @@ export function FilterBar({
   const csmStandingSelected = parseMulti(searchParams.get('csm_standing'))
   const npsStandingSelected = parseMulti(searchParams.get('nps_standing'))
   const trustpilotSelected = parseMulti(searchParams.get('trustpilot'))
+  const countrySelected = parseMulti(searchParams.get('country'))
+  const accountabilitySelected = parseMulti(searchParams.get('accountability'))
+  const npsToggleSelected = parseMulti(searchParams.get('nps_toggle'))
   const needsReviewSelected =
     searchParams.get('needs_review') === '1' ? ['1'] : []
 
   const primaryCsmDropdownOptions = primaryCsmOptions.map((o) => ({
     value: o.id,
     label: o.label,
+  }))
+
+  const countryDropdownOptions = countryOptions.map((c) => ({
+    value: c,
+    label: c,
   }))
 
   function writeParams(updater: (params: URLSearchParams) => void) {
@@ -174,6 +193,9 @@ export function FilterBar({
     csmStandingSelected.length > 0 ||
     npsStandingSelected.length > 0 ||
     trustpilotSelected.length > 0 ||
+    countrySelected.length > 0 ||
+    accountabilitySelected.length > 0 ||
+    npsToggleSelected.length > 0 ||
     needsReviewSelected.length > 0
 
   return (
@@ -232,27 +254,21 @@ export function FilterBar({
         />
         <MultiSelectDropdown
           label="Accountability"
-          options={[]}
-          selected={[]}
-          onChange={() => {}}
-          disabled
-          disabledTooltip="Coming with status cascade — auto-on for active, auto-off for paused"
+          options={TOGGLE_OPTIONS}
+          selected={accountabilitySelected}
+          onChange={(values) => setMulti('accountability', values)}
         />
         <MultiSelectDropdown
           label="NPS toggle"
-          options={[]}
-          selected={[]}
-          onChange={() => {}}
-          disabled
-          disabledTooltip="Coming with status cascade — per-client NPS opt-out"
+          options={TOGGLE_OPTIONS}
+          selected={npsToggleSelected}
+          onChange={(values) => setMulti('nps_toggle', values)}
         />
         <MultiSelectDropdown
           label="Country"
-          options={[]}
-          selected={[]}
-          onChange={() => {}}
-          disabled
-          disabledTooltip="Coming once country is populated as a dedicated column (currently a tag)"
+          options={countryDropdownOptions}
+          selected={countrySelected}
+          onChange={(values) => setMulti('country', values)}
         />
       </div>
     </div>

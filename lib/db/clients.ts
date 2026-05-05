@@ -118,6 +118,13 @@ export type ClientsListFilters = {
   csm_standing?: string[]
   nps_standing?: string[]
   trustpilot_status?: string[]
+  // M5.7 — three additional dropdowns replacing M5.5's disabled placeholders.
+  // country uses .in() against clients.country (USA/AUS today; nullable);
+  // accountability/nps_toggle map 'on'|'off' strings to boolean .in() against
+  // clients.accountability_enabled / clients.nps_enabled (M5.6 columns).
+  country?: string[]
+  accountability?: Array<'on' | 'off'>
+  nps_toggle?: Array<'on' | 'off'>
   needs_review?: boolean
   search?: string
 }
@@ -189,6 +196,17 @@ export async function getClientsList(
   }
   if (filters.trustpilot_status && filters.trustpilot_status.length > 0) {
     query = query.in('trustpilot_status', filters.trustpilot_status)
+  }
+  if (filters.country && filters.country.length > 0) {
+    query = query.in('country', filters.country)
+  }
+  if (filters.accountability && filters.accountability.length > 0) {
+    const bools = filters.accountability.map((v) => v === 'on')
+    query = query.in('accountability_enabled', bools)
+  }
+  if (filters.nps_toggle && filters.nps_toggle.length > 0) {
+    const bools = filters.nps_toggle.map((v) => v === 'on')
+    query = query.in('nps_enabled', bools)
   }
   if (filters.needs_review === true) {
     query = query.contains('tags', ['needs_review'])
