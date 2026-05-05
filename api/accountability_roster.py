@@ -52,6 +52,7 @@ Response shape (200 OK):
     "clients": [
       {
         "client_email": "...",
+        "full_name": "...",
         "slack_user_id": "U...",
         "slack_channel_id": "C...",
         "accountability_enabled": <bool>,
@@ -154,6 +155,7 @@ class handler(BaseHTTPRequestHandler):
                 db.table("clients")
                 .select(
                     "email,"
+                    "full_name,"
                     "slack_user_id,"
                     "accountability_enabled,"
                     "nps_enabled,"
@@ -193,6 +195,7 @@ class handler(BaseHTTPRequestHandler):
             clients_payload.append(
                 {
                     "client_email": client_email,
+                    "full_name": row.get("full_name"),
                     "slack_user_id": slack_user_id,
                     "slack_channel_id": slack_channel_id,
                     "accountability_enabled": bool(

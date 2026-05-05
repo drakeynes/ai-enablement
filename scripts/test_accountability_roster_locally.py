@@ -261,6 +261,7 @@ def test_1_happy_path(url: str) -> dict | None:
         first = clients[0]
         expected_keys = {
             "client_email",
+            "full_name",
             "slack_user_id",
             "slack_channel_id",
             "accountability_enabled",
@@ -275,6 +276,11 @@ def test_1_happy_path(url: str) -> dict | None:
             "1.row_email_str",
             isinstance(first.get("client_email"), str) and first["client_email"],
             f"client_email={first.get('client_email')!r}",
+        )
+        _check(
+            "1.row_full_name_str",
+            isinstance(first.get("full_name"), str) and first["full_name"],
+            f"full_name={first.get('full_name')!r}",
         )
         _check(
             "1.row_slack_user_id_str",
