@@ -24,6 +24,10 @@
     "api/accountability_roster.py": {
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 60
+    },
+    "api/airtable_onboarding_webhook.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 60
     }
   },
   "crons": [
