@@ -729,3 +729,32 @@ Spec deviations:
 **Migration count: 0.** All writes through existing RPCs / direct INSERTs. `cleanup:m5_completeness` note is SQL-joinable to find every row written by this sweep, distinct from `cleanup:m5_master_sheet_reconcile` so the two passes' contributions are separable.
 
 **Combined commit chain on origin/main:** `0efff3a` (Phase A path repoint + delta apply) → `83a0f88` (Phase B completeness script + apply). Both phases idempotent on re-run. Canonical CSV location going forward: `data/master_sheet/master-sheet-<MM-DD>/`.
+
+### Cleanup pass — misclassified-client archive (shipped 2026-05-05)
+
+Shipped: end-of-cleanup tool (`scripts/archive_misclassified_clients.py`) that closes the last 3 Gregory rows that the Fathom classifier auto-created from non-client conversations. Each row got its calls reclassified through the dashboard's existing `update_call_classification` RPC, then the client row was soft-archived with structured metadata for forensics. Two-phase apply via `--apply-calls` / `--apply-archives` flags so a hard stop sits between them — call writes land first, client archive is the recovery point if anything surprises us.
+
+Pieces:
+
+- **3 client rows archived** (matches `metadata->>'archived_via' = 'm5_cleanup_misclassification_archive'`):
+  - `Andrés González` (Drake's spec said "Andy Gonzalez"; DB had the formal name with accents) — `email='andy@thecyberself.com'`, `misclassification_type='external_hiring'`. 3 calls reclassified to `category='external'`. The Fathom classifier auto-created him as a client from a hiring-interview call series — sales-flavored conversation tripped the heuristic.
+  - `Aman` — `email='amanxli4@gmail.com'`, `misclassification_type='internal_team'`. 1 call reclassified to `category='internal'`. Aman is now on team_members but his call pre-dated his team_members row, so the classifier had no email/identity hint to call it internal.
+  - `Branden Bledsoe` (Drake's spec said "Brendan"; DB had "Branden") — `email='brandenbledsoe@transcendcu.com'`, `misclassification_type='representative_of_other_client'`, `rerouted_to_client_id=<Isabel Bledsoe's UUID>`. 1 call kept `category='client'`; only `primary_client_id` flipped from Branden to Isabel (her offboarding call where Branden joined as her representative).
+- **5 calls reclassified.** All went through `update_call_classification` RPC (migration 0016) with `p_changed_by=Gregory Bot UUID`. The RPC auto-handled: clearing `primary_client_id` on the 4 category-changing calls, deriving `is_retrievable_by_client_agents` (false for external/internal, true for Branden's repointed client call), stamping `classification_method='manual'`, writing per-field `call_classification_history` rows. 1 history row per category change + 1 per primary_client_id change = 9 history rows total (4 category + 4 auto-cleared primary + 1 Branden primary repoint).
+- **Document is_active suppression** for category-change calls (Drake's gate-time adjustment 2). Call-level `is_retrievable_by_client_agents` is the primary gate (Ella's `kb_query` filters on it transitively), but flipping `is_active=false` on the linked documents is a defensive over-suppress so the docs are excluded by every layer that filters on document state directly. 3 documents deactivated (Andy's 2 + Aman's 1); 1 already inactive (Andy had a previously-suppressed doc); 1 kept active (Branden's, which is now Isabel's offboarding-call summary — legitimately retrievable for her account).
+- **Soft-archive pattern** mirrors `merge_clients` (migration 0015:115): `archived_at=now()` + metadata jsonb merge with structured keys (`archived_via`, `archived_at_iso`, `misclassification_type`, optional `rerouted_to_client_id`). Idempotent on re-run via `archived_at IS NOT NULL` check. SQL-joinable — `WHERE metadata->>'archived_via' = 'm5_cleanup_misclassification_archive'` returns the 3 rows.
+
+End-state verification:
+- 188 non-archived clients (was 191; -3 ✓)
+- 188 CSV rows on the canonical master sheet (perfect 1:1 match between CSV and Gregory; zero extras, zero unmatched)
+- 5 history rows attributed to Gregory Bot UUID with `changed_at` in the today's apply window — UUID-only attribution (the table has no `note` column per migration 0013)
+
+Spec deviations:
+
+- **Attribution rides on Gregory Bot UUID alone for call_classification_history.** Drake's spec called for `note='cleanup:m5_archive_misclassified'`; the audit table has no `note` column (per migration 0013 — only `changed_by`, `changed_at`, `field_name`, `old_value`, `new_value`). Surfaced at the gate; Drake accepted UUID + timestamp window as sufficient forensic signal.
+- **Document is_active flipped only for category-change calls.** Branden's case is a primary_client_id repoint (category stays `client`); his call summary is legitimately Isabel's account content post-repoint and stays retrievable. Andy's + Aman's docs flipped to inactive as belt-and-suspenders.
+- **Name resolution defensive against spelling drift.** "Andy Gonzalez" resolved to "Andrés González" (the formal name in DB with accent characters) via a 3-candidate ladder. "Brendan Bledsoe" resolved to "Branden Bledsoe" (DB has the alt spelling). "Aman" enforced exact full_name match post-ilike to avoid "Amanda" / "Amanpreet" false positives.
+
+**Migration count: 0.** All writes through existing RPCs (`update_call_classification` for calls) + direct UPDATE on `clients` (archive) and `documents` (is_active flip).
+
+**Commit chain on origin/main:** `6d6b460` (script + dry-run, no writes) → `c7d1cbe` (call reclassifications + targeted document suppression applied). Archive phase landed via second invocation of the same script; no new code commit (script unchanged from `c7d1cbe`).

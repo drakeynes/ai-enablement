@@ -121,3 +121,50 @@ _(Phase 2 has not run yet. Run with `--apply` to populate this section.)_
 
 _(no status flips proposed)_
 
+
+---
+
+## needs_review walkthrough close-out (2026-05-05)
+
+End-of-cleanup audit trail. Drake walked the dashboard's `Needs Review` filter end-to-end on 2026-05-05 and resolved every flagged row. This section captures what actually happened so the trail is auditable; Scott doesn't need to walk through every entry tomorrow.
+
+### 3 client rows soft-archived (Fathom misclassifications)
+
+Discoverable via `WHERE metadata->>'archived_via' = 'm5_cleanup_misclassification_archive'`.
+
+| Client (DB row) | Misclassification type | Calls reclassified | Reroute |
+|---|---|---|---|
+| Andrés González (`andy@thecyberself.com`) | `external_hiring` | 3 calls → `category='external'`, `primary_client_id=NULL`, `is_retrievable=False` | — |
+| Aman (`amanxli4@gmail.com`) | `internal_team` | 1 call → `category='internal'`, `primary_client_id=NULL`, `is_retrievable=False` | — |
+| Branden Bledsoe (`brandenbledsoe@transcendcu.com`) | `representative_of_other_client` | 1 call kept `category='client'`; `primary_client_id` repointed to Isabel Bledsoe | Isabel Bledsoe (`d94ca03d-f821-4acf-904b-70216f38f069`) |
+
+Andy + Aman: 4 linked documents flipped to `is_active=false` (defensive over-suppress; 1 was already inactive). Branden: 1 linked document kept active (it's now Isabel's offboarding-call summary, legitimately retrievable for her account).
+
+### 12 merges performed today
+
+Discoverable via `WHERE metadata->>'merged_at' LIKE '2026-05-05%'`. Drake's Slack-mentioned count was "4 merges" — the data shows 12 in the May-5 walkthrough window (03:16–03:43 UTC). Either the 4 referenced a notable subset or the count was rough; the full 12 are listed below for completeness.
+
+| Source row (auto-created duplicate) | Merged into |
+|---|---|
+| Brooke Gorman | `2fd76c8d-3c76-4646-82da-a1f3a1aef83d` |
+| `ataylor2879@gmail.com` | `a2f1517e-f351-4c39-bde6-3478c1b3b319` |
+| `mr.andrew.hsu@gmail.com` | `86779b9f-62ec-46d1-93cb-e285e07d61bf` |
+| Nathan Simon (×2 source rows) | `66bd4ae8-041e-4160-92c0-abf0fe7a3f14` |
+| Robert Traffie (Apple iMIP duplicate — see followups entry) | `cfaac08e-b588-4405-a3d8-7b1377b50806` |
+| `kevin@myflowbook.com` | `6cda47f0-4310-482b-b90c-54692a2f9ed9` |
+| ruphael getahun | `22dbdbb9-eae8-465f-b819-1b5349b14447` |
+| `johnfernandes960@gmail.com` | `2e2663fe-6599-4c6b-b7f5-3b711a11c92b` |
+| `naturalnautica13@gmail.com` | `66bd4ae8-041e-4160-92c0-abf0fe7a3f14` (also Nathan Simon — 3 dupes total for him) |
+| `salmanr85@outlook.com` | `2c1969b9-dca8-46ca-a2d2-a3e716513fde` |
+| `samb@gmail.com` | `4c2736ea-f20b-4af7-8e69-7f3f483c1f0b` |
+
+### ~13 needs_review detags
+
+Drake-driven via the dashboard during the walkthrough. Each detag was a "I confirmed this client matches the canonical row I already had — no merge needed, just clear the flag." Specific clients aren't auditable from current DB state because `clients.tags` has no history table; the tag is either present or absent. Followup logged (`needs_review tag doesn't auto-clear after manual reconciliation`) covering future automation of the detag step.
+
+### End-state
+
+- **188 non-archived clients** (was 191 pre-archive; -3 ✓)
+- **188 CSV rows** on the canonical 2026-05-04 master sheet
+- **Perfect 1:1 match** between Gregory and the master sheet — zero extras on the Gregory side, zero unmatched on the CSV side
+- Reconcile dry-run idempotent (0 Tier 1 changes); cleanup script leaves Gregory in steady state until the next master sheet edit

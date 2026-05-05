@@ -237,7 +237,7 @@
       Today's four priorities follow M5.6's close-out. Path 2 was reshaped by the Zain conversation — it's a daily-pull GET endpoint Make.com hits for the active-client roster (<span style="font-family: var(--mono); font-size: 13px; color: var(--text);">accountability_enabled</span> + <span style="font-family: var(--mono); font-size: 13px; color: var(--text);">nps_enabled</span> + Slack identifiers, joined per-client), not the event-driven UPDATE-listener architecture previously sketched; this replaces the Financial Master Sheet as Zain's daily source. P2 is the manual cleanup pass to land Gregory in a usable state by EOD, P3 is a Drake-led plan around base44 for Nabeel, and P4 is onboarding Scott tomorrow so he starts using Gregory in his daily workflow.
     </div>
     <div class="meta">
-      <span><strong>Last updated:</strong> Session M5 — delta + completeness applied (Gregory matches canonical CSVs)</span>
+      <span><strong>Last updated:</strong> Session M5 — cleanup fully closed (188 clients ↔ 188 CSV rows, perfect 1:1)</span>
       <span><strong>Source of truth:</strong> CLAUDE.md (this is a view, not authoritative)</span>
     </div>
   </header>
@@ -277,8 +277,15 @@
     <div class="col done">
       <header>
         <h2>Done</h2>
-        <span class="count">9</span>
+        <span class="count">10</span>
       </header>
+
+      <div class="card">
+        <div class="id">Cleanup III</div>
+        <div class="title">M5 cleanup close-out — needs_review walkthrough + misclassification archive</div>
+        <div class="subtitle">2026-05-05 Drake-driven dashboard walkthrough closed every flagged row. <strong>12 merges</strong> via the dashboard merge flow (auto-created duplicates folded into canonical rows; includes the Robert Traffie iMIP duplicate + 3 Nathan Simon dupes). <strong>~13 needs_review detags</strong> (rows confirmed canonical without merge). <strong>3 misclassification archives</strong> via <span style="font-family: var(--mono); font-size: 12.5px;">scripts/archive_misclassified_clients.py</span>: Andrés González (hiring interview → 3 calls reclassified external), Aman (internal teammate → 1 call internal), Branden Bledsoe (Isabel's representative → 1 call repointed to Isabel). 4 linked documents flipped to is_active=false (over-suppress). All RPCs / archive metadata attributed to Gregory Bot UUID. <strong>End-state: 188 non-archived clients, perfect 1:1 with the 188-row master sheet — zero extras, zero unmatched.</strong> Cleanup is fully complete; reconcile dry-run idempotent. 7 followups logged for future classifier tuning + dashboard ergonomics.</div>
+        <div class="pills"><span class="pill">delivered</span><span class="pill stretch">cleanup fully closed</span></div>
+      </div>
 
       <div class="card">
         <div class="id">Cleanup II</div>
