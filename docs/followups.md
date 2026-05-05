@@ -120,15 +120,17 @@ Ops reminders and known gaps that aren't "ideas to build" (those live in `docs/f
 - **Next action:** extract to a third file like `lib/clients-filter-defaults.ts` (or fold into `lib/client-vocab.ts` since it's adjacent to the status vocab). Both call sites import the constant. ~5-line refactor, zero behavior change. Worth doing alongside any future filter-default tweak; not urgent on its own.
 - **Logged:** 2026-05-03 (M5.5 close-out — intentional defer at ship time).
 
-## Email-mismatch alternate_emails sync log (NPS backfill 404 + master sheet diff pattern)
+## Email-mismatch alternate_emails sync log — RESOLVED (canonical pattern: scripts/add_alternate_emails_batch.py)
 
 - **What:** Airtable / master-sheet emails that don't match Gregory's primary email get added to `clients.metadata.alternate_emails` per the canonical pattern in `docs/runbooks/backfill_nps_from_airtable.md` § Failure modes. Two surfaces feed this: M5.4 NPS backfill 404s (Airtable side) and master sheet reconcile A8 mismatches (CSV side). Same fix either way — single jsonb write closes the gap for every downstream resolver (NPS receiver, Fathom classifier, master sheet reconcile).
 - **Why it matters:** until the alternate is added, the affected clients can't receive auto-derived nps_standing from Path 1, won't match cleanly on master sheet re-runs, and surface as "unmatched" in Fathom call attribution. Dashboard surfaces `metadata.alternate_emails` read-only by design (M3.2 followup); the canonical write path is via script until that affordance lands.
-- **Resolution log:**
-  - **Jonathan Duran-Rojas** + **Luis Malo** (M5.4 backfill 404s, surfaced 2026-05-03): handled by Drake out-of-band.
-  - **Cheston Nguyen** (Gregory `cheston@395northai.com`, alt `cheston.nguyen@gmail.com`) + **Yeshlin Singh** (Gregory `yeshlin_singh@yahoo.com`, alt `yeshlinp@gmail.com`) — surfaced by `scripts/cleanup_master_sheet_completeness.py` as scott_notes A8; resolved via `scripts/add_alternate_emails_cheston_yeshlin.py --apply` on 2026-05-04. Idempotent on re-run.
-- **Next action:** none open. If a future NPS backfill / master sheet reconcile surfaces fresh email mismatches, edit the `MAPPINGS` constant at the top of `scripts/add_alternate_emails_cheston_yeshlin.py` (or rename it to drop the dated suffix once it's recognizably the canonical script for this pattern) and re-run.
-- **Logged:** 2026-05-03 (J + L); 2026-05-04 (C + Y resolved).
+- **Resolution log (all 4 known mismatches closed 2026-05-04):**
+  - **Cheston Nguyen** (Gregory `cheston@395northai.com`, alt `cheston.nguyen@gmail.com`) + **Yeshlin Singh** (Gregory `yeshlin_singh@yahoo.com`, alt `yeshlinp@gmail.com`) — surfaced by master sheet completeness pass (scott_notes A8); resolved via `scripts/add_alternate_emails_batch.py --apply`.
+  - **Luis Malo** (Gregory `luis@malova.io`, alt `lmalo721@yahoo.com`) — M5.4 NPS backfill 404; resolved via the same script.
+  - **Jonathan Duran-Rojas** (canonical row is `Jonathan Duran` / `j05832952@gmail.com` after Drake's out-of-band `merge_clients` RPC; alts `jonathan@luxrevo.com` from the merge + `wetasspressurewasher04@gmail.com` from this script) — M5.4 NPS backfill 404; resolved.
+  - **Closing step:** `scripts/backfill_nps_from_airtable.py --apply` re-run after alternates landed — moved 59→61 successes / 2→0 client_not_found 404s. Jonathan and Luis both landed `nps_standing='promoter'` + `csm_standing='happy'` (auto-derive applied; both were Strong / Promoter in Airtable).
+- **Next action:** none open. The canonical script is `scripts/add_alternate_emails_batch.py` — for future fresh mismatches, edit its `MAPPINGS` constant (the resolution log in its docstring also accumulates so re-running stays a documented no-op for prior batches) and re-run; close with one more `backfill_nps_from_airtable.py --apply` if the trigger was an NPS 404.
+- **Logged:** 2026-05-03 (J + L surfaced from M5.4 backfill); 2026-05-04 (C + Y surfaced from master sheet completeness; all 4 resolved + NPS backfill closure run).
 
 ## NPS backfill — 4 manual-override-sticky divergences worth Scott discussion
 

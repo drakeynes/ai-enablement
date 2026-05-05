@@ -1,35 +1,37 @@
-"""Add alternate emails for Cheston Nguyen + Yeshlin Singh.
+"""Add alternate emails to Gregory clients in batch.
 
 Per the M5.4 NPS backfill runbook
 (`docs/runbooks/backfill_nps_from_airtable.md` § Failure modes):
-when Airtable's NPS email doesn't match Gregory's `clients.email`,
-the canonical fix is to add the Airtable email to the Gregory
-client's `metadata.alternate_emails`. The receiver's resolver
-(and the Fathom classifier, and the master sheet reconcile) all
-consult `alternate_emails` after the primary email lookup, so a
-single write closes the gap for every downstream lookup.
+when an external system's email (Airtable NPS, master sheet, etc.)
+doesn't match Gregory's primary `clients.email`, the canonical fix
+is to add the external email to the Gregory client's
+`metadata.alternate_emails`. The receiver's resolver, the Fathom
+classifier, and the master sheet reconcile all consult
+`alternate_emails` after the primary lookup, so a single write
+closes the gap for every downstream resolver.
 
-This batch handles 2 cases surfaced as scott_notes A8 by
-`scripts/cleanup_master_sheet_completeness.py` running against the
-canonical 2026-05-04 master sheet:
+The `MAPPINGS` constant below is the working batch — edit it for
+each new wave of mismatches. Idempotent on re-run via case-
+insensitive dedup against the existing `alternate_emails` array.
 
-  - Cheston Nguyen (USA): Gregory primary cheston@395northai.com,
-    add alternate cheston.nguyen@gmail.com.
-  - Yeshlin Singh (AUS): Gregory primary yeshlin_singh@yahoo.com,
-    add alternate yeshlinp@gmail.com.
+Resolution log (cumulative — entries stay here so re-running this
+script remains a documented no-op for already-handled cases):
 
-Idempotent. Re-running with no changes is a no-op (dedup check
-on `alternate_emails` membership). Future-recurring use: every NPS
-backfill 404 is a candidate for the same pattern; if Drake wants
-to reuse, edit the `MAPPINGS` constant at the top of the file.
+  - 2026-05-04: Cheston Nguyen + Yeshlin Singh (master sheet
+    reconcile A8 surface).
+  - 2026-05-04: Luis Malo + Jonathan Duran-Rojas (M5.4 NPS backfill
+    404 surface; Jonathan pre-merged via `merge_clients` RPC by
+    Drake out-of-band — canonical row is `Jonathan Duran` /
+    `j05832952@gmail.com` with `jonathan@luxrevo.com` already
+    in alternates from the merge).
 
 The dashboard surfaces `metadata.alternate_emails` read-only by
 design (M3.2 followup logged in `docs/followups.md`); this script
 is the canonical write path until that affordance lands.
 
 Usage:
-    .venv/bin/python scripts/add_alternate_emails_cheston_yeshlin.py
-    .venv/bin/python scripts/add_alternate_emails_cheston_yeshlin.py --apply
+    .venv/bin/python scripts/add_alternate_emails_batch.py
+    .venv/bin/python scripts/add_alternate_emails_batch.py --apply
 """
 
 from __future__ import annotations
@@ -49,6 +51,12 @@ from shared.db import get_client  # noqa: E402
 MAPPINGS: list[tuple[str, str, str]] = [
     ("cheston@395northai.com", "cheston.nguyen@gmail.com", "Cheston Nguyen"),
     ("yeshlin_singh@yahoo.com", "yeshlinp@gmail.com", "Yeshlin Singh"),
+    ("luis@malova.io", "lmalo721@yahoo.com", "Luis Malo"),
+    (
+        "j05832952@gmail.com",
+        "wetasspressurewasher04@gmail.com",
+        "Jonathan Duran-Rojas",
+    ),
 ]
 
 
