@@ -296,17 +296,17 @@ because:
 | Var | Purpose | Source |
 |---|---|---|
 | `FATHOM_API_KEY` | Read access to `/external/v1/meetings` | Drake generates from Fathom team account during M1.2.5 |
-| `FATHOM_BACKFILL_AUTH_TOKEN` | Bearer token the cron sends in `Authorization` | Generate with `openssl rand -hex 32` during M1.2.5 |
-| `CRON_SECRET` | Same value as `FATHOM_BACKFILL_AUTH_TOKEN` — what Vercel Cron actually puts in the header | Set both to the same value |
+| `CRON_SECRET` | Bearer token Vercel Cron sends in `Authorization`; the handler validates against this same env var. Shared across all cron endpoints in this project (consolidated to single-var pattern in M6.2). | Generate with `openssl rand -hex 32` |
 | Existing | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY` | Already in Vercel env from earlier sessions |
 
 ### Deploy (M1.2.5 — not yet done)
 
-1. **Generate `FATHOM_BACKFILL_AUTH_TOKEN`:**
+1. **Generate `CRON_SECRET`:**
    ```bash
    openssl rand -hex 32
    ```
-   Save to Bitwarden as `FATHOM_BACKFILL_AUTH_TOKEN`.
+   Save to Bitwarden as `CRON_SECRET_PROD`. NOTE: this is the SAME secret
+   used by every cron in the project — set once, used by all.
 
 2. **Generate `FATHOM_API_KEY`** from the Fathom team account: Settings →
    API Access → Generate API Key. Save to Bitwarden as `FATHOM_API_KEY_PROD`.
@@ -315,9 +315,9 @@ because:
 3. **Set env vars on Vercel** (Project → Settings → Environment Variables,
    Production scope):
    - `FATHOM_API_KEY` = the Fathom key
-   - `FATHOM_BACKFILL_AUTH_TOKEN` = the random hex from step 1
-   - `CRON_SECRET` = the same random hex (Vercel Cron uses this internally
-     to populate the `Authorization` header)
+   - `CRON_SECRET` = the random hex from step 1. Vercel Cron uses this
+     internally to populate the `Authorization` header AND the handler
+     validates against this same env var. Single source of truth.
 
 4. **Push the commit** that adds `api/fathom_backfill.py` + the cron entry
    in `vercel.json`. Vercel auto-builds. The cron entry takes effect on
@@ -326,7 +326,7 @@ because:
 5. **Manual trigger to verify before waiting for 08:00 UTC:**
    ```bash
    curl -i -X POST \
-     -H "Authorization: Bearer <FATHOM_BACKFILL_AUTH_TOKEN>" \
+     -H "Authorization: Bearer <CRON_SECRET>" \
      https://ai-enablement-sigma.vercel.app/api/fathom_backfill
    ```
    Expect a 200 with summary JSON: `{"ok": true, "meetings_seen": N,
@@ -370,7 +370,7 @@ order by received_at desc;
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| `select max(received_at) from webhook_deliveries where source='fathom_cron'` is older than 36h | Cron didn't fire OR fired and 401'd | Vercel dashboard → Cron Jobs tab — should show daily 08:00 UTC entries. If they're 401ing, `FATHOM_BACKFILL_AUTH_TOKEN` and `CRON_SECRET` env vars don't match. |
+| `select max(received_at) from webhook_deliveries where source='fathom_cron'` is older than 36h | Cron didn't fire OR fired and 401'd | Vercel dashboard → Cron Jobs tab — should show daily 08:00 UTC entries. If they're 401ing, `CRON_SECRET` is unset in Vercel; set it and redeploy. |
 | Sweep returns `meetings_seen=0` consistently | `FATHOM_API_KEY` invalid OR account has no meetings in window | Verify the key works: `curl -H "X-Api-Key: $KEY" https://api.fathom.ai/external/v1/meetings?include_summary=true` should return JSON. |
 | Sweep returns `more_remaining=true` repeatedly | More than 50 missed calls in the lookback window | Tomorrow's run continues catch-up. If catch-up doesn't converge after a week, raise `_MAX_INGESTS_PER_SWEEP` in `api/fathom_backfill.py` or run a manual sweep with a shorter window. |
 | `failed` rows accumulating | Pipeline raising on a specific payload shape | Inspect `webhook_deliveries.processing_error` for the failing rows; the `payload` jsonb has the raw delivery for re-running through the adapter locally. |
@@ -382,7 +382,7 @@ If something goes sideways and you need to force a sweep mid-day:
 
 ```bash
 curl -sS -X POST \
-  -H "Authorization: Bearer <FATHOM_BACKFILL_AUTH_TOKEN>" \
+  -H "Authorization: Bearer <CRON_SECRET>" \
   https://ai-enablement-sigma.vercel.app/api/fathom_backfill
 ```
 

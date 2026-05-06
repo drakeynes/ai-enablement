@@ -21,7 +21,7 @@ Design rationale (`docs/architecture/fathom_webhook.md` §f):
 Sync flow:
 
   1. Auth check — bearer token in `Authorization` header, compared
-     constant-time against `FATHOM_BACKFILL_AUTH_TOKEN`. Fail → 401.
+     constant-time against `CRON_SECRET`. Fail → 401.
   2. Determine lookback window:
        since = MAX(received_at) FROM webhook_deliveries
                 WHERE source LIKE 'fathom%' - 6h
@@ -40,9 +40,11 @@ Sync flow:
      `more_remaining=true`. Tomorrow's cron picks up where we stopped.
 
 Env vars required (set in the Vercel project — NOT committed):
-  FATHOM_BACKFILL_AUTH_TOKEN          — random secret, value of the cron's
-                                 `Authorization: Bearer <token>` header.
-                                 Drake generates and sets in M1.2.5.
+  CRON_SECRET                  — random secret. Vercel Cron sends it as
+                                 `Authorization: Bearer <token>`. Shared
+                                 across ALL cron endpoints in this project
+                                 (Vercel only supports one CRON_SECRET per
+                                 project). Single source of truth.
   FATHOM_API_KEY               — Fathom team-account API key with read
                                  access to /meetings. Drake generates and
                                  sets in M1.2.5. Distinct from the
@@ -263,15 +265,16 @@ class handler(BaseHTTPRequestHandler):
 def _verify_auth(headers: Any) -> bool:
     """Bearer-token auth for the cron endpoint.
 
-    Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` where
-    CRON_SECRET is a Vercel project env var. We read our own
-    FATHOM_BACKFILL_AUTH_TOKEN env var and compare constant-time. Drake will
-    set CRON_SECRET = FATHOM_BACKFILL_AUTH_TOKEN to the same value when wiring
-    the cron up in Vercel.
+    Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`. Single source
+    of truth — Vercel only supports one CRON_SECRET per project, so all
+    cron endpoints in this codebase validate against the same env var.
+    Consolidated to this pattern in M6.2 (was per-source-named tokens
+    before; the per-source-naming-for-independent-rotation rationale was
+    never deliverable since Vercel only supports one CRON_SECRET).
     """
-    expected = os.environ.get("FATHOM_BACKFILL_AUTH_TOKEN") or ""
+    expected = os.environ.get("CRON_SECRET") or ""
     if not expected:
-        logger.error("fathom_backfill: FATHOM_BACKFILL_AUTH_TOKEN not configured")
+        logger.error("fathom_backfill: CRON_SECRET not configured")
         return False
     auth_header = headers.get("Authorization") or headers.get("authorization") or ""
     if not auth_header.startswith("Bearer "):

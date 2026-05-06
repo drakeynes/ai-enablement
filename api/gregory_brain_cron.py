@@ -19,12 +19,12 @@ a code change once summary coverage densifies.
 
 Env vars required (set in Vercel — NOT committed):
 
-  GREGORY_BRAIN_CRON_AUTH_TOKEN — random secret. Vercel Cron sends
+  CRON_SECRET                   — random secret. Vercel Cron sends it as
                                   `Authorization: Bearer <token>` and the
-                                  handler verifies constant-time. Same
-                                  source-prefix-namespaced pattern as
-                                  FATHOM_BACKFILL_AUTH_TOKEN; allows
-                                  per-cron rotation.
+                                  handler verifies constant-time. Shared
+                                  across ALL cron endpoints in this project
+                                  (Vercel only supports one CRON_SECRET per
+                                  project). Single source of truth.
   GREGORY_CONCERNS_ENABLED      — flip to "true" once summary coverage
                                   is dense enough to justify the LLM
                                   cost. Default off.
@@ -32,7 +32,7 @@ Env vars required (set in Vercel — NOT committed):
   ANTHROPIC_API_KEY             — used only if concerns flag is on.
 
 Manual trigger for testing:
-  curl -i -X POST -H "Authorization: Bearer $GREGORY_BRAIN_CRON_AUTH_TOKEN" \
+  curl -i -X POST -H "Authorization: Bearer $CRON_SECRET" \
        https://ai-enablement-sigma.vercel.app/api/gregory_brain_cron
 """
 
@@ -112,14 +112,13 @@ class handler(BaseHTTPRequestHandler):
 
 
 def _verify_auth(headers: Any) -> bool:
-    """Bearer-token auth. Mirrors the fathom_backfill pattern;
-    namespaced env var per the source-prefix convention so secrets
-    rotate independently."""
-    expected = os.environ.get("GREGORY_BRAIN_CRON_AUTH_TOKEN") or ""
+    """Bearer-token auth. Validates against `CRON_SECRET` — the single
+    project-level env var Vercel Cron sends as the Bearer token. All
+    cron endpoints in this codebase share this validation; Vercel only
+    supports one CRON_SECRET per project (consolidated in M6.2)."""
+    expected = os.environ.get("CRON_SECRET") or ""
     if not expected:
-        logger.error(
-            "gregory_brain_cron: GREGORY_BRAIN_CRON_AUTH_TOKEN not configured"
-        )
+        logger.error("gregory_brain_cron: CRON_SECRET not configured")
         return False
     auth_header = headers.get("Authorization") or headers.get("authorization") or ""
     if not auth_header.startswith("Bearer "):

@@ -20,8 +20,10 @@ Requires:
   - FATHOM_API_KEY in .env.local (the real production one — Drake will
     have set it during M1.2.5; for this M1.2 dev-loop test we read it
     from .env.local just like other shared.* modules do)
-  - FATHOM_BACKFILL_AUTH_TOKEN — generated locally for this test only (random
-    bytes); production Vercel will get its own value from Drake
+  - CRON_SECRET — generated locally for this test only (random bytes);
+    production Vercel will get its own value from Drake. The handler
+    validates Authorization: Bearer <CRON_SECRET> (consolidated to this
+    single-var pattern in M6.2; see api/fathom_backfill.py:_verify_auth).
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ load_dotenv(_REPO / ".env.local")
 # Set the test bearer BEFORE importing the handler so module-level reads
 # (none today, but defensive) see it.
 _TEST_TOKEN = "BACKFILL_TEST_" + secrets.token_hex(16)
-os.environ["FATHOM_BACKFILL_AUTH_TOKEN"] = _TEST_TOKEN
+os.environ["CRON_SECRET"] = _TEST_TOKEN
 
 from api.fathom_backfill import handler  # noqa: E402 — must follow env setup
 

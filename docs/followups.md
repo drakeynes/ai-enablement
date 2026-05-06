@@ -276,12 +276,12 @@ These three are byproducts of Drake's M4 Chunk C triage decisions on the master 
 - **Next action:** add a one-line note to `docs/runbooks/fathom_webhook.md` § Register that says "zoom out before submitting if the verify button isn't visible." Also, the cleanest long-term fix is to skip the UI entirely — Fathom's `POST /webhooks` API endpoint works fine (per F2.1 doc read). For the next rotation, register via API instead of UI.
 - **Logged:** 2026-04-27 (M1.1 root cause).
 
-## Fathom API key + cron backfill auth token — need rotation runbook
+## Fathom API key + cron auth secret — need rotation runbook
 
-- **What:** M1.2 added two new env vars: `FATHOM_API_KEY` (Fathom team-account API key, used by `api/fathom_backfill.py` to read `/meetings`) and `FATHOM_BACKFILL_AUTH_TOKEN` (random secret, used by Vercel Cron's `Authorization: Bearer ...` header). Neither has a documented rotation procedure today. The Fathom API key has the same constraint as the webhook secret — Fathom's API doesn't expose a rotate endpoint, only delete + recreate.
-- **Why it matters:** if either is leaked or a team member with access leaves, we need a known-good rotation path. Doing it under pressure without a runbook is error-prone (cron downtime window, missed env-var update on Vercel).
-- **Next action:** when adding the secret-rotation section to `docs/runbooks/fathom_webhook.md` (already an open followup for the webhook secret), extend it to cover both new secrets. ~30 min to draft. Not urgent — defer until first rotation is needed.
-- **Logged:** 2026-04-27 (M1.2 build).
+- **What:** Two cron-related secrets need documented rotation procedures. (1) `FATHOM_API_KEY` (Fathom team-account API key, used by `api/fathom_backfill.py` to read `/meetings`) — Fathom's API doesn't expose a rotate endpoint, only delete + recreate. (2) `CRON_SECRET` (random secret used by Vercel Cron's `Authorization: Bearer ...` header AND validated by every cron handler in this codebase; consolidated to single-var pattern in M6.2). Rotating CRON_SECRET affects all crons simultaneously since it's the single project-level token.
+- **Why it matters:** if either is leaked or a team member with access leaves, we need a known-good rotation path. Doing it under pressure without a runbook is error-prone (cron downtime window between Vercel env update and redeploy).
+- **Next action:** when adding the secret-rotation section to `docs/runbooks/fathom_webhook.md` (already an open followup for the webhook secret), extend it to cover both new secrets. CRON_SECRET rotation is now well-documented in `docs/runbooks/accountability_notification_cron.md` § "Rotate the secrets" — could simply cross-reference rather than duplicate. ~30 min to draft. Not urgent — defer until first rotation is needed.
+- **Logged:** 2026-04-27 (M1.2 build); updated 2026-05-06 (M6.2 consolidated cron-auth env var to CRON_SECRET).
 
 ## PostgREST transient empty-body 400 on count queries — pattern observed multiple sessions
 

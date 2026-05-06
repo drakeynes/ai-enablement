@@ -6,7 +6,7 @@ which of their clients didn't submit accountability the prior day.
 
 **Cron schedule:** `0 12 * * *` (12:00 UTC = 7am EST, 8am EDT).
 **Endpoint:** `https://ai-enablement-sigma.vercel.app/api/accountability_notification_cron`
-**Auth:** `Authorization: Bearer <ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN>`
+**Auth:** `Authorization: Bearer <CRON_SECRET>` (shared across all cron endpoints in this project; consolidated to single-var pattern in M6.2)
 **Destination:** `SLACK_CS_ACCOUNTABILITY_CHANNEL_ID` (one channel; one message per CSM).
 **Architecture:** see `docs/agents/gregory.md` § "CS visibility surfaces (M6.1)".
 
@@ -70,7 +70,7 @@ Expected (success): most recent row is `processing_status='processed'`, `payload
 To run the cron on demand (e.g., re-fire after a Vercel deploy or test a new env var):
 
 ```bash
-PROD_TOKEN=$(grep '^ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN=' .env.local | cut -d= -f2-)
+PROD_TOKEN=$(grep '^CRON_SECRET=' .env.local | cut -d= -f2-)
 curl -i -X POST -H "Authorization: Bearer $PROD_TOKEN" \
   https://ai-enablement-sigma.vercel.app/api/accountability_notification_cron
 ```
@@ -83,17 +83,19 @@ Expected: HTTP 200 with `{"status":"ok",...}` on a successful run, or HTTP 500 w
 
 The cron uses two secrets that may need rotation:
 
-### Auth token (`ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN`)
+### Cron auth token (`CRON_SECRET`)
 
-Same pattern as `FATHOM_BACKFILL_AUTH_TOKEN`:
+`CRON_SECRET` is the single project-level Vercel env var ALL crons in this codebase validate against (consolidated to this pattern in M6.2). Rotating it affects every cron endpoint simultaneously — fathom_backfill, gregory_brain_cron, accountability_notification_cron.
 
 1. Generate: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Set in Vercel Production env. Set BOTH `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN` (read by handler) AND `CRON_SECRET` (sent by Vercel Cron) to the same value.
+2. Set `CRON_SECRET` in Vercel Production env (Settings → Environment Variables).
 3. Trigger redeploy.
-4. Manually fire the cron with the new token (above) → expect 200.
+4. Manually fire each cron with the new token (above) → expect 200 on all three.
 5. Update `.env.local` for harness runs.
 
-Window of disruption: between Vercel env update and redeploy, the cron's Vercel-Cron auto-fire would 401. At our daily cadence this is a ~15-minute window per rotation; usually a non-event.
+Single source of truth: no synchronization with a second env var. Rotation is one place, no risk of drift.
+
+Window of disruption: between Vercel env update and redeploy, scheduled cron fires would 401. At daily cadence this is a ~15-minute window; usually a non-event.
 
 ### Airtable PAT (`AIRTABLE_ACCOUNTABILITY_PAT`)
 
@@ -173,7 +175,7 @@ The harness exercises happy path, idempotent re-run, no-missing skip, Airtable f
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| HTTP 401 on Vercel Cron's POST | `CRON_SECRET` and `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN` out of sync | Set both to the same value in Vercel; redeploy |
+| HTTP 401 on Vercel Cron's POST | `CRON_SECRET` not set in Vercel OR doesn't match what the handler expects | Set `CRON_SECRET` in Vercel Production env; redeploy. Single source of truth — no second env var to sync. |
 | HTTP 500 with `airtable_fetch_failed` | PAT expired/revoked OR Airtable down | Regenerate PAT (see "Rotate the secrets"); check status.airtable.com |
 | HTTP 500 with `gregory_query_failed` | Supabase pooler down OR schema regression | Check Supabase status; verify `accountability_enabled` column still exists; check recent migrations |
 | HTTP 500 with `SLACK_CS_ACCOUNTABILITY_CHANNEL_ID not set` | Env var missing in Vercel | Set + redeploy |

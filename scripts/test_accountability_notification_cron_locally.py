@@ -48,13 +48,13 @@ _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
 # Set the test auth token BEFORE importing the handler so the env var
-# is present at first os.environ.get() call.
+# is present at first os.environ.get() call. The handler validates
+# Authorization: Bearer <CRON_SECRET> — single-var pattern shared across
+# all cron endpoints (consolidated in M6.2).
 import secrets
 
 _TEST_AUTH_TOKEN = "test_token_" + secrets.token_urlsafe(16)
-os.environ.setdefault(
-    "ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN", _TEST_AUTH_TOKEN
-)
+os.environ.setdefault("CRON_SECRET", _TEST_AUTH_TOKEN)
 
 # Stable Airtable env so the inner function has what it needs. The
 # urllib mock intercepts before any real call goes out.

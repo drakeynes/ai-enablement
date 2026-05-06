@@ -26,7 +26,11 @@ Drake's call, "off by an hour during DST is fine"). The cron:
 
 Env vars required:
 
-  ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN — Vercel Cron Bearer auth
+  CRON_SECRET                                 — Vercel Cron Bearer auth.
+                                                Shared across all cron
+                                                endpoints in this project
+                                                (Vercel only supports one
+                                                CRON_SECRET per project).
   AIRTABLE_ACCOUNTABILITY_PAT                 — Airtable personal access
                                                 token; expires-or-revokes
                                                 surface as a loud Slack
@@ -40,7 +44,7 @@ Env vars required:
   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY    — shared.db client
 
 Manual trigger for testing:
-  curl -i -X POST -H "Authorization: Bearer $ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN" \\
+  curl -i -X POST -H "Authorization: Bearer $CRON_SECRET" \\
        https://ai-enablement-sigma.vercel.app/api/accountability_notification_cron
 """
 
@@ -590,13 +594,14 @@ def _mark_delivery(
 
 
 def _verify_auth(headers: Any) -> bool:
-    """Bearer-token auth. Mirrors gregory_brain_cron's pattern; per-
-    source-prefixed env var name lets cron secrets rotate independently."""
-    expected = os.environ.get("ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN") or ""
+    """Bearer-token auth. Validates against `CRON_SECRET` — the single
+    project-level env var Vercel Cron sends as the Bearer token. All
+    cron endpoints in this codebase share this validation; Vercel only
+    supports one CRON_SECRET per project (consolidated in M6.2)."""
+    expected = os.environ.get("CRON_SECRET") or ""
     if not expected:
         logger.error(
-            "accountability_notification_cron: "
-            "ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN not configured"
+            "accountability_notification_cron: CRON_SECRET not configured"
         )
         return False
     auth_header = (
