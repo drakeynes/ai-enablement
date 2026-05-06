@@ -6,6 +6,7 @@ import {
   insertNpsSubmission,
   isProfilePath,
   updateClient,
+  updateClientAlternateEmails,
   updateClientCsmStandingWithHistory,
   updateClientJourneyStageWithHistory,
   updateClientProfileField,
@@ -327,6 +328,32 @@ export async function updateClientProfileFieldAction(
     profilePath as ProfilePath,
     cleaned,
   )
+  if (result.success) {
+    revalidatePath(`/clients/${client_id}`)
+  }
+  return result
+}
+
+// ----------------------------------------------------------------------
+// updateClientAlternateEmailsAction — Section 1 metadata.alternate_emails
+// ----------------------------------------------------------------------
+//
+// Comma-separated input → string[]. Split on commas, trim each piece,
+// drop empties. No dedup, no email validation, no collision check by
+// design (Drake's call) — matches the editability pattern of every
+// other inline-edit field on the page. Empty/null raw writes [].
+// Risk of typo'd alt-emails affecting Fathom resolver matches is
+// accepted; recoverable by editing the call's primary_client_id.
+export async function updateClientAlternateEmailsAction(
+  client_id: string,
+  raw: string | null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const text = raw ?? ''
+  const emails = text
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+  const result = await updateClientAlternateEmails(client_id, emails)
   if (result.success) {
     revalidatePath(`/clients/${client_id}`)
   }

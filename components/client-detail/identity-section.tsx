@@ -7,11 +7,8 @@
 // imported as types (the runtime never reaches into lib/db/clients
 // from this module).
 //
-// Read-only-by-design: slack_channel_id, slack_user_id, signup_date,
-// alternate_emails. The first three are system-sourced; alternate_emails
-// has no UI write path because the merge_clients RPC and Fathom
-// resolver are the canonical writers. Direct edit would corrupt the
-// identity-resolution chain.
+// alternate_emails is editable as a comma-separated text input — no
+// dedup, no validation, no collision check by design (see commit).
 
 import type { ClientDetail } from '@/lib/db/clients'
 import { Section } from './section'
@@ -19,6 +16,7 @@ import { ReadOnlyField } from './read-only-field'
 import { EditableField } from './editable-field'
 import { EditableTagsField } from './editable-tags-field'
 import {
+  updateClientAlternateEmailsAction,
   updateClientField,
   updateClientStatusAction,
 } from '@/app/(authenticated)/clients/[id]/actions'
@@ -91,14 +89,15 @@ export function IdentitySection({ client }: { client: ClientDetail }) {
           }
         />
 
-        {/* Alternate emails — read-only by design. Populated by the
-            merge_clients RPC and Fathom resolver; direct edit would
-            corrupt the resolver chain. */}
-        <ReadOnlyField
+        <EditableField
           label="Alternate emails"
           value={altEmailsDisplay}
-          editable={false}
+          variant="text"
           mono
+          placeholder="comma,separated@x.com"
+          onSave={(v) =>
+            updateClientAlternateEmailsAction(client.id, v as string | null)
+          }
         />
         <EditableField
           label="Phone"

@@ -828,3 +828,47 @@ export async function updateClientProfileField(
   if (writeErr) return { success: false, error: writeErr.message }
   return { success: true }
 }
+
+// ----------------------------------------------------------------------
+// updateClientAlternateEmails — read-modify-write on clients.metadata
+// ----------------------------------------------------------------------
+//
+// Section 1 (Identity) — metadata.alternate_emails is editable from the
+// dashboard as a comma-separated text field. The Server Action handles
+// the split/trim/drop-empty pre-processing; this function just writes
+// the resulting array. No dedup, no validation by design — matches the
+// editability pattern of every other field on the page.
+//
+// Same race window as updateClientProfileField: concurrent edits to
+// different metadata.* keys can clobber each other (V1-accepted, see
+// followups). Top-level metadata keys (alternate_names, profile, etc.)
+// preserved by spreading the existing object.
+export async function updateClientAlternateEmails(
+  client_id: string,
+  emails: string[],
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+
+  const { data: row, error: readErr } = await supabase
+    .from('clients')
+    .select('metadata')
+    .eq('id', client_id)
+    .maybeSingle()
+  if (readErr) return { success: false, error: readErr.message }
+  if (!row) return { success: false, error: 'Client not found.' }
+
+  const metadata =
+    (row.metadata as Record<string, unknown> | null) ?? {}
+
+  const newMetadata = {
+    ...metadata,
+    alternate_emails: emails,
+  } as unknown as ClientRow['metadata']
+
+  const { error: writeErr } = await supabase
+    .from('clients')
+    .update({ metadata: newMetadata })
+    .eq('id', client_id)
+  if (writeErr) return { success: false, error: writeErr.message }
+  return { success: true }
+}

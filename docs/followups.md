@@ -395,11 +395,12 @@ These three are byproducts of Drake's M4 Chunk C triage decisions on the master 
 - **Revisit triggers:** (a) `select count(*) from documents where document_type='call_transcript_chunk'` crosses ~50k, OR (b) merge dialog spinner ever takes more than ~2s on submit. Resolution: add the partial index in a small migration. Until then: status quo.
 - **Logged:** 2026-04-29 (M3.2 build).
 
-## Surface `alternate_emails` / `alternate_names` on Clients detail page
+## Surface `alternate_names` on Clients detail page
 
-- **What:** Section 1 (Identity) on the Clients detail page renders `email` and `full_name`, but not `metadata.alternate_emails` / `metadata.alternate_names`. After a merge, the absorbed identities live in those fields and are invisible to dashboard reviewers without opening Studio. Fix: display them as a read-only "Also known as: x@y.com, foo@bar.com" line below the email field, and "Display name variants: Name A, Name B" below the full_name field. Source data is on the client row itself; no new query needed — the page entry already pulls full `metadata` via `getClientById`.
+- **What:** Section 1 (Identity) on the Clients detail page renders `full_name` but not `metadata.alternate_names`. After a merge, the absorbed display-name variants live in that field and are invisible to dashboard reviewers without opening Studio. Fix: display as a read-only "Display name variants: Name A, Name B" line below the full_name field. Source data is on the client row itself; no new query needed — the page entry already pulls full `metadata` via `getClientById`.
 - **Why it matters:** not blocking, no behavior bug. Both fields are correctly populated by the M3.2 merge RPC. The data is correct; only the dashboard's read-back is missing.
-- **Revisit triggers:** (a) next Clients detail page polish pass, (b) a reviewer asks "what merged into this client?" and Studio is the only answer, (c) audit needs surface for understanding why a given client matched a participant by an alt-email.
+- **Revisit triggers:** (a) next Clients detail page polish pass, (b) a reviewer asks "what merged into this client?" and Studio is the only answer, (c) audit needs surface for understanding why a given client matched a participant by an alt-name.
+- **History:** the `alternate_emails` half of this entry was resolved 2026-05-06 — Section 1 now exposes `metadata.alternate_emails` as an editable comma-separated text input (no dedup / no validation by design).
 - **Logged:** 2026-04-29 (M3.2 live verification).
 
 ## `calls.summary` column is unused — cron path writes to `documents` instead
