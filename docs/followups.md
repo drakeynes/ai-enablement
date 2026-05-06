@@ -11,6 +11,13 @@ Real bugs and ops reminders for Gregory. Ideas live in `docs/future-ideas.md` (G
 
 ---
 
+## Cron auth: all Vercel crons share one project-level CRON_SECRET
+
+- **What:** all Vercel cron endpoints in this project share a single `CRON_SECRET` env var (Vercel project-level convention; Vercel sends this as the `Authorization: Bearer <token>` regardless of which cron entry fires). The env var name is fixed by Vercel's cron infrastructure — not configurable via `vercel.json` or anywhere else. Confirmed empirically during the M6.1 401 saga: a per-cron-namespaced token convention was tried earlier (`FATHOM_BACKFILL_AUTH_TOKEN`, `GREGORY_BRAIN_CRON_AUTH_TOKEN`, `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN`) and required operators to keep `CRON_SECRET` in sync with the custom token, which silently failed at the M6.1 deploy. Refactored to single-source-of-truth in M6.2.
+- **Why it matters:** independent per-cron rotation is **NOT supported by Vercel**. Rotating `CRON_SECRET` rotates auth for every cron in the project simultaneously. If a use case ever surfaces requiring true independence (e.g., a third-party caller who shouldn't be able to trigger ALL crons by knowing one secret, or a per-cron rotation cadence the org needs to maintain for compliance reasons), the codebase would need a separate auth surface — likely a per-cron HMAC-signature scheme or a per-cron API gateway in front of the function. Not solvable via env var naming.
+- **Next action:** none today. Logged as a constraint to remember when designing future cron endpoints. If Drake adds a new cron, just point its `_verify_auth` at `CRON_SECRET` like the existing three. If a third-party trigger becomes a real requirement, design a separate auth path (this followup is the prompt to remember the constraint).
+- **Logged:** 2026-05-06 (M6.2 cron-auth consolidation refactor surfaced the architectural finding via the M6.1 401 diagnosis).
+
 ## NPS harness fixture (`Branden Bledsoe`) was archived 2026-05-05
 
 - **What:** `scripts/test_airtable_nps_webhook_locally.py` uses Branden Bledsoe (`brandenbledsoe@transcendcu.com`) as the test fixture for happy-path NPS update probes. Branden was soft-archived 2026-05-05 in the M5 misclassified-client cleanup (he was Isabel Bledsoe's representative, not a real client). The NPS receiver's `update_client_from_nps_segment` RPC filters on `archived_at IS NULL`, so any harness call against Branden now hits the 404 "no active client matches email" path rather than the happy update path. Discovered while writing the M5.9 onboarding harness — that harness initially mirrored the NPS pattern and surfaced the same break.

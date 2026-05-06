@@ -1005,4 +1005,18 @@ Spec deviations:
 
 **Cron schedule operationally:** at 12:00 UTC daily, the cron fires its first real production run on the next deploy. Live count at first fire will depend on yesterday's actual Airtable submissions; the audit row will surface eligibility/submitted/missing breakdown immediately. If everyone submitted (best case), no Slack posts go out and the audit row records `skipped_reason='no_missing_clients'`. If nobody submitted (worst case — Airtable side broken or a Saturday with zero submissions), every CSM gets a message listing all their active accountability-enabled clients.
 
-**Commit chain:** TBD — held for greenlight at session end. Plan: per-chunk commits (1: shared helper + Ella refactor; 2: per-call summary; 3: accountability cron; 4: docs).
+**Commit chain:** 4 commits on origin/main (`8c34f9e` shared helper + Ella refactor → `bbfdc4f` per-call summary → `158db17` accountability cron → `8975e90` docs). Pushed 2026-05-05.
+
+#### M6.1 cron auth saga + M6.2 refactor (shipped 2026-05-06)
+
+The M6.1 accountability cron's first deploy hit a 401 saga that surfaced a real architectural finding worth recording.
+
+**The saga.** Drake set `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN` in Vercel Production and redeployed; "Run now" returned 401 with no `Authorization` header visible in Vercel function logs. Diagnosis-only investigation walked the auth path end-to-end and surfaced: Vercel Cron infrastructure ALWAYS sends `Authorization: Bearer <CRON_SECRET>` where `CRON_SECRET` is a project-level env var with a fixed name — not configurable via `vercel.json` or anywhere else. Drake had set the M6.1 custom-named token but `CRON_SECRET` in Vercel was still set to the fathom_backfill value from M1.2.5 (which DOESN'T match the M6.1 token). When Vercel Cron fired, it sent the (stale) fathom value as the Bearer; the M6.1 handler validated against `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN` (a different value); → 401.
+
+The deeper finding: the codebase's "per-source-namespacing for independent rotation" rationale (`FATHOM_BACKFILL_AUTH_TOKEN`, `GREGORY_BRAIN_CRON_AUTH_TOKEN`, `ACCOUNTABILITY_NOTIFICATION_CRON_AUTH_TOKEN`) was **never deliverable** — Vercel only supports ONE `CRON_SECRET` per project, so per-source naming required operators to set BOTH env vars in sync per cron, which silently failed when a new cron deployed and the operator only set the new custom-named token. The fathom_backfill and gregory_brain_cron crons had been working because `CRON_SECRET` happened to match the per-source token at their respective deploy times.
+
+**M6.2 refactor.** Single commit (`a7722e6`): all three cron endpoints now read `CRON_SECRET` directly. Auth-validation function bodies, docstrings, manual-trigger curl examples, runbooks, env.example, CLAUDE.md, test harnesses, build-log + followup references — all updated to the single-var pattern. 11 files changed, 105 insertions, 82 deletions. Final-pass grep returns ZERO references to the three deprecated env var names anywhere in the repo. pytest 381/381; fathom backfill harness auth-subset 3/3; accountability cron harness 31/31; Ella post-tests 14/14 — all unchanged from pre-refactor.
+
+The three custom-named env vars in Vercel become dead weight after this deploy; Drake's manual cleanup is to delete them from Vercel Settings → Environment Variables once the redeploy verifies all three crons auth successfully.
+
+**Architectural finding logged to `docs/followups.md`** so future sessions know why all crons share a single secret: independent per-cron rotation isn't supported by Vercel. If a future use case ever requires true independence (e.g., a third-party caller who shouldn't be able to trigger ALL crons by knowing one secret), it requires a separate auth surface — not solvable via env var naming.
