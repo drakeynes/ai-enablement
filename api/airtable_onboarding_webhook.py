@@ -22,9 +22,13 @@ Sync flow (mirrors api/airtable_nps_webhook.py):
   3. Read body bytes, parse JSON.
      Malformed JSON → 400 + webhook_deliveries row marked 'malformed'.
 
-  4. Validate the 7 required payload fields. All must be non-null,
-     string-typed, non-empty after strip. date_joined parsed to a date.
-     Missing/wrong → 400 + 'malformed'.
+  4. Validate payload fields. 4 required (full_name, email, country,
+     date_joined) + 3 optional (phone, slack_user_id, slack_channel_id).
+     Required: non-null, string-typed, non-empty after strip → missing
+     or empty fails 400 missing_field. Optional: absent or null passes
+     through as None; if PRESENT, must be string-typed AND non-empty
+     after strip (rejecting "" as wrong_type so Make.com mapping bugs
+     don't silently coerce). date_joined parsed to a date.
 
   5. Generate webhook_id = "airtable_onboarding_<uuid4>". Insert
      webhook_deliveries row (status='received').
@@ -48,14 +52,20 @@ Env vars required (set in Vercel Production scope, NOT committed):
 Payload shape (from Make.com):
 
   {
-    "full_name":        "Jane Doe",
-    "email":            "jane@example.com",
-    "phone":            "+1 555-123-4567",
-    "country":          "USA",
-    "date_joined":      "2026-05-05" or "2026-05-05T14:30:00Z",
-    "slack_user_id":    "U01ABC123",
-    "slack_channel_id": "C01ABC456"
+    "full_name":        "Jane Doe",         # required
+    "email":            "jane@example.com", # required
+    "country":          "USA",              # required
+    "date_joined":      "2026-05-05" or "2026-05-05T14:30:00Z",  # required
+    "phone":            "+1 555-123-4567",  # optional (omit or null)
+    "slack_user_id":    "U01ABC123",        # optional (omit or null)
+    "slack_channel_id": "C01ABC456"         # optional (omit or null)
   }
+
+  Optional fields support a re-fire flow: Zain runs onboarding for a
+  new client without slack IDs in hand → client lands in Gregory →
+  later re-runs the same form with slack IDs filled in → client
+  updates in place (NULL-only backfill on slack_user_id, fresh
+  slack_channels INSERT via the RPC's Branch C).
 
 Response shape (200 OK):
 
@@ -107,14 +117,22 @@ _HEADERS_TO_STORE = frozenset({
     "user-agent",
 })
 
-# All 7 required fields. Validated as non-null + string-typed + non-empty
-# after strip. date_joined gets a separate parse step.
+# Required string fields. Validated as non-null + string-typed +
+# non-empty after strip. date_joined gets a separate parse step.
 _REQUIRED_STRING_FIELDS: tuple[str, ...] = (
     "full_name",
     "email",
-    "phone",
     "country",
     "date_joined",
+)
+
+# Optional string fields. Absent or null passes through as None. If
+# PRESENT, must be string-typed AND non-empty after strip — i.e., the
+# caller must not send `""` to mean "blank" (use null instead). This
+# keeps the contract strict at the boundary while allowing the re-fire
+# flow described in the module docstring.
+_OPTIONAL_STRING_FIELDS: tuple[str, ...] = (
+    "phone",
     "slack_user_id",
     "slack_channel_id",
 )
@@ -263,7 +281,10 @@ class handler(BaseHTTPRequestHandler):
             error=None,
         )
 
-        # 6. Call the RPC.
+        # 6. Call the RPC. Optional fields pass through as null when
+        #    absent or null in the payload. The RPC's null guards on the
+        #    slack_* anti-overwrite checks + the wrapped six-branch
+        #    block handle the rest.
         db = get_client()
         try:
             rpc_resp = db.rpc(
@@ -271,11 +292,13 @@ class handler(BaseHTTPRequestHandler):
                 {
                     "p_full_name": payload["full_name"].strip(),
                     "p_email": payload["email"].strip(),
-                    "p_phone": payload["phone"].strip(),
+                    "p_phone": _optional_field(payload, "phone"),
                     "p_country": payload["country"].strip(),
                     "p_start_date": start_date.isoformat(),
-                    "p_slack_user_id": payload["slack_user_id"].strip(),
-                    "p_slack_channel_id": payload["slack_channel_id"].strip(),
+                    "p_slack_user_id": _optional_field(payload, "slack_user_id"),
+                    "p_slack_channel_id": _optional_field(
+                        payload, "slack_channel_id"
+                    ),
                     "p_delivery_id": delivery_id,
                 },
             ).execute()
@@ -400,10 +423,19 @@ class handler(BaseHTTPRequestHandler):
 def _validate_payload(
     payload: dict[str, Any],
 ) -> tuple[str, str] | None:
-    """Validate the 7 required fields. Returns (error_code, detail) on
-    failure or None on success. Each field must be non-null, string-typed,
-    non-empty after strip. date_joined parsing happens in a separate step
-    so the error code can distinguish missing-field from unparseable-date."""
+    """Validate the payload. Returns (error_code, detail) on failure or
+    None on success.
+
+    Required fields: non-null, string-typed, non-empty after strip.
+    Optional fields: absent or null is fine; if present, must be
+    string-typed AND non-empty after strip. We reject `""` for optional
+    fields rather than coercing to null because Make.com mapping bugs
+    that produce `""` are an operator error worth surfacing, not
+    silently fixing.
+
+    date_joined parsing happens in a separate step so the error code
+    can distinguish missing-field from unparseable-date.
+    """
     for field in _REQUIRED_STRING_FIELDS:
         value = payload.get(field)
         if value is None:
@@ -415,7 +447,34 @@ def _validate_payload(
             )
         if not value.strip():
             return ("missing_field", f"{field} cannot be empty")
+
+    for field in _OPTIONAL_STRING_FIELDS:
+        if field not in payload:
+            continue
+        value = payload[field]
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            return (
+                "wrong_type",
+                f"{field} must be a string or null, got {type(value).__name__}",
+            )
+        if not value.strip():
+            return (
+                "wrong_type",
+                f"{field} must be non-empty when present (use null to omit)",
+            )
     return None
+
+
+def _optional_field(payload: dict[str, Any], field: str) -> str | None:
+    """Return the stripped value for an optional payload field, or None
+    when the field is absent / null. Validation already ensured a
+    present-non-null value is a non-empty string."""
+    value = payload.get(field)
+    if value is None:
+        return None
+    return value.strip()
 
 
 def _parse_date_joined(raw: str) -> date:
