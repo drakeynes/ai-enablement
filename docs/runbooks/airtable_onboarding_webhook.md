@@ -49,17 +49,62 @@ Same shape as Path 2 outbound's secret rotation. The secret is shared between Ve
 {
   "full_name":        "Jane Doe",
   "email":            "jane@example.com",
-  "phone":            "+1 555-123-4567",
   "country":          "USA",
   "date_joined":      "2026-05-05",
+  "phone":            "+1 555-123-4567",
   "slack_user_id":    "U01ABC123",
   "slack_channel_id": "C01ABC456"
 }
 ```
 
-All 7 fields required: non-null, string-typed, non-empty after strip. `date_joined` accepts ISO date (`"2026-05-05"`) or full ISO datetime (`"2026-05-05T14:30:00Z"`); both parse to a `date` for storage in `clients.start_date`.
+**Required (4):** `full_name`, `email`, `country`, `date_joined`. Non-null, string-typed, non-empty after strip. `date_joined` accepts ISO date (`"2026-05-05"`) or full ISO datetime (`"2026-05-05T14:30:00Z"`); both parse to a `date` for storage in `clients.start_date`.
+
+**Optional (3):** `phone`, `slack_user_id`, `slack_channel_id`. Each may be omitted from the payload OR sent as `null`. If PRESENT in the payload, the value must be a non-empty string after strip — sending `""` is a 400 `wrong_type` (we surface the operator error rather than silently coerce). The receiver passes `null` to the RPC for any optional field that's absent / null in the payload.
 
 Country isn't validated against a vocab — Zain owns the contract. Today's expected values are `'USA'` / `'AUS'`, but anything else passes through as-is. (See followup in `docs/followups.md` about `/clients` filter drift if Zain ever sends `'United States'`.)
+
+---
+
+## Re-fire to add slack IDs
+
+The optional-fields contract supports a two-pass onboarding flow. Zain often fires the form for a new client BEFORE the Slack channel is provisioned — the client lands in Gregory immediately, then Zain re-fires the same form later when the IDs are in hand. The system handles this without duplicate clients or reconciliation work.
+
+**First pass — no slack IDs:**
+
+```json
+{
+  "full_name": "Jane Doe",
+  "email": "jane@example.com",
+  "country": "USA",
+  "date_joined": "2026-05-05"
+}
+```
+
+Result: `action='created'`. Client lands with `slack_user_id IS NULL` and no `slack_channels` row. `tags=['needs_review']`, `status='active'`, `csm_standing='content'` per the standard create branch.
+
+**Second pass — same email, slack IDs populated:**
+
+```json
+{
+  "full_name": "Jane Doe",
+  "email": "jane@example.com",
+  "country": "USA",
+  "date_joined": "2026-05-05",
+  "slack_user_id": "U01ABC123",
+  "slack_channel_id": "C01ABC456"
+}
+```
+
+Result: `action='updated'`. Email match hits the active branch:
+
+- `clients.slack_user_id` backfills via `coalesce` (was `NULL`, becomes `U01ABC123`).
+- `slack_channels` resolution runs Branch C (no global match for the channel id) → fresh INSERT linked to this client with `name=full_name`, `is_archived=false`, `metadata.created_via='onboarding_webhook'`.
+- `phone` backfills the same way if it was `NULL` first time around.
+- Status / csm_standing stay where they are (idempotent transitions).
+
+**Partial re-fires** (e.g. slack_user_id but no slack_channel_id) work the same way: only the populated fields are backfilled. No `slack_channels` row is created when channel id is omitted.
+
+**Re-firing with slack IDs that conflict with existing values** still returns 409 — the optional fields don't relax the anti-overwrite semantics. If the existing client already has `slack_user_id='U01XYZ'` and the re-fire sends `'U01ABC'`, that's a `slack_user_id_conflict` 409. Same for `slack_channel_id_*` paths. See "Debug a Slack ID conflict" below.
 
 ---
 
@@ -196,7 +241,7 @@ Always safe to run — uses self-seeded per-run fixtures, no reliance on product
 .venv/bin/python scripts/test_airtable_onboarding_webhook_locally.py
 ```
 
-Expected: `74/74 checks passed`. The harness creates and hard-deletes its synthetic fixture in cleanup; soft-archives any happy-path created clients.
+Expected: all checks pass (count grows over time as new tests land — current target is the count printed at the end of the run). The harness creates and hard-deletes its synthetic fixture in cleanup; soft-archives any happy-path created clients. The 5b/5c/5d optional-field tests depend on migration 0026 being applied; pre-0026 they fail with a `phone is required` RPC raise.
 
 ---
 
@@ -206,7 +251,8 @@ Expected: `74/74 checks passed`. The harness creates and hard-deletes its synthe
 |---|---|---|
 | `HTTP 401` from Make.com | Secret out of sync after rotation | Sync Make.com to the new secret |
 | `HTTP 500 misconfigured` | `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` not set in Vercel | Set env var, redeploy |
-| `HTTP 400 missing_field` | Make.com mapping dropped a field | Check Zain's Airtable → Make.com field mapping |
+| `HTTP 400 missing_field` | Make.com mapping dropped one of the 4 required fields (full_name / email / country / date_joined) | Check Zain's Airtable → Make.com field mapping. Phone / slack_user_id / slack_channel_id are optional and don't trigger this. |
+| `HTTP 400 wrong_type` (`<field> must be non-empty when present`) | Make.com mapped an optional field to `""` instead of omitting it | Update the Make.com mapping to omit the field when the source cell is blank, OR set null explicitly |
 | `HTTP 400 wrong_type` (`date_joined: ...`) | Date isn't ISO date or ISO datetime | Check the Airtable date format export setting |
 | `HTTP 409 slack_user_id_conflict` | Established client has a different slack_user_id | See "Debug a Slack ID conflict" above |
 | `HTTP 409 slack_channel_id_*` | Channel id already linked elsewhere or to a different client | See "Debug a Slack ID conflict" above |

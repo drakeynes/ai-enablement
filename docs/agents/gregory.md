@@ -277,8 +277,8 @@ Path 3 inbound. Zain's Make.com automation fires this once per new client when h
 
 **Architecture — three layers, one direction:**
 
-1. **Airtable onboarding form + Make.com automation** (external) — Zain's existing flow captures full_name / email / phone / country / date_joined / slack_user_id / slack_channel_id at form submission. Make.com fires a webhook into the Vercel receiver. Source of truth for the form payload.
-2. **Receiver** (`api/airtable_onboarding_webhook.py`) — small Vercel serverless function. Validates auth + 7-field payload, parses `date_joined` (ISO date or ISO timestamp), then calls the combined RPC. No business logic at this layer; thin adapter.
+1. **Airtable onboarding form + Make.com automation** (external) — Zain's existing flow captures full_name / email / country / date_joined plus optional phone / slack_user_id / slack_channel_id at form submission. Make.com fires a webhook into the Vercel receiver. Source of truth for the form payload.
+2. **Receiver** (`api/airtable_onboarding_webhook.py`) — small Vercel serverless function. Validates auth + payload (4 required + 3 optional fields), parses `date_joined` (ISO date or ISO timestamp), then calls the combined RPC. No business logic at this layer; thin adapter.
 3. **`create_or_update_client_from_onboarding` RPC** (migration 0025) — does match-or-create + `*_with_history` audit writes + `slack_channels` insert + `needs_review` tag-append in one transaction.
 
 **Three branches (mirroring Fathom's `_lookup_or_create_auto_client`):**
@@ -344,15 +344,19 @@ Endpoint: `POST https://ai-enablement-sigma.vercel.app/api/airtable_onboarding_w
 {
   "full_name":        "Jane Doe",
   "email":            "jane@example.com",
-  "phone":            "+1 555-123-4567",
   "country":          "USA",
   "date_joined":      "2026-05-05",
+  "phone":            "+1 555-123-4567",
   "slack_user_id":    "U01ABC123",
   "slack_channel_id": "C01ABC456"
 }
 ```
 
-All 7 fields required (non-null, string-typed, non-empty after strip). `date_joined` accepts ISO date (`"2026-05-05"`) or ISO datetime (`"2026-05-05T14:30:00Z"`). Country isn't CHECK-constrained at this layer — Zain owns the contract on his side; today's expected values are `'USA'` / `'AUS'` but other strings pass through as-is.
+**4 required + 3 optional** (since migration 0026, M6.x). Required: `full_name`, `email`, `country`, `date_joined` — non-null, string-typed, non-empty after strip. Optional: `phone`, `slack_user_id`, `slack_channel_id` — may be omitted from the payload OR sent as `null`; if PRESENT, must be a non-empty string after strip (sending `""` is rejected as `wrong_type`). The receiver passes `null` to the RPC for any optional field that's absent / null, which the RPC's null-guards on the slack_* anti-overwrite checks + the wrapped six-branch slack_channels resolution treat as a no-op for that field.
+
+The optional fields support a re-fire flow: Zain submits the form for a new client BEFORE the Slack channel is provisioned (no slack IDs in hand) → client lands in Gregory immediately → Zain re-submits the same form later with the IDs filled in → client updates in place via the email match (NULL-only backfill on `slack_user_id`, fresh `slack_channels` INSERT via Branch C). No duplicate clients; no manual reconciliation. See `docs/runbooks/airtable_onboarding_webhook.md` § "Re-fire to add slack IDs" for the full operator-facing description.
+
+`date_joined` accepts ISO date (`"2026-05-05"`) or ISO datetime (`"2026-05-05T14:30:00Z"`). Country isn't CHECK-constrained at this layer — Zain owns the contract on his side; today's expected values are `'USA'` / `'AUS'` but other strings pass through as-is.
 
 **Response shapes:**
 
