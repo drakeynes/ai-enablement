@@ -274,6 +274,33 @@ def ingest_call(
 
     action = "updated" if was_pre_existing else "inserted"
 
+    # CS visibility hook (M6.1 — Batch A). Posts a per-call summary to
+    # the cross-CSM Slack channel for client-category calls. Wrapped in
+    # try/except so a Slack-post failure NEVER fails the Fathom webhook
+    # delivery — the call row + summary doc + chunks are more important
+    # than the Slack message. Audit trail via webhook_deliveries with
+    # source='cs_call_summary_slack_post'.
+    try:
+        from agents.gregory.cs_call_summary_post import (
+            maybe_post_cs_call_summary,
+        )
+
+        maybe_post_cs_call_summary(
+            db,
+            call_id=call_id,
+            call_category=classification.call_category,
+            primary_client_id=classification.primary_client_id,
+            summary_text=record.summary_text,
+            fathom_external_id=record.external_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "cs_call_summary_post hook raised for call %s: %s — "
+            "ingest continues",
+            call_id,
+            exc,
+        )
+
     return IngestOutcome(
         external_id=record.external_id,
         call_id=call_id,
