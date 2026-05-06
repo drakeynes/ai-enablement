@@ -80,7 +80,7 @@ def test_user_token_success_does_not_fall_back(monkeypatch):
         seen_tokens.append(_capture_token_from_request(req))
         return _slack_ok_response({"ok": True, "ts": "1234.5678"})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts="111.222")
 
     assert seen_tokens == ["xoxp-USER-TEST"], (
@@ -113,7 +113,7 @@ def test_user_token_http_4xx_falls_back_to_bot(monkeypatch):
         # Second call (bot fallback) → success
         return _slack_ok_response({"ok": True, "ts": "1234.5678"})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"], (
@@ -138,7 +138,7 @@ def test_user_token_http_5xx_falls_back_to_bot(monkeypatch):
             )
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"]
@@ -167,7 +167,7 @@ def test_user_token_ok_false_falls_back_to_bot(monkeypatch):
             return _slack_ok_response({"ok": False, "error": "missing_scope"})
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"]
@@ -190,7 +190,7 @@ def test_user_token_not_in_channel_falls_back_to_bot(monkeypatch):
             return _slack_ok_response({"ok": False, "error": "not_in_channel"})
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"]
@@ -215,7 +215,7 @@ def test_user_token_network_timeout_falls_back_to_bot(monkeypatch):
             raise urllib.error.URLError("timeout")
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"]
@@ -242,7 +242,7 @@ def test_user_token_json_decode_error_falls_back_to_bot(monkeypatch):
             return cm
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxp-USER-TEST", "xoxb-BOT-TEST"]
@@ -266,7 +266,7 @@ def test_no_user_token_uses_bot_directly(monkeypatch):
         seen_tokens.append(_capture_token_from_request(req))
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxb-BOT-TEST"], (
@@ -288,7 +288,7 @@ def test_empty_user_token_treated_as_unset(monkeypatch):
         seen_tokens.append(_capture_token_from_request(req))
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
     assert seen_tokens == ["xoxb-BOT-TEST"]
@@ -311,7 +311,7 @@ def test_both_paths_fail_raises_for_caller_to_log(monkeypatch):
         # Both calls fail with transport error
         raise urllib.error.URLError("network down")
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         with pytest.raises(urllib.error.URLError):
             se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
@@ -332,7 +332,7 @@ def test_both_paths_ok_false_logs_but_does_not_raise(monkeypatch, caplog):
             return _slack_ok_response({"ok": False, "error": "missing_scope"})
         return _slack_ok_response({"ok": False, "error": "channel_not_found"})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         # No exception expected
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
@@ -355,7 +355,7 @@ def test_bot_token_unset_when_user_token_succeeds_does_not_break(monkeypatch):
     def fake_urlopen(req, timeout=None):
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         # Should not raise even though SLACK_BOT_TOKEN is unset.
         se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 
@@ -387,7 +387,7 @@ def test_token_never_appears_in_log_output(monkeypatch, caplog):
             return _slack_ok_response({"ok": False, "error": "missing_scope"})
         return _slack_ok_response({"ok": True})
 
-    with patch("api.slack_events.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("shared.slack_post.urllib.request.urlopen", side_effect=fake_urlopen):
         with caplog.at_level(logging.DEBUG):
             se._post_to_slack(channel="C1", text="hi", thread_ts=None)
 

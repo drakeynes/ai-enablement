@@ -51,11 +51,11 @@ import json
 import logging
 import os
 import time
-import urllib.request
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
 from agents.ella.slack_handler import handle_slack_event
+from shared.slack_post import call_chat_post_message
 
 # Vercel's Python runtime pre-configures the root logger at WARNING
 # level, so a naive `logging.basicConfig(level=INFO)` is a no-op and
@@ -334,30 +334,11 @@ def _post_to_slack(*, channel: str, text: str, thread_ts: str | None) -> None:
         raise
 
 
-def _call_chat_post_message(token: str, body: dict[str, Any]) -> tuple[bool, str | None]:
-    """Make one POST to chat.postMessage with the given token.
-
-    Returns `(ok, slack_error)`:
-      - `ok=True, slack_error=None` on Slack-side success.
-      - `ok=False, slack_error=<code>` on HTTP 200 with `ok=false`
-        (e.g., `missing_scope`, `not_in_channel`, `channel_not_found`).
-      - Raises on transport-level failure (HTTP non-2xx, network
-        timeout, JSON decode error). The caller decides whether to
-        fall through to a different token.
-
-    The token is held only in the Authorization header sent to Slack;
-    never logged, never appears in any returned value.
-    """
-    req = urllib.request.Request(
-        "https://slack.com/api/chat.postMessage",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json; charset=utf-8",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=_SLACK_POST_TIMEOUT_SECONDS) as resp:
-        response_body = resp.read().decode("utf-8")
-    parsed = json.loads(response_body)
-    return bool(parsed.get("ok")), parsed.get("error")
+# `_call_chat_post_message` was extracted to shared/slack_post.py
+# (M6.1). The two-token Ella post path above imports it from there;
+# the new internal-CS post helpers (per-call summary, accountability
+# cron) use shared.slack_post.post_message directly. Keeping this
+# alias so the in-file references and existing test patches remain
+# stable; tests still patch urllib.request.urlopen but now in
+# shared.slack_post.
+_call_chat_post_message = call_chat_post_message
