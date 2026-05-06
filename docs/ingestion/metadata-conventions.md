@@ -147,10 +147,7 @@ The V1 backlog pipeline (`ingestion/fathom/pipeline.py`) intentionally leaves tw
 - **`call_action_items`.** The TXT exports don't carry action items.
 - **`documents` rows with `document_type='call_summary'`.** The TXT exports don't carry summaries either. Chunks still cover retrievability; the summary doc adds a higher-signal overview but isn't on the critical path for V1.
 
-Both omissions are resolved by the same future paths, in preference order:
-
-1. **Fathom webhook integration** — the real-time ingest will receive both the summary JSON and action items in the webhook payload. Single source, minimal fuss. Documented in `docs/future-ideas.md` ("Fathom webhook integration (real-time call ingestion)"). That entry notes it does double-duty for both summaries and action items.
-2. **LLM extraction over stored transcripts** — fallback if the webhook path stalls. Two separate entries in `docs/future-ideas.md` ("LLM-based summary generation" and "LLM-based action item extraction") cross-reference each other and the webhook entry.
+Both omissions are resolved for new calls (post 2026-04-24) via the Fathom realtime webhook + cron backfill paths shipped in F2.3 / M1.2.5 / M4.1. The webhook payload carries the `default_summary` field which the pipeline writes as a `documents` row with `document_type='call_summary'` plus an embedded chunk; the same payload carries `action_items[]` which the pipeline upserts into `call_action_items` via `_upsert_action_items`. Backlog (TXT-sourced) calls remain without summaries / action items — those would need either a Fathom-API `GET /recordings/{id}/summary` per-call backfill OR an LLM-extraction fallback if retrieval ever demands it.
 
 ## 6. Re-Classification Policy
 

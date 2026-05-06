@@ -11,11 +11,10 @@ unknowns from F2.1 (retry schedule, `webhook-id` stability across retries) are
 still open; the design is robust to worst-case assumptions on both.
 
 **Related docs.**
-- `docs/followups.md` § "Fathom webhook design intel" — F2.1 research output
-- `docs/followups.md` § "Fathom webhook — delivery semantics live-test list" — the four unknowns still to resolve empirically
+- `docs/followups.md` § "Fathom webhook — delivery semantics live-test (3 of 4 still open, plan-tier resolved)" — the unknowns still to resolve empirically
 - `docs/runbooks/fathom_backlog_ingest.md` — batch path that this complements
 - `docs/runbooks/slack_webhook.md` — sync-on-Vercel precedent (same pattern here)
-- `docs/agents/ella.md` — downstream consumer of the data this lands
+- `docs/agents/ella/ella.md` — downstream consumer of the data this lands
 
 ## Doc-vs-reality deltas surfaced at deploy (M1.2.5, 2026-04-27)
 

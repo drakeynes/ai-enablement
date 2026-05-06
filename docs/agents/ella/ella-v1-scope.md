@@ -1,6 +1,6 @@
 # Ella V1 — Scope for Team Review
 
-*Short version of `docs/agents/ella.md` — what Ella actually does in week one. Read this before Thursday's test session.*
+*Short version of `docs/agents/ella/ella.md` — what Ella actually does in week one. Read this before Thursday's test session.*
 
 ## Purpose
 
@@ -68,4 +68,4 @@ Team agrees she won't embarrass the company in front of pilot clients. That's it
 
 ---
 
-Questions, flags, edits: Drake. Full technical spec: `docs/agents/ella.md`.
+Questions, flags, edits: Drake. Full technical spec: `docs/agents/ella/ella.md`.
