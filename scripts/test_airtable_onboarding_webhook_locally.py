@@ -3,8 +3,9 @@
 Stands up the real `handler` class in a background thread via
 http.server.HTTPServer (same class Vercel instantiates in prod). Runs
 14 paths covering the three branches (create / update / reactivate),
-idempotency, all 7 required-field validations, type errors, JSON parse,
-auth, and the 3 conflict cases. Mirrors
+idempotency, the 4 required-field validations, optional-field omission
++ re-fire flow (5b/5c/5d — depend on migration 0026), type errors,
+JSON parse, auth, and the 3 conflict cases. Mirrors
 scripts/test_airtable_nps_webhook_locally.py.
 
 Test fixtures:
@@ -660,9 +661,9 @@ def test_4_happy_reactivate(url: str) -> None:
 
 
 def test_5_missing_fields(url: str) -> None:
-    print("\n[5] Missing each of the 7 required fields → 400 missing_field with the right detail")
+    print("\n[5] Missing each of the 4 REQUIRED fields → 400 missing_field with the right detail")
     base = _full_payload(email=f"onboarding-test-missing-{RUN_TOKEN}@nowhere.invalid")
-    fields = ["full_name", "email", "phone", "country", "date_joined", "slack_user_id", "slack_channel_id"]
+    fields = ["full_name", "email", "country", "date_joined"]
     for field in fields:
         payload = {k: v for k, v in base.items() if k != field}
         status, body = _post_with_secret(url, payload)
@@ -681,6 +682,169 @@ def test_5_missing_fields(url: str) -> None:
             body and field in body.get("detail", ""),
             f"detail={body.get('detail') if body else None}",
         )
+
+
+def test_5b_optional_fields_omitted(url: str) -> None:
+    print("\n[5b] Omit phone + slack_user_id + slack_channel_id → 200 created, all three null in DB, no slack_channels row")
+    email = f"onboarding-test-noslack-{RUN_TOKEN}@nowhere.invalid"
+
+    # Build a 4-field payload — only the required ones.
+    payload = {
+        "full_name": "No Slack On First Pass",
+        "email": email,
+        "country": "USA",
+        "date_joined": "2026-05-05",
+    }
+    status, body = _post_with_secret(url, payload)
+    _check("5b.status", status == 200, f"got HTTP {status}, body={body}")
+    if not body or status != 200:
+        return
+    _check("5b.action", body.get("action") == "created", f"got {body.get('action')!r}")
+    if not body.get("client_id"):
+        _check("5b.has_client_id", False, f"client_id missing in body={body}")
+        return
+    _CREATED_CLIENT_IDS.append(body["client_id"])
+
+    state = _client_state(email)
+    _check("5b.db.found", state["id"] is not None, f"client found: {state['id']}")
+    _check("5b.db.phone_null", state.get("phone") is None, f"phone={state.get('phone')!r}")
+    _check(
+        "5b.db.slack_user_id_null",
+        state.get("slack_user_id") is None,
+        f"slack_user_id={state.get('slack_user_id')!r}",
+    )
+    _check("5b.db.status_active", state.get("status") == "active", f"status={state.get('status')!r}")
+    _check(
+        "5b.db.csm_standing_content",
+        state.get("csm_standing") == "content",
+        f"csm_standing={state.get('csm_standing')!r}",
+    )
+    _check(
+        "5b.db.needs_review",
+        "needs_review" in state.get("tags", []),
+        f"tags={state.get('tags')}",
+    )
+
+    channels = _slack_channels_for(state["id"])
+    _check(
+        "5b.db.no_slack_channels_row",
+        len(channels) == 0,
+        f"expected zero channels for this client, got {channels}",
+    )
+
+
+def test_5c_refire_with_slack_ids(url: str) -> None:
+    print("\n[5c] Re-fire test 5b's email with slack_user_id + slack_channel_id populated → 200 updated, IDs backfilled, slack_channels row created")
+    email = f"onboarding-test-noslack-{RUN_TOKEN}@nowhere.invalid"
+
+    pre = _client_state(email)
+    if pre["id"] is None:
+        _check("5c.precondition", False, "test 5b client not found — did 5b run first?")
+        return
+
+    slack_user = f"UREFIRE{RUN_TOKEN.upper()[:8]}"
+    slack_chan = f"CREFIRE{RUN_TOKEN.upper()[:8]}"
+    _SEEDED_SLACK_CHANNEL_IDS.append(slack_chan)
+
+    # Re-fire with the SAME required fields plus the previously-omitted
+    # slack identifiers populated.
+    payload = {
+        "full_name": "No Slack On First Pass",
+        "email": email,
+        "country": "USA",
+        "date_joined": "2026-05-05",
+        "phone": "+1 555-LATER",
+        "slack_user_id": slack_user,
+        "slack_channel_id": slack_chan,
+    }
+    status, body = _post_with_secret(url, payload)
+    _check("5c.status", status == 200, f"got HTTP {status}, body={body}")
+    if not body or status != 200:
+        return
+    _check("5c.action", body.get("action") == "updated", f"got {body.get('action')!r}")
+    _check(
+        "5c.client_id",
+        body.get("client_id") == pre["id"],
+        f"expected same client_id {pre['id']}, got {body.get('client_id')!r}",
+    )
+
+    post = _client_state(email)
+    _check(
+        "5c.db.slack_user_id_backfilled",
+        post.get("slack_user_id") == slack_user,
+        f"expected {slack_user!r}, got {post.get('slack_user_id')!r}",
+    )
+    # NULL-only backfill: phone was null on pre-state, so the re-fire's
+    # phone DOES land. (If 5b had set phone, this would assert no-overwrite
+    # — but 5b explicitly omits phone.)
+    _check(
+        "5c.db.phone_backfilled",
+        post.get("phone") == "+1 555-LATER",
+        f"expected '+1 555-LATER', got {post.get('phone')!r}",
+    )
+
+    channels = _slack_channels_for(post["id"])
+    matching = [c for c in channels if c["slack_channel_id"] == slack_chan]
+    _check(
+        "5c.db.slack_channels_inserted",
+        len(matching) == 1
+        and matching[0]["client_id"] == post["id"]
+        and matching[0]["is_archived"] is False,
+        f"expected one active row for client_id={post['id']!r}, got {channels}",
+    )
+
+
+def test_5d_refire_partial(url: str) -> None:
+    print("\n[5d] Seed a fresh slackless client, re-fire with slack_user_id only → 200 updated, slack_user_id set, no slack_channels row")
+    email = f"onboarding-test-partial-{RUN_TOKEN}@nowhere.invalid"
+
+    # Seed via the webhook itself (simpler than direct DB seed; same
+    # path as 5b but with a different email).
+    seed_payload = {
+        "full_name": "Partial Refire Subject",
+        "email": email,
+        "country": "USA",
+        "date_joined": "2026-05-05",
+    }
+    s0, b0 = _post_with_secret(url, seed_payload)
+    if s0 != 200 or not b0 or not b0.get("client_id"):
+        _check("5d.seed", False, f"seed call failed: {s0} {b0}")
+        return
+    _CREATED_CLIENT_IDS.append(b0["client_id"])
+    _check(
+        "5d.seed.action_created",
+        b0.get("action") == "created",
+        f"seed action={b0.get('action')!r}",
+    )
+
+    # Re-fire with slack_user_id only — slack_channel_id intentionally absent.
+    slack_user = f"UPART{RUN_TOKEN.upper()[:8]}"
+    payload = {
+        "full_name": "Partial Refire Subject",
+        "email": email,
+        "country": "USA",
+        "date_joined": "2026-05-05",
+        "slack_user_id": slack_user,
+    }
+    status, body = _post_with_secret(url, payload)
+    _check("5d.status", status == 200, f"got HTTP {status}, body={body}")
+    if not body or status != 200:
+        return
+    _check("5d.action", body.get("action") == "updated", f"got {body.get('action')!r}")
+
+    post = _client_state(email)
+    _check(
+        "5d.db.slack_user_id_backfilled",
+        post.get("slack_user_id") == slack_user,
+        f"expected {slack_user!r}, got {post.get('slack_user_id')!r}",
+    )
+
+    channels = _slack_channels_for(post["id"])
+    _check(
+        "5d.db.no_slack_channels_row",
+        len(channels) == 0,
+        f"expected zero channels for this client, got {channels}",
+    )
 
 
 def test_6_wrong_type(url: str) -> None:
@@ -825,6 +989,9 @@ def main() -> int:
         test_3_idempotent_update(url)
         test_4_happy_reactivate(url)
         test_5_missing_fields(url)
+        test_5b_optional_fields_omitted(url)
+        test_5c_refire_with_slack_ids(url)
+        test_5d_refire_partial(url)
         test_6_wrong_type(url)
         test_7_unparseable_date(url)
         test_8_invalid_json(url)
