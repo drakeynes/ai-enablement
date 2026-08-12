@@ -261,6 +261,23 @@ class MetaAdsClient:
             "destination_type,optimization_goal,promoted_object",
         )
 
+    def account_ads_with_creatives(self) -> list[dict[str, Any]]:
+        """Every ad on the account with its creative DESTINATION fields.
+
+        The landing-page discriminator: instant-form campaigns are identified by
+        the adset scan, but landing-page campaigns look like any other
+        OFFSITE_CONVERSIONS campaign — the only reliable signal that one belongs
+        to Digital College is where its creatives send people (host
+        digitalcollege.ai vs the Closer Funnel's theaipartner.io). Meta hides the
+        URL in several places depending on creative type, so we ask for all of
+        them and let the parser dig (see leads_parser.creative_destination_urls).
+        """
+        return self.get_edge(
+            f"{self._account}/ads",
+            "id,name,campaign_id,campaign{id,name},effective_status,"
+            "creative{id,link_url,object_story_spec,asset_feed_spec}",
+        )
+
     # -- internal ------------------------------------------------------
 
     def _get(self, url: str, *, token: str | None = None) -> dict[str, Any]:

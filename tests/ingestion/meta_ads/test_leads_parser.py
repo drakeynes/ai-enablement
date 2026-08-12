@@ -1,7 +1,9 @@
 """leads_parser: real API shapes (captured live 2026-07-10) → mirror rows."""
 
 from ingestion.meta_ads.leads_parser import (
+    creative_destination_urls,
     parse_form,
+    parse_landing_page_ad,
     parse_lead,
     parse_leadgen_adset,
 )
@@ -153,3 +155,109 @@ def test_leadgen_adset_discriminator_requires_both_signals():
     assert parse_leadgen_adset(half, ACCOUNT_ID) is None
     other_half = dict(LEADGEN_ADSET_ROW, optimization_goal="OFFSITE_CONVERSIONS")
     assert parse_leadgen_adset(other_half, ACCOUNT_ID) is None
+
+
+# -- landing-page discriminator (0130) --------------------------------------
+# Both rows captured verbatim from GET /{campaign_id}/ads on 2026-08-12. Note
+# the DC ad carries its destination ONLY under
+# object_story_spec.video_data.call_to_action.value.link — there is no
+# link_data.link — which is why the parser digs through every known location.
+
+DC_LANDING_AD_ROW = {
+    "id": "120250218014210748",
+    "name": "07/25 | Creative 7",
+    "campaign_id": "120250217875250748",
+    "campaign": {"id": "120250217875250748", "name": "07/25 | Aman TY Vsl | DC funnel"},
+    "effective_status": "PAUSED",
+    "creative": {
+        "id": "1943577862881268",
+        "object_story_spec": {
+            "page_id": PAGE_ID,
+            "video_data": {
+                "video_id": "4347257485588781",
+                "call_to_action": {
+                    "type": "SEE_DETAILS",
+                    "value": {"link": "https://join.digitalcollege.ai/training"},
+                },
+            },
+        },
+    },
+}
+
+# The ANDROMEDA / Closer Funnel motion — same ad account, same Facebook page,
+# different product. Must never be claimed by the DC page.
+CLOSER_FUNNEL_AD_ROW = {
+    "id": "120248128714100748",
+    "name": "6/13/26 - Broad - Ad Tracking Image (4)",
+    "campaign_id": "120248128714030748",
+    "campaign": {"id": "120248128714030748", "name": "6/13/26 | ANDROMEDA | ... | Closer Funnel - Copy"},
+    "effective_status": "PAUSED",
+    "creative": {
+        "id": "1006972555216258",
+        "object_story_spec": {
+            "page_id": PAGE_ID,
+            "link_data": {
+                "link": "https://go.theaipartner.io/lp-vsl",
+                "call_to_action": {
+                    "type": "LEARN_MORE",
+                    "value": {"link": "https://go.theaipartner.io/lp-vsl"},
+                },
+            },
+        },
+    },
+}
+
+
+def test_landing_page_ad_claims_digital_college():
+    row = parse_landing_page_ad(DC_LANDING_AD_ROW)
+    assert row is not None
+    assert row["campaign_id"] == "120250217875250748"
+    assert row["source_kind"] == "landing_page"
+    assert row["destination_url"] == "https://join.digitalcollege.ai/training"
+    assert row["last_seen_at"]
+
+
+def test_landing_page_ad_rejects_closer_funnel():
+    """The regression that matters: theaipartner.io must not land on the DC page."""
+    assert parse_landing_page_ad(CLOSER_FUNNEL_AD_ROW) is None
+
+
+def test_landing_page_ad_matches_host_not_path():
+    """/training exists on BOTH domains — a path-based rule would be wrong."""
+    imposter = {
+        "campaign_id": "999",
+        "creative": {"object_story_spec": {"link_data": {"link": "https://join.theaipartner.io/training"}}},
+    }
+    assert parse_landing_page_ad(imposter) is None
+
+
+def test_landing_page_ad_matches_subdomains_only_of_configured_host():
+    for url, expected in (
+        ("https://go.digitalcollege.ai/", True),
+        ("https://digitalcollege.ai/x", True),
+        ("https://digitalcollege.ai.evil.com/x", False),
+        ("https://notdigitalcollege.ai/x", False),
+    ):
+        row = {
+            "campaign_id": "1",
+            "creative": {"object_story_spec": {"link_data": {"link": url}}},
+        }
+        assert (parse_landing_page_ad(row) is not None) is expected, url
+
+
+def test_landing_page_ad_without_destination_is_ignored():
+    assert parse_landing_page_ad({"campaign_id": "1", "creative": {}}) is None
+    assert parse_landing_page_ad({"creative": DC_LANDING_AD_ROW["creative"]}) is None
+
+
+def test_creative_destination_urls_finds_every_location():
+    creative = {
+        "link_url": "https://digitalcollege.ai/a",
+        "object_story_spec": {"link_data": {"link": "https://digitalcollege.ai/b"}},
+        "asset_feed_spec": {"link_urls": [{"website_url": "https://digitalcollege.ai/c"}]},
+    }
+    assert creative_destination_urls(creative) == {
+        "https://digitalcollege.ai/a",
+        "https://digitalcollege.ai/b",
+        "https://digitalcollege.ai/c",
+    }

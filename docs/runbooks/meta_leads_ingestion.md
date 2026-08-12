@@ -1,9 +1,18 @@
 # Runbook: Meta Lead-Form (Instant Form) Ingestion
 
 Mirrors Meta lead-gen data — the **Digital College ads funnel** — into
-Supabase. Since the full-program suspension (July 2026) the DC funnel is:
-Meta ad → the person fills a **Meta instant form** (no landing page) → the
-Meta→Close bridge creates/updates the Close lead within seconds → reps dial.
+Supabase. Since the full-program suspension (July 2026) the DC funnel has run
+**two** acquisition paths:
+
+| `source_kind` | Path | Status |
+|---|---|---|
+| `instant_form` | Meta ad → **Meta instant form** → Meta→Close bridge → reps dial | the original; its campaign has been **paused** since ~2026-07-25 |
+| `landing_page` | Meta ad → **landing page** (`digitalcollege.ai`) → **Typeform** → Close → reps dial | live since 2026-07-22, the **active** motion |
+
+Both are scoped by **`dc_ads_campaigns`** (migration 0130), which is what the DC
+Ads page reads. Before 0130 only the instant-form path was scoped, so the
+landing-page campaigns — including the only active one — were invisible on the
+page along with ~$12.2k of spend. See `docs/schema/dc_ads_campaigns.md`.
 
 ## What this ingestion does
 
@@ -11,11 +20,21 @@ One pass (`ingestion/meta_ads/leads_pipeline.py :: sync_meta_leads`):
 
 1. **Adset scan** — `GET /act_<id>/adsets`, filter to the instant-form
    discriminator (`optimization_goal=LEAD_GENERATION` +
-   `destination_type=ON_AD`; old website/Wix campaigns are
-   `OFFSITE_CONVERSIONS`) → upsert **`meta_leadgen_campaigns`**. This table is
-   THE ad-spend scoping set for the DC ads funnel page: spend rows in
-   `cortana_campaign_daily` whose `platform_entity_id` is in it count as DC
-   ads spend.
+   `destination_type=ON_AD`; website/landing-page campaigns are
+   `OFFSITE_CONVERSIONS`) → upsert **`meta_leadgen_campaigns`**, mirrored into
+   **`dc_ads_campaigns`** as `source_kind='instant_form'`.
+1b. **Creative scan** (0130) — `GET /act_<id>/ads` with the creative's
+   destination fields → upsert **`dc_ads_campaigns`** as
+   `source_kind='landing_page'` for any campaign whose creatives point at a
+   **`digitalcollege.ai`** host. Landing-page campaigns are otherwise
+   indistinguishable from the unrelated ANDROMEDA / Closer Funnel campaigns on
+   the same account, which point at `theaipartner.io` — so the match is on
+   **host, never path** (`/training` exists on both). Runs in its own try block:
+   a failure here can't cost the instant-form scope or the lead sync.
+
+   `dc_ads_campaigns` is THE ad-spend scoping set for the DC ads funnel page:
+   spend rows in `cortana_campaign_daily` whose `platform_entity_id` is in it
+   count as DC ads spend.
 2. **Page token** — `GET /{page_id}?fields=access_token` with the user token.
    Lead reads are page-scoped; the page token is derived per run, never stored.
 3. **Forms** — `GET /{page_id}/leadgen_forms` → upsert **`meta_lead_forms`**.
@@ -87,6 +106,19 @@ First run 2026-07-10: 1 campaign, 1 form, 110 leads.
 - **A new lead-form campaign shows no spend on the DC page** — check it
   appears in `meta_leadgen_campaigns` (adset scan runs every tick; the
   campaign must have at least one instant-form adset).
+- **A new LANDING-PAGE campaign is missing entirely** (no leads, no spend,
+  absent from the cascade dropdown) — check `dc_ads_campaigns` for a
+  `source_kind='landing_page'` row. The creative scan only claims a campaign
+  whose ad creatives resolve to a `digitalcollege.ai` host, so a campaign
+  pointed at a NEW DC domain is invisible until that host is added to
+  `DC_LANDING_HOSTS` in `ingestion/meta_ads/leads_parser.py`. This is the exact
+  failure 0130 fixed — the whole page ran off a paused campaign for three weeks.
+  Quick check: `select source_kind, count(*) from dc_ads_campaigns group by 1;`
+- **Landing-page leads counted but the bridge-drift banner keeps firing** — the
+  banner compares Meta-side instant-form submissions against
+  `dc_ads_lead_facts` rows with `source_kind='instant_form'` ONLY. If it
+  compares against the whole funnel it will always show a gap, because
+  landing-page opt-ins never submit a Meta form.
 
 ## Table docs
 

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from ingestion.meta_ads.client import MetaAdsAPIError, MetaAdsClient
 from ingestion.meta_ads.leads_parser import (
     parse_form,
+    parse_landing_page_ad,
     parse_lead,
     parse_leadgen_adset,
 )
@@ -37,6 +38,7 @@ class LeadsSyncOutcome:
     """Per-run summary; serialized into the cron audit row + HTTP response."""
 
     campaigns_upserted: int = 0
+    lp_campaigns_upserted: int = 0
     forms_upserted: int = 0
     leads_upserted: int = 0
     facts_rows: int | None = None
@@ -61,6 +63,18 @@ def fetch_leadgen_campaign_rows(client: MetaAdsClient, account_id: str) -> list[
     return _dedup_by([r for r in rows if r], "campaign_id")
 
 
+def fetch_landing_page_campaign_rows(client: MetaAdsClient) -> list[dict]:
+    """Creative scan → deduped `dc_ads_campaigns` landing-page rows.
+
+    The instant-form discriminator can't see these: a landing-page campaign is
+    an ordinary OFFSITE_CONVERSIONS campaign, distinguishable only by where its
+    creatives point (docs/schema/dc_ads_campaigns.md).
+    """
+    ads = client.account_ads_with_creatives()
+    rows = [parse_landing_page_ad(a) for a in ads]
+    return _dedup_by([r for r in rows if r], "campaign_id")
+
+
 def sync_meta_leads(
     db,
     client: MetaAdsClient,
@@ -78,17 +92,43 @@ def sync_meta_leads(
     """
     outcome = LeadsSyncOutcome()
 
-    # 1. adset scan → campaign scoping set (user token; independent of leads)
+    # 1. adset scan → instant-form campaigns (user token; independent of leads)
     try:
         campaign_rows = fetch_leadgen_campaign_rows(client, account_id)
         for chunk in _chunked(campaign_rows):
             db.table("meta_leadgen_campaigns").upsert(
                 chunk, on_conflict="campaign_id"
             ).execute()
+        # Mirror into the page's real scoping set. on_conflict does NOT overwrite
+        # funnel_label/typeform_id — those are curated per campaign.
+        dc_rows = [
+            {
+                "campaign_id": r["campaign_id"],
+                "campaign_name": r.get("campaign_name"),
+                "source_kind": "instant_form",
+                "last_seen_at": r.get("last_seen_at"),
+            }
+            for r in campaign_rows
+        ]
+        for chunk in _chunked(dc_rows):
+            db.table("dc_ads_campaigns").upsert(chunk, on_conflict="campaign_id").execute()
         outcome.campaigns_upserted = len(campaign_rows)
     except MetaAdsAPIError as exc:
         outcome.errors.append(f"adset_scan: {exc}")
         logger.warning("meta leads sync: adset scan failed: %s", exc)
+
+    # 1b. creative scan → landing-page campaigns. Kept separate from the adset
+    # scan so a failure here can't cost us the instant-form scope (or the leads
+    # below); a stale landing-page row just means a new LP campaign shows up a
+    # tick late.
+    try:
+        lp_rows = fetch_landing_page_campaign_rows(client)
+        for chunk in _chunked(lp_rows):
+            db.table("dc_ads_campaigns").upsert(chunk, on_conflict="campaign_id").execute()
+        outcome.lp_campaigns_upserted = len(lp_rows)
+    except MetaAdsAPIError as exc:
+        outcome.errors.append(f"creative_scan: {exc}")
+        logger.warning("meta leads sync: creative scan failed: %s", exc)
 
     # 2. page token — everything below needs it
     try:
@@ -136,8 +176,9 @@ def sync_meta_leads(
         logger.warning("meta leads sync: refresh_dc_ads_facts failed: %s", exc)
 
     logger.info(
-        "meta leads sync: campaigns=%d forms=%d leads=%d facts=%s errors=%d",
+        "meta leads sync: campaigns=%d lp_campaigns=%d forms=%d leads=%d facts=%s errors=%d",
         outcome.campaigns_upserted,
+        outcome.lp_campaigns_upserted,
         outcome.forms_upserted,
         outcome.leads_upserted,
         outcome.facts_rows,

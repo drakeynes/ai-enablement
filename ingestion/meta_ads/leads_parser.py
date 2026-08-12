@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 
 def _first_value(field_data: list[dict[str, Any]], name: str) -> str | None:
@@ -75,6 +76,75 @@ def parse_lead(row: dict[str, Any], page_id: str) -> dict[str, Any]:
         "email": _first_value(field_data, "email"),
         "field_data": field_data,
         "raw": row,
+    }
+
+
+# Hosts whose traffic belongs to the Digital College funnel. Deliberately NOT
+# theaipartner.io — that is the separate ANDROMEDA / Closer Funnel motion on the
+# same ad account, and counting it here would corrupt DC spend and ROAS.
+DC_LANDING_HOSTS: tuple[str, ...] = ("digitalcollege.ai",)
+
+
+def creative_destination_urls(creative: dict[str, Any] | None) -> set[str]:
+    """Every destination URL a creative might carry.
+
+    Meta stores the click destination in a different place per creative type
+    (plain link ads, video ads, Advantage+ asset feeds, CTA overrides), so we
+    check all of them — a missed location means a DC campaign looks like a
+    foreign one and silently drops off the page.
+    """
+    found: set[str] = set()
+    if not creative:
+        return found
+    if str(creative.get("link_url") or "").startswith("http"):
+        found.add(str(creative["link_url"]))
+    spec = creative.get("object_story_spec") or {}
+    for sub in ("link_data", "video_data", "photo_data"):
+        data = spec.get(sub) or {}
+        if str(data.get("link") or "").startswith("http"):
+            found.add(str(data["link"]))
+        cta_link = ((data.get("call_to_action") or {}).get("value") or {}).get("link")
+        if str(cta_link or "").startswith("http"):
+            found.add(str(cta_link))
+    for link in (creative.get("asset_feed_spec") or {}).get("link_urls") or []:
+        if str(link.get("website_url") or "").startswith("http"):
+            found.add(str(link["website_url"]))
+    return found
+
+
+def _host_matches(url: str, hosts: tuple[str, ...]) -> bool:
+    try:
+        netloc = urlparse(url).netloc.lower().split("@")[-1].split(":")[0]
+    except ValueError:
+        return False
+    return any(netloc == h or netloc.endswith("." + h) for h in hosts)
+
+
+def parse_landing_page_ad(
+    row: dict[str, Any],
+    hosts: tuple[str, ...] = DC_LANDING_HOSTS,
+) -> dict[str, Any] | None:
+    """Project an /ads row into a `dc_ads_campaigns` landing-page row.
+
+    Returns None unless the ad's creative points at one of `hosts`. Matching on
+    HOST, never path: `/training` exists on both digitalcollege.ai (DC) and
+    theaipartner.io (the unrelated Closer Funnel motion), and mixing them would
+    corrupt the DC page's spend.
+    """
+    campaign_id = row.get("campaign_id")
+    if not campaign_id:
+        return None
+    urls = creative_destination_urls(row.get("creative"))
+    hit = next((u for u in sorted(urls) if _host_matches(u, hosts)), None)
+    if not hit:
+        return None
+    campaign = row.get("campaign") or {}
+    return {
+        "campaign_id": str(campaign_id),
+        "campaign_name": campaign.get("name"),
+        "source_kind": "landing_page",
+        "destination_url": hit,
+        "last_seen_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
