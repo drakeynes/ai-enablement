@@ -13,9 +13,15 @@ this small table (delete + insert, one transaction) and the page reads it via
 `dc_ads_funnel(p_start, p_end)` / `dc_ads_funnel_by_rep(p_start, p_end)` —
 sub-second.
 
-**Membership:** `close_leads` where `funnel_name='Digital College'` AND
-`campaign_id in (select campaign_id from meta_leadgen_campaigns)` and not
-excluded. **Anchor:** `greatest(date_created, latest_opt_in_date)` — the
+**Membership (changed in 0130):** `close_leads` whose `campaign_id` is in
+`dc_ads_campaigns` (active), and not excluded — **both acquisition paths**
+(instant form *and* landing page → Typeform). The old rule also required
+`funnel_name='Digital College'` AND `campaign_id in meta_leadgen_campaigns`;
+both clauses excluded the live landing-page motion, which Close tags
+`Aman Funnel` / `Luke Funnel`. Campaign membership is now the sole signal — it
+is what keeps the unrelated ANDROMEDA / Closer Funnel campaigns off this page
+(see `docs/schema/dc_ads_campaigns.md` for why you must not widen it).
+**Anchor:** `greatest(date_created, latest_opt_in_date)` — the
 Meta→Close bridge matches returning phone numbers to their existing Close
 lead and re-stamps `latest_opt_in_date`, so a re-opted April lead anchors at
 its July form submit, not its original creation.
@@ -54,6 +60,13 @@ instant form behind the opt-in. The bridge doesn't stamp form ids on
 `close_leads`, so the refresh derives it: match the lead's contact phone
 (last 10 digits) to `meta_form_leads.phone_number` and take the NEWEST
 submission's form (parity with the re-anchor-at-newest-opt-in rule).
+
+**0130** adds `source_kind` (`instant_form` | `landing_page`), `funnel_label`
+(the lead's `close_leads.funnel_name`, falling back to the campaign registry
+label) and `typeform_id` (landing-page leads only, from
+`dc_ads_campaigns.typeform_id`). `form_id` stays the **Meta instant form** and is
+null for landing-page leads; `typeform_id` is its landing-page counterpart and is
+null for instant-form leads.
 
 ## Populated by / read by
 
