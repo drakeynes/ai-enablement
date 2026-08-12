@@ -11,6 +11,7 @@ import {
   getDcAdsByRep,
   getDcAdsSpend,
   getDcAdsMetaOptIns,
+  getDcAdsInstantFormOptIns,
   getDcAdsDaily,
   getDcAdsHierarchy,
   getDcAdsSpeedCohort,
@@ -29,12 +30,15 @@ function monthDay(ymd: string): string {
 // Sales Dashboard — DC Ads (top-level page).
 //
 // The Digital College paid-ads funnel, since the full-program suspension the
-// only acquisition motion: Meta ad → instant lead form (name + phone, no
-// landing page) → the Meta→Close bridge creates the Close lead in seconds →
-// reps dial. Same shape as the Outbound page but with AD SPEND leading the
-// funnel and opt-ins instead of outbound leads; scoped ONLY to lead-form
-// campaigns (meta_leadgen_campaigns — the adset discriminator), never
-// outbound pools. See lib/db/dc-ads.ts + docs/sales/surfaces.md § DC Ads.
+// only acquisition motion. TWO paths (migration 0130):
+//   instant_form  Meta ad → instant lead form → Meta→Close bridge → reps dial
+//   landing_page  Meta ad → landing page → Typeform → Close → reps dial
+// The landing-page path went live 2026-07-22 and is the ACTIVE motion; the
+// instant-form campaign has been paused since. Same shape as the Outbound page
+// but with AD SPEND leading the funnel and opt-ins instead of outbound leads;
+// scoped to dc_ads_campaigns (the registry covering both paths), never outbound
+// pools and never the Closer Funnel campaigns that share the ad account.
+// See lib/db/dc-ads.ts + docs/sales/surfaces.md § DC Ads.
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -76,16 +80,25 @@ export default async function DcAdsPage({
 
   const range = dateRangeFromExplicit(startEt, endEt)
   const rangeBounds = { startUtcIso: range.startUtcIso, endUtcIso: range.endUtcIso }
-  const [{ funnel, called, timeOfDay }, byRep, spend, metaOptIns, dailyRows, hierarchy, speedCohort] =
-    await Promise.all([
-      getDcAdsFunnel(rangeBounds, filter),
-      getDcAdsByRep(rangeBounds, filter),
-      getDcAdsSpend(startEt, endEt, filter),
-      getDcAdsMetaOptIns(rangeBounds),
-      getDcAdsDaily(todayEt, filter),
-      getDcAdsHierarchy(rangeBounds),
-      getDcAdsSpeedCohort(rangeBounds, filter),
-    ])
+  const [
+    { funnel, called, timeOfDay },
+    byRep,
+    spend,
+    metaOptIns,
+    instantFormOptIns,
+    dailyRows,
+    hierarchy,
+    speedCohort,
+  ] = await Promise.all([
+    getDcAdsFunnel(rangeBounds, filter),
+    getDcAdsByRep(rangeBounds, filter),
+    getDcAdsSpend(startEt, endEt, filter),
+    getDcAdsMetaOptIns(rangeBounds),
+    getDcAdsInstantFormOptIns(rangeBounds),
+    getDcAdsDaily(todayEt, filter),
+    getDcAdsHierarchy(rangeBounds),
+    getDcAdsSpeedCohort(rangeBounds, filter),
+  ])
 
   return (
     <div>
@@ -111,23 +124,65 @@ export default async function DcAdsPage({
         className="geg-mono"
         style={{ marginTop: 14, fontSize: 10, letterSpacing: '0.04em', color: 'var(--color-geg-text-2)', lineHeight: 1.7 }}
       >
-        The <b>Digital College ads</b> funnel. Someone clicks a Meta ad, fills the instant lead form
-        (name + phone — no landing page), lands in Close tagged <b>Digital College</b> within seconds,
-        and gets dialed. Ad spend covers the lead-form campaigns only ({spend.campaigns} detected) —
-        no outbound leads on this page, no ad leads on Outbound.
+        The <b>Digital College ads</b> funnel, across <b>both</b> acquisition paths. Someone clicks a
+        Meta ad and either fills the <b>Meta instant form</b> (name + phone, no landing page) or lands
+        on a <b>landing page</b> and fills its <b>Typeform</b>; either way they reach Close within
+        seconds and get dialed. Ad spend covers the registered DC campaigns only ({spend.campaigns}{' '}
+        detected) — no outbound leads on this page, no ad leads on Outbound, and none of the
+        Closer&nbsp;Funnel campaigns that run against a different domain.
       </div>
 
       {/* Bridge-drift check only reads on the unfiltered view — the Meta-side
           count isn't cascade-scoped, so comparing it under a filter would
-          false-alarm. */}
-      {!filterActive && metaOptIns !== funnel.optIns ? (
+          false-alarm. Compared against INSTANT-FORM opt-ins only: landing-page
+          leads never submit a Meta form, so measuring them here would report a
+          permanent phantom gap. */}
+      {!filterActive && metaOptIns !== instantFormOptIns ? (
         <div
           className="geg-mono"
           style={{ marginTop: 8, fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--color-geg-text-3)', lineHeight: 1.6 }}
         >
-          ⚠ Meta reports {metaOptIns.toLocaleString('en-US')} ad-attributed form submissions in this
-          range vs {funnel.optIns.toLocaleString('en-US')} mirrored into Close — a growing gap means
-          the Meta→Close bridge is dropping leads (see docs/runbooks/meta_leads_ingestion.md).
+          ⚠ Meta reports {metaOptIns.toLocaleString('en-US')} ad-attributed instant-form submissions
+          in this range vs {instantFormOptIns.toLocaleString('en-US')} mirrored into Close — a growing
+          gap means the Meta→Close bridge is dropping leads (see
+          docs/runbooks/meta_leads_ingestion.md). Landing-page opt-ins are excluded from this check:
+          they never submit a Meta form.
+        </div>
+      ) : null}
+
+      {/* Acquisition-path breakdown (0130). Until the RPCs take a funnel facet
+          this is a read-out, not a filter — but it makes the landing-page /
+          Typeform split visible, which is the whole point of the page after
+          the instant-form campaign was paused. */}
+      {hierarchy.funnels.length > 0 ? (
+        <div
+          className="geg-mono"
+          style={{
+            marginTop: 14,
+            display: 'flex',
+            gap: 18,
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+            fontSize: 10,
+            letterSpacing: '0.04em',
+            color: 'var(--color-geg-text-2)',
+          }}
+        >
+          <span style={{ textTransform: 'uppercase', color: 'var(--color-geg-text-3)' }}>Paths</span>
+          {hierarchy.funnels.map((f) => (
+            <span key={f.label}>
+              <b>{f.label}</b> {f.count.toLocaleString('en-US')}
+              <span style={{ color: 'var(--color-geg-text-faint)' }}>
+                {' '}
+                · {f.sourceKind === 'landing_page' ? 'landing page → Typeform' : 'Meta instant form'}
+              </span>
+            </span>
+          ))}
+          {hierarchy.typeforms.map((t) => (
+            <span key={t.formId} style={{ color: 'var(--color-geg-text-faint)' }}>
+              Typeform <b>{t.formName}</b> {t.count.toLocaleString('en-US')}
+            </span>
+          ))}
         </div>
       ) : null}
 
@@ -181,7 +236,8 @@ export default async function DcAdsPage({
         className="geg-mono"
         style={{ marginTop: 16, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.8 }}
       >
-        Opt-ins = Digital College lead-form leads mirrored into Close (anchored at the form submit; a
+        Opt-ins = Digital College ad leads mirrored into Close — Meta instant form <i>and</i> landing
+        page → Typeform (anchored at the form submit; a
         returning phone number re-anchors at its newest opt-in) · Called = ≥1 call (inbound or outbound,
         any length) · Connected = a <b>call ≥90s</b> (either direction) or a filed pitch form · Showed = a
         filed <b>DC sale form</b> or closer report (the lead got a pitch) · Closed = a DC close <b>with an

@@ -5,19 +5,27 @@ import { businessHoursElapsedSec } from '@/lib/time/est-periods'
 import { summarizeCohortRows, type CohortStats } from './funnel-appointment-setting'
 import type { DcPlanCounts } from './funnel-dc'
 
-// DC ads funnel — the Digital College paid-ads funnel (Meta instant-form
-// opt-ins dialed by reps), on its own /sales-dashboard/dc-ads page. Sibling of
-// the Outbound page's data layer (lib/db/funnel-revival.ts): same materialized-
-// facts pattern, different membership + anchor (migrations 0122–0125).
+// DC ads funnel — the Digital College paid-ads funnel, on its own
+// /sales-dashboard/dc-ads page. Sibling of the Outbound page's data layer
+// (lib/db/funnel-revival.ts): same materialized-facts pattern, different
+// membership + anchor (migrations 0122–0130).
 //
-// Three sources, all Supabase (never the Meta API from here):
+// TWO acquisition paths since 2026-07-22 (migration 0130):
+//   instant_form  — Meta ad → Meta instant form → Close      (the original)
+//   landing_page  — Meta ad → LP → Typeform → Close          (the live motion)
+// Both are scoped by dc_ads_campaigns, THE campaign registry. Never widen this
+// to "all OFFSITE_CONVERSIONS campaigns": the same ad account runs the
+// unrelated ANDROMEDA / Closer Funnel motion against theaipartner.io.
+//
+// Sources, all Supabase (never the Meta API from here):
 //   dc_ads_funnel() / dc_ads_funnel_by_rep()  — per-lead facts rollups
-//     (dc_ads_lead_facts: close_leads where funnel_name='Digital College' and
-//     campaign_id ∈ meta_leadgen_campaigns, anchored at the form opt-in)
-//   cortana_campaign_daily × meta_leadgen_campaigns — the AD SPEND in front of
-//     the funnel, scoped to lead-form campaigns only
-//   meta_form_leads — the Meta-side opt-in count (bridge-drift check: if the
-//     Meta→Close bridge breaks, this keeps counting while the funnel stalls)
+//     (dc_ads_lead_facts: close_leads on a campaign in dc_ads_campaigns,
+//     anchored at the opt-in; carries source_kind/funnel_label/typeform_id)
+//   cortana_campaign_daily × dc_ads_campaigns — the AD SPEND in front of the
+//     funnel, scoped to the registry (the cortana_* tables kept their legacy
+//     name but are fed by the Meta API since the 2026-06-30 cutover)
+//   meta_form_leads — the Meta-side opt-in count for the instant-form path
+//     (bridge-drift check; landing-page leads never appear here)
 
 export type DcAdsFunnel = {
   optIns: number
@@ -175,9 +183,10 @@ async function spendScope(
 ): Promise<{ table: string; ids: string[]; campaigns: number }> {
   const sb = createAdminClient()
   const { data: camps, error } = await sb
-    .from('meta_leadgen_campaigns' as never)
+    .from('dc_ads_campaigns' as never)
     .select('campaign_id')
-  if (error) throw new Error(`meta_leadgen_campaigns read failed: ${error.message}`)
+    .eq('active', true)
+  if (error) throw new Error(`dc_ads_campaigns read failed: ${error.message}`)
   const all = ((camps ?? []) as Array<{ campaign_id: string }>).map((c) => c.campaign_id)
   if (filter?.adId) return { table: 'cortana_ad_daily', ids: [filter.adId], campaigns: all.length }
   if (filter?.adsetId) return { table: 'cortana_adset_daily', ids: [filter.adsetId], campaigns: all.length }
@@ -286,11 +295,40 @@ export type DcCampaignNode = {
 // in the window, same source as the cascade counts; names come from the
 // meta_lead_forms registry.
 export type DcFormOption = { formId: string; formName: string; count: number }
+// The funnel facet (0130): which acquisition path an opt-in came through —
+// 'Digital College' (instant form) vs 'Aman Funnel' / 'Luke Funnel' (the
+// landing-page + Typeform motions). Labels are the Close funnel_name.
+export type DcFunnelOption = { label: string; sourceKind: string | null; count: number }
 export type DcAdHierarchy = {
   campaigns: DcCampaignNode[]
   adsetsAll: DcAdsetNode[]
   adsAll: DcAdNode[]
   forms: DcFormOption[]
+  typeforms: DcFormOption[]
+  funnels: DcFunnelOption[]
+}
+
+// Entity-id → display-name, from the Meta-fed spend mirror. One row per entity
+// per day, so dedupe (last non-null wins); these are the only tables carrying
+// adset/ad names for LANDING-PAGE campaigns, which never appear in
+// meta_form_leads.
+async function entityNames(
+  sb: ReturnType<typeof createAdminClient>,
+  table: string,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (ids.length === 0) return out
+  const { data, error } = await sb
+    .from(table as never)
+    .select('platform_entity_id, entity_name')
+    .in('platform_entity_id', ids)
+    .limit(20000)
+  if (error) throw new Error(`${table} name read failed: ${error.message}`)
+  for (const r of (data ?? []) as Array<{ platform_entity_id: string; entity_name: string | null }>) {
+    if (r.entity_name) out.set(r.platform_entity_id, r.entity_name)
+  }
+  return out
 }
 
 export async function getDcAdsHierarchy(range: {
@@ -298,55 +336,100 @@ export async function getDcAdsHierarchy(range: {
   endUtcIso: string
 }): Promise<DcAdHierarchy> {
   const sb = createAdminClient()
-  const [{ data, error }, { data: formRows, error: fErr }] = await Promise.all([
-    sb
-      .from('meta_form_leads' as never)
-      .select('campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name, form_id')
-      .not('ad_id', 'is', null)
-      .gte('created_time', range.startUtcIso)
-      .lt('created_time', range.endUtcIso)
-      .limit(10000),
-    sb.from('meta_lead_forms' as never).select('form_id, name'),
-  ])
-  if (error) throw new Error(`meta_form_leads hierarchy read failed: ${error.message}`)
+  // Sourced from the FACTS table, not meta_form_leads. Landing-page opt-ins
+  // never submit a Meta instant form, so building the cascade from
+  // meta_form_leads hid every LP campaign from the dropdown regardless of
+  // spend — half of the 0130 bug (the other half was facts membership).
+  const [{ data, error }, { data: formRows, error: fErr }, { data: tfRows, error: tErr }] =
+    await Promise.all([
+      sb
+        .from('dc_ads_lead_facts' as never)
+        .select('campaign_id, adset_id, ad_id, form_id, typeform_id, source_kind, funnel_label')
+        .gte('anchor', range.startUtcIso)
+        .lt('anchor', range.endUtcIso)
+        .limit(20000),
+      sb.from('meta_lead_forms' as never).select('form_id, name'),
+      sb.from('typeform_forms' as never).select('form_id, title'),
+    ])
+  if (error) throw new Error(`dc_ads_lead_facts hierarchy read failed: ${error.message}`)
   if (fErr) throw new Error(`meta_lead_forms registry read failed: ${fErr.message}`)
+  if (tErr) throw new Error(`typeform_forms registry read failed: ${tErr.message}`)
   const formNames = new Map(
     ((formRows ?? []) as Array<{ form_id: string; name: string | null }>).map((r) => [r.form_id, r.name]),
   )
+  const typeformNames = new Map(
+    ((tfRows ?? []) as Array<{ form_id: string; title: string | null }>).map((r) => [r.form_id, r.title]),
+  )
   type Row = {
     campaign_id: string | null
-    campaign_name: string | null
     adset_id: string | null
-    adset_name: string | null
-    ad_id: string
-    ad_name: string | null
-    form_id: string
+    ad_id: string | null
+    form_id: string | null
+    typeform_id: string | null
+    source_kind: string | null
+    funnel_label: string | null
   }
+  const factRows = ((data ?? []) as Row[]).filter((r) => r.ad_id)
+  const [campaignNames, adsetNames, adNames] = await Promise.all([
+    entityNames(
+      sb,
+      'cortana_campaign_daily',
+      Array.from(new Set(factRows.map((r) => r.campaign_id).filter(Boolean) as string[])),
+    ),
+    entityNames(
+      sb,
+      'cortana_adset_daily',
+      Array.from(new Set(factRows.map((r) => r.adset_id).filter(Boolean) as string[])),
+    ),
+    entityNames(
+      sb,
+      'cortana_ad_daily',
+      Array.from(new Set(factRows.map((r) => r.ad_id).filter(Boolean) as string[])),
+    ),
+  ])
   type AdsetAgg = { adsetName?: string; count: number; ads: Map<string, { adName: string; count: number }> }
   const camps = new Map<string, { campaignName: string; count: number; adsets: Map<string, AdsetAgg> }>()
   const adsetsAll = new Map<string, AdsetAgg>()
   const adsAll = new Map<string, { adName: string; count: number }>()
   const formsAgg = new Map<string, number>()
+  const typeformsAgg = new Map<string, number>()
+  const funnelsAgg = new Map<string, { sourceKind: string | null; count: number }>()
   const bump = (m: Map<string, AdsetAgg>, r: Row) => {
     const key = r.adset_id ?? '—'
-    const a = m.get(key) ?? { adsetName: r.adset_name ?? undefined, count: 0, ads: new Map() }
+    const a = m.get(key) ?? {
+      adsetName: (r.adset_id ? adsetNames.get(r.adset_id) : undefined) ?? undefined,
+      count: 0,
+      ads: new Map(),
+    }
     a.count += 1
-    const ad = a.ads.get(r.ad_id) ?? { adName: r.ad_name ?? r.ad_id, count: 0 }
+    const adId = r.ad_id as string
+    const ad = a.ads.get(adId) ?? { adName: adNames.get(adId) ?? adId, count: 0 }
     ad.count += 1
-    a.ads.set(r.ad_id, ad)
+    a.ads.set(adId, ad)
     m.set(key, a)
   }
-  for (const r of ((data ?? []) as Row[])) {
+  for (const r of factRows) {
     const cId = r.campaign_id ?? '—'
-    const c = camps.get(cId) ?? { campaignName: r.campaign_name ?? cId, count: 0, adsets: new Map() }
+    const c = camps.get(cId) ?? {
+      campaignName: (r.campaign_id ? campaignNames.get(r.campaign_id) : undefined) ?? cId,
+      count: 0,
+      adsets: new Map(),
+    }
     c.count += 1
     bump(c.adsets, r)
     camps.set(cId, c)
     bump(adsetsAll, r)
-    const g = adsAll.get(r.ad_id) ?? { adName: r.ad_name ?? r.ad_id, count: 0 }
+    const adId = r.ad_id as string
+    const g = adsAll.get(adId) ?? { adName: adNames.get(adId) ?? adId, count: 0 }
     g.count += 1
-    adsAll.set(r.ad_id, g)
-    formsAgg.set(r.form_id, (formsAgg.get(r.form_id) ?? 0) + 1)
+    adsAll.set(adId, g)
+    if (r.form_id) formsAgg.set(r.form_id, (formsAgg.get(r.form_id) ?? 0) + 1)
+    if (r.typeform_id) typeformsAgg.set(r.typeform_id, (typeformsAgg.get(r.typeform_id) ?? 0) + 1)
+    if (r.funnel_label) {
+      const f = funnelsAgg.get(r.funnel_label) ?? { sourceKind: r.source_kind, count: 0 }
+      f.count += 1
+      funnelsAgg.set(r.funnel_label, f)
+    }
   }
   const adNodes = (ads: Map<string, { adName: string; count: number }>): DcAdNode[] => {
     const list = Array.from(ads.entries()).map(([adId, v]) => ({ adId, adName: v.adName, count: v.count }))
@@ -369,6 +452,12 @@ export async function getDcAdsHierarchy(range: {
     adsAll: adNodes(adsAll),
     forms: Array.from(formsAgg.entries())
       .map(([formId, count]) => ({ formId, formName: formNames.get(formId) ?? formId, count }))
+      .sort((x, y) => y.count - x.count),
+    typeforms: Array.from(typeformsAgg.entries())
+      .map(([formId, count]) => ({ formId, formName: typeformNames.get(formId) ?? formId, count }))
+      .sort((x, y) => y.count - x.count),
+    funnels: Array.from(funnelsAgg.entries())
+      .map(([label, v]) => ({ label, sourceKind: v.sourceKind, count: v.count }))
       .sort((x, y) => y.count - x.count),
   }
 }
@@ -420,8 +509,27 @@ export async function getDcAdsSpeedCohort(
   }
 }
 
+// Close-side opt-ins on the INSTANT-FORM path only, for the bridge-drift check.
+// Since 0130 the funnel's optIns spans both paths, so comparing the Meta-side
+// count (instant form by definition — landing-page leads never submit a Meta
+// form) against the whole funnel would report a permanent phantom gap.
+export async function getDcAdsInstantFormOptIns(range: {
+  startUtcIso: string
+  endUtcIso: string
+}): Promise<number> {
+  const sb = createAdminClient()
+  const { count, error } = await sb
+    .from('dc_ads_lead_facts' as never)
+    .select('close_id', { count: 'exact', head: true })
+    .eq('source_kind', 'instant_form')
+    .gte('anchor', range.startUtcIso)
+    .lt('anchor', range.endUtcIso)
+  if (error) throw new Error(`dc_ads_lead_facts instant-form count failed: ${error.message}`)
+  return count ?? 0
+}
+
 // Meta-side opt-in count in the window (ad-attributed submissions in
-// meta_form_leads). Compared against the funnel's Close-side optIns on the
+// meta_form_leads). Compared against the INSTANT-FORM Close-side optIns on the
 // page: a growing gap = the Meta→Close bridge is dropping leads.
 export async function getDcAdsMetaOptIns(range: {
   startUtcIso: string
