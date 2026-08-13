@@ -56,7 +56,7 @@ export default async function DcAdsPage({
     campaign?: string | string[]
     adset?: string | string[]
     ad?: string | string[]
-    form?: string | string[]
+    lp?: string | string[]
   }
 }) {
   const param = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim() || null
@@ -68,15 +68,16 @@ export default async function DcAdsPage({
   const endEt = param(searchParams?.end) ?? todayEt
 
   // Ad cascade selection (?campaign / ?adset / ?ad) — same URL contract as the
-  // Advertising Hub's chooser — plus the Forms facet (?form, an AND filter).
+  // Advertising Hub's chooser — plus the landing-page facet (?lp, an AND
+  // filter on funnel_label, the Hub's LandingPageFilter counterpart; 0131).
   // Scopes everything: spend, funnel, by-rep, speed-to-lead, speed-to-dial,
   // time-of-day, and the last-5-days strip.
   const campaign = param(searchParams?.campaign)
   const adset = param(searchParams?.adset)
   const ad = param(searchParams?.ad)
-  const form = param(searchParams?.form)
-  const filter: DcAdsEntityFilter = { campaignId: campaign, adsetId: adset, adId: ad, formId: form }
-  const filterActive = !!(ad || adset || campaign || form)
+  const lp = param(searchParams?.lp)
+  const filter: DcAdsEntityFilter = { campaignId: campaign, adsetId: adset, adId: ad, funnelLabel: lp }
+  const filterActive = !!(ad || adset || campaign || lp)
 
   const range = dateRangeFromExplicit(startEt, endEt)
   const rangeBounds = { startUtcIso: range.startUtcIso, endUtcIso: range.endUtcIso }
@@ -109,7 +110,16 @@ export default async function DcAdsPage({
       />
 
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <AdCascadeFilter hierarchy={hierarchy} campaign={campaign} adset={adset} ad={ad} forms={hierarchy.forms} form={form} startEtDate={startEt} endEtDate={endEt} />
+        <AdCascadeFilter
+          hierarchy={hierarchy}
+          campaign={campaign}
+          adset={adset}
+          ad={ad}
+          landingPages={hierarchy.funnels.map((f) => ({ value: f.label, label: f.label, count: f.count }))}
+          lp={lp}
+          startEtDate={startEt}
+          endEtDate={endEt}
+        />
         <DateRangePicker startEtDate={startEt} endEtDate={endEt} todayEt={todayEt} />
         <span
           className="geg-mono"
@@ -150,10 +160,10 @@ export default async function DcAdsPage({
         </div>
       ) : null}
 
-      {/* Acquisition-path breakdown (0130). Until the RPCs take a funnel facet
-          this is a read-out, not a filter — but it makes the landing-page /
-          Typeform split visible, which is the whole point of the page after
-          the instant-form campaign was paused. */}
+      {/* Acquisition-path breakdown (0130). The landing-page dropdown filters
+          (0131); this strip stays as the at-a-glance split — it's also the
+          only place the Typeform names + counts surface. Counts are always
+          the whole window (like the dropdown's), not the filtered view. */}
       {hierarchy.funnels.length > 0 ? (
         <div
           className="geg-mono"
@@ -242,9 +252,9 @@ export default async function DcAdsPage({
         any length) · Connected = a <b>call ≥90s</b> (either direction) or a filed pitch form · Showed = a
         filed <b>DC sale form</b> or closer report (the lead got a pitch) · Closed = a DC close <b>with an
         explicit plan</b> — from the DC sale form or a closer report (a closed form with no plan counts as
-        a show, not a close) · Cash = $300 per Digital College plan unit · Adspend = the lead-form
-        campaigns&apos; spend (Meta API, ET days; with only a form selected, that form&apos;s ads) ·
-        ROAS = cash ÷ adspend.
+        a show, not a close) · Cash = $300 per Digital College plan unit · Adspend = the registered
+        DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected, that
+        path&apos;s campaigns) · ROAS = cash ÷ adspend.
       </div>
     </div>
   )

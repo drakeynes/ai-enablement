@@ -148,15 +148,24 @@ need their `airtable_user_id` set to merge their closes with their dials.
 ## DC Ads — `/dc-ads` (added 2026-07-10)
 
 The **Digital College paid-ads funnel** — since the full-program suspension (July 2026) the only
-acquisition motion: Meta ad → **instant lead form** (name + phone, no landing page) → the Meta→Close
-bridge creates the Close lead in seconds (`funnel_name='Digital College'` + the Meta
-ad/adset/campaign ids) → reps dial. The Outbound page's shape with **ad spend leading the funnel**:
+acquisition motion, across **two paths** (0130):
+
+- `instant_form` — Meta ad → **instant lead form** (name + phone, no landing page) → the Meta→Close
+  bridge creates the Close lead in seconds (`funnel_name='Digital College'`). The original motion;
+  its campaign has been paused since the landing-page path went live 2026-07-22.
+- `landing_page` — Meta ad → **landing page** on `digitalcollege.ai` → its **Typeform** → Close
+  (`funnel_name='Aman Funnel'` / `'Luke Funnel'`). The live motion.
+
+Both are scoped by the `dc_ads_campaigns` registry (never "all `OFFSITE_CONVERSIONS` campaigns" —
+the same ad account runs the unrelated Closer Funnel motion against `theaipartner.io`; see
+`docs/schema/dc_ads_campaigns.md`). The Outbound page's shape with **ad spend leading the funnel**:
 
 - **Funnel** — `Adspend → Opt-ins → Called → Connected → Closed` + cash & **ROAS** row (cash ÷
   spend), with a **$/opt-in** figure on the adspend→opt-ins arrow. Booked/Showed computed but hidden
   (same Connected → Closed model as Outbound). Adspend = `cortana_campaign_daily` summed over ONLY
-  the lead-form campaigns (`meta_leadgen_campaigns` — detected by the adset discriminator
-  `optimization_goal=LEAD_GENERATION` + `destination_type=ON_AD`, re-scanned every 15 min).
+  the registered DC campaigns (`dc_ads_campaigns` — instant-form campaigns detected by the adset
+  discriminator `optimization_goal=LEAD_GENERATION` + `destination_type=ON_AD`, landing-page
+  campaigns by creative destination host `digitalcollege.ai`; both re-scanned every 15 min).
   **Shows/closes come from the DC SALE FORM** (`airtable_digital_college_sales` — where reps
   actually file these dial-up pitches; the Full Closer Report went quiet with the program
   suspension) unioned with the closer report (0127): a filed form = showed, `Closed?=Yes` with ≥1
@@ -180,15 +189,19 @@ ad/adset/campaign ids) → reps dial. The Outbound page's shape with **ad spend 
 - **Ad cascade chooser** (added 2026-07-10) — the hub's `AdCascadeFilter` component reused as-is
   (`?campaign / ?adset / ?ad`, deepest wins). Scopes EVERYTHING: spend (entity's own `cortana_*`
   table, like the hub's cascade), funnel, by-rep, speed-to-lead, speed-to-dial, time-of-day, and
-  the daily strip. Hierarchy + names come from `meta_form_leads` in the window (it carries all
-  three levels' names natively — no adset-name mirror lookup).
-- **Forms dropdown** (added 2026-07-15) — a fourth select beside the cascade (`?form`): Meta runs
-  multiple instant forms ("7/8 - Basic Form", "7/13 - Basic Form", …). Unlike the cascade it's an
-  independent AND facet — a form spans many ads. Backed by `dc_ads_lead_facts.form_id` (0128),
-  stamped at refresh by phone-matching the lead's newest `meta_form_leads` submission (the bridge
-  doesn't stamp form ids on `close_leads`). Spend under a form-only selection = that form's ads
-  summed from `cortana_ad_daily`; with both a form and a cascade entity selected, the entity wins
-  the spend read while the funnel ANDs both. Option names come from the `meta_lead_forms` registry.
+  the daily strip. Hierarchy comes from `dc_ads_lead_facts` in the window (0130 — building it from
+  `meta_form_leads` hid every landing-page campaign, which never submits a Meta form); entity
+  names come from the `cortana_*` spend mirrors.
+- **Landing-page dropdown** (2026-08-13; replaced the Forms dropdown) — a fourth select beside
+  the cascade (`?lp`), the DC counterpart of the hub's landing-page filter. Options are the
+  window's acquisition paths (`funnel_label`: "Aman Funnel", "Luke Funnel", "Digital College" for
+  the legacy instant-form path) with opt-in counts. An independent AND facet — a path spans many
+  ads — backed by `dc_ads_lead_facts.funnel_label` via the RPCs' `p_funnel_label` param (0131).
+  Spend under an LP-only selection = that path's registry campaigns summed from
+  `cortana_campaign_daily`; with a cascade entity selected too, the entity wins the spend read
+  while the funnel ANDs both. The retired Forms facet's plumbing (`form_id` column, `p_form_id`
+  RPC param, form→ads spend mapping in `lib/db/dc-ads.ts`) is all retained — the forms breakdown
+  is planned to resurface in its own section.
 - **Last 5 days strip** (added 2026-07-10) — the hub's daily cohort table shaped to the DC funnel:
   Day · Spend · Opt-ins · Called · Connected · Closed · Cash · Dials (no speed-to-lead, no
   bookings). Each row = that ET day's opt-in cohort + lifetime progression + dials received.
@@ -198,9 +211,9 @@ ad/adset/campaign ids) → reps dial. The Outbound page's shape with **ad spend 
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close
   bridge is dropping leads). Unfiltered view only (the Meta count isn't cascade-scoped).
 
-Scoping is mutually exclusive with Outbound: only lead-form-campaign leads here (never outbound
-pools), and DC ads leads never appear on the Outbound page (separate facts table —
-`dc_ads_lead_facts`, migrations 0122–0129 — precisely so Outbound's "All" view stays clean).
+Scoping is mutually exclusive with Outbound: only registered-DC-campaign leads here (never
+outbound pools), and DC ads leads never appear on the Outbound page (separate facts table —
+`dc_ads_lead_facts`, migrations 0122–0131 — precisely so Outbound's "All" view stays clean).
 Date range: URL `?start/?end`, default **[2026-07-08 (first lead-form campaign) → today]**.
 Data layer `lib/db/dc-ads.ts`; ingestion `docs/runbooks/meta_leads_ingestion.md`.
 

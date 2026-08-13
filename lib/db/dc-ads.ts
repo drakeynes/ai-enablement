@@ -75,15 +75,21 @@ export type DcAdsByRep = { reps: DcAdsRepRow[]; totals: DcAdsRepTotals }
 
 const TOD_LABELS = ['12a', '2a', '4a', '6a', '8a', '10a', '12p', '2p', '4p', '6p', '8p', '10p']
 
-// The page's ad-cascade selection (campaign → ad set → ad) plus the Forms
-// facet. Cascade: deepest wins — the RPC args carry only the deepest id,
-// mirroring the Advertising Hub. The form is an independent AND facet (a form
-// spans many ads), so it composes with the cascade instead of competing.
+// The page's ad-cascade selection (campaign → ad set → ad) plus the
+// landing-page facet. Cascade: deepest wins — the RPC args carry only the
+// deepest id, mirroring the Advertising Hub. The landing page (funnelLabel,
+// matching dc_ads_lead_facts.funnel_label — 'Aman Funnel', 'Luke Funnel',
+// 'Digital College') is an independent AND facet (a path spans many ads), so
+// it composes with the cascade instead of competing. formId (the Meta instant
+// form, 0128) stays supported at this layer — the forms dropdown left the
+// page's filter row (0131) but the facet is planned to resurface in its own
+// forms section.
 export type DcAdsEntityFilter = {
   campaignId?: string | null
   adsetId?: string | null
   adId?: string | null
   formId?: string | null
+  funnelLabel?: string | null
 }
 
 function entityArgs(filter?: DcAdsEntityFilter): Record<string, unknown> {
@@ -92,6 +98,7 @@ function entityArgs(filter?: DcAdsEntityFilter): Record<string, unknown> {
   else if (filter?.adsetId) args.p_adset_id = filter.adsetId
   else if (filter?.campaignId) args.p_campaign_id = filter.campaignId
   if (filter?.formId) args.p_form_id = filter.formId
+  if (filter?.funnelLabel) args.p_funnel_label = filter.funnelLabel
   return args
 }
 
@@ -175,19 +182,23 @@ export async function getDcAdsByRep(
 // cascade selection. Deepest wins: ad → cortana_ad_daily, ad set →
 // cortana_adset_daily, campaign → cortana_campaign_daily (that id only). A
 // form-only selection maps to the ads that served that form (a form is not a
-// Meta spend entity; its ads are) — when BOTH a form and a cascade entity are
-// selected, the entity wins the spend read while the funnel ANDs both. No
-// selection → cortana_campaign_daily over the whole meta_leadgen_campaigns set.
+// Meta spend entity; its ads are); a landing-page-only selection maps to the
+// registry campaigns carrying that funnel_label (a lead whose Close-side label
+// matches no registry campaign — rare cross-tagging — reads as $0 spend).
+// When a cascade entity is selected alongside either facet, the entity wins
+// the spend read while the funnel ANDs everything. No selection →
+// cortana_campaign_daily over the whole dc_ads_campaigns registry.
 async function spendScope(
   filter?: DcAdsEntityFilter,
 ): Promise<{ table: string; ids: string[]; campaigns: number }> {
   const sb = createAdminClient()
   const { data: camps, error } = await sb
     .from('dc_ads_campaigns' as never)
-    .select('campaign_id')
+    .select('campaign_id, funnel_label')
     .eq('active', true)
   if (error) throw new Error(`dc_ads_campaigns read failed: ${error.message}`)
-  const all = ((camps ?? []) as Array<{ campaign_id: string }>).map((c) => c.campaign_id)
+  const rows = (camps ?? []) as Array<{ campaign_id: string; funnel_label: string | null }>
+  const all = rows.map((c) => c.campaign_id)
   if (filter?.adId) return { table: 'cortana_ad_daily', ids: [filter.adId], campaigns: all.length }
   if (filter?.adsetId) return { table: 'cortana_adset_daily', ids: [filter.adsetId], campaigns: all.length }
   if (filter?.campaignId)
@@ -202,6 +213,10 @@ async function spendScope(
     if (aErr) throw new Error(`meta_form_leads form-ads read failed: ${aErr.message}`)
     const ids = Array.from(new Set(((ads ?? []) as Array<{ ad_id: string }>).map((r) => r.ad_id)))
     return { table: 'cortana_ad_daily', ids, campaigns: all.length }
+  }
+  if (filter?.funnelLabel) {
+    const ids = rows.filter((c) => c.funnel_label === filter.funnelLabel).map((c) => c.campaign_id)
+    return { table: 'cortana_campaign_daily', ids, campaigns: all.length }
   }
   return { table: 'cortana_campaign_daily', ids: all, campaigns: all.length }
 }

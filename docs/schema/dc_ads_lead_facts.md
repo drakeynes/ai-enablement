@@ -52,7 +52,8 @@ buckets 0–11), `updated_at` — plus (0126) the lead's Meta attribution
 `campaign_id`/`adset_id`/`ad_id` (from `close_leads`), which power the page's
 ad-cascade filters on `dc_ads_funnel()` / `dc_ads_funnel_by_rep()` /
 `dc_ads_daily()` / `dc_ads_speed_cohort()` (all take optional
-`p_campaign_id`/`p_adset_id`/`p_ad_id`/`p_form_id`;
+`p_campaign_id`/`p_adset_id`/`p_ad_id`/`p_form_id`, plus `p_funnel_label` —
+the page's landing-page dropdown, 0131;
 `dc_ads_daily(p_end_et, p_days, …)` returns the last-N-days cohort strip;
 `dc_ads_speed_cohort()` (0129) returns per-lead anchor/first-dial/dial-count
 rows for the page's speed-to-lead boxes) — and (0128) `form_id`, the Meta
