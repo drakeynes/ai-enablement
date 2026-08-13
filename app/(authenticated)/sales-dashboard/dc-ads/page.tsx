@@ -244,14 +244,18 @@ export default async function DcAdsPage({
         style={{ marginTop: 16, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.8 }}
       >
         Opt-ins = Digital College ad leads mirrored into Close — Meta instant form <i>and</i> landing
-        page → Typeform (anchored at the form submit; a
-        returning phone number re-anchors at its newest opt-in) · Called = ≥1 call (inbound or outbound,
-        any length) · Connected = a <b>call ≥90s</b> (either direction) or a filed pitch form · Showed = a
-        filed <b>DC sale form</b> or closer report (the lead got a pitch) · Closed = a DC close <b>with an
-        explicit plan</b> — from the DC sale form or a closer report (a closed form with no plan counts as
-        a show, not a close) · Cash = $300 per Digital College plan unit · Adspend = the registered
-        DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected, that
-        path&apos;s campaigns) · ROAS = cash ÷ adspend.
+        page → Typeform (anchored at the form submit; a returning phone number re-anchors at its
+        newest opt-in) · Qualified = the lead&apos;s own <b>Typeform</b> answered the qualifying
+        question with &ldquo;Yes I can pay for the AI tools&rdquo; (matched by phone/email; instant-form
+        leads have no Typeform, so they never qualify) · SMS = the lead <b>texted us back</b> (an
+        inbound SMS after the opt-in) · SMS+MQL = qualified <i>and</i> texted back · Connects = a{' '}
+        <b>call ≥90s</b> (either direction) or a filed pitch form · HVC = high-value connect —
+        SMS+MQL <i>or</i> a connect · Units = Digital College <b>plan units</b> closed · Closed = a DC
+        close <b>with an explicit plan</b> — from the DC sale form or a closer report (a closed form
+        with no plan counts as a show, not a close) · Cash = $300 per plan unit · Adspend = the
+        registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,
+        that path&apos;s campaigns) · ROAS = cash ÷ adspend. The stage row is <b>not</b> a funnel —
+        stages overlap rather than nest, so no stage need be smaller than the one before it.
       </div>
     </div>
   )

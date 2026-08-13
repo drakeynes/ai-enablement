@@ -160,9 +160,19 @@ Both are scoped by the `dc_ads_campaigns` registry (never "all `OFFSITE_CONVERSI
 the same ad account runs the unrelated Closer Funnel motion against `theaipartner.io`; see
 `docs/schema/dc_ads_campaigns.md`). The Outbound page's shape with **ad spend leading the funnel**:
 
-- **Funnel** — `Adspend → Opt-ins → Called → Connected → Closed` + cash & **ROAS** row (cash ÷
-  spend), with a **$/opt-in** figure on the adspend→opt-ins arrow. Booked/Showed computed but hidden
-  (same Connected → Closed model as Outbound). Adspend = `cortana_campaign_daily` summed over ONLY
+- **Stage row** (reshaped 2026-08-13, migration 0133 — was the Adspend→Called→Connected→Closed
+  funnel) — the boss's nine numbers:
+  `Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed`, plus the
+  cash & **ROAS** row. Deliberately **not a funnel** — stages overlap rather than nest, so the
+  arrows carry no conversion percentages. Definitions: Qualified = the lead's own Typeform hit
+  the LP's qualify answer (`dc_landing_pages.qualify_field_ref`/`qualify_answers` — ⚠ the DC
+  forms have NO "$2,000+" budget question; the shared discriminator is the affordability
+  question "Yes I can pay for the AI tools"; matched to the lead by phone/email, newest response
+  wins → `dc_ads_lead_facts.tf_qualified`); SMS = inbound SMS after the opt-in (`has_inbound`);
+  SMS+MQL = qualified AND texted back; Connects = the Connected roll (call ≥90s or a later
+  stage); HVC = SMS+MQL OR Connects; Units = `plan_units` sum (cash = units × $300).
+  Called/Booked/Showed are still computed for the page's other sections.
+  Adspend = `cortana_campaign_daily` summed over ONLY
   the registered DC campaigns (`dc_ads_campaigns` — instant-form campaigns detected by the adset
   discriminator `optimization_goal=LEAD_GENERATION` + `destination_type=ON_AD`, landing-page
   campaigns by creative destination host `digitalcollege.ai`; both re-scanned every 15 min).

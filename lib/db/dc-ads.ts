@@ -29,6 +29,12 @@ import type { DcPlanCounts } from './funnel-dc'
 
 export type DcAdsFunnel = {
   optIns: number
+  // The stage row (0133) — NOT monotonic; stages overlap rather than nest.
+  qualified: number // lead's own Typeform hit the LP's qualify answer
+  sms: number // inbound SMS after the opt-in (has_inbound)
+  smsMql: number // qualified AND texted back
+  hvc: number // "high-value connect": smsMql OR connected
+  units: number // DC plan units closed (cash = units × $300)
   called: number
   connected: number
   booked: number

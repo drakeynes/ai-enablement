@@ -24,6 +24,7 @@ so adding DC forms there would corrupt the Advertising Hub's numbers.
 | `lp_url` | UNIQUE — the normalized ad-destination URL (host+path, no scheme/query/trailing slash; `shared/lp_urls.py`). THE join key from `dc_ads_campaigns.destination_url`. |
 | `page_urls` | Additional normalized funnel pages (e.g. Luke's VSL page `join.digitalcollege.ai/t-2`, reached after the opt-in). The Wistia embed scan matches videos against `lp_url` AND these. |
 | `typeform_id` | The LP's opt-in Typeform. Auto-resolved by majority vote over `typeform_responses.hidden->>'campaign_id'` (861/862 coverage on the Aman form, verified 2026-08-13). |
+| `qualify_field_ref` / `qualify_answers` | (0133) The LP's Typeform qualification rule — field ref + the choice labels that count as qualified (same convention as `landing_page_forms`). ⚠ The DC forms have no "$2,000+" budget question; the shared discriminator is "Yes I can pay for the AI tools". Feeds `dc_ads_lead_facts.tf_qualified` at refresh. Manual — the resolver can't infer which question qualifies. |
 | `vsl` | `[{hashedId, label}]` — the funnel's video(s), same shape as `landing_pages.vsl`. Auto-appended by the Wistia embed-location scan; one video can serve several LPs (DC_VSL_Thank you_v2 plays on both funnels). |
 | `confirm_video_hashed_id` / `confirm_video_label` | Optional confirmation-page video. Manual for now (the confirmation-page URLs aren't registered). |
 | `active` | false retires an LP from the dropdown without deleting history. |

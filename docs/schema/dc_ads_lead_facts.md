@@ -75,6 +75,15 @@ via the campaign registry's `lp_slug` at refresh; `'instant-form'` pseudo-slug
 for instant-form leads). The landing-page dropdown's filter key (`p_lp_slug`);
 `funnel_label` stays as display metadata for the Paths strip.
 
+**0133** adds `tf_qualified` — the lead's own DC Typeform submission answered
+the LP's qualification question with a qualifying label
+(`dc_landing_pages.qualify_field_ref`/`qualify_answers`; the DC forms have no
+$2k budget question — the shared discriminator is "Yes I can pay for the AI
+tools"). Matched by phone (answers or hidden fields, last-10-digit rule) or
+email, newest response wins; null = no matched response (always null for
+instant-form leads). Powers the stage row's Qualified / SMS+MQL / HVC counts
+in `dc_ads_funnel()` (`qualified`, `sms`, `smsMql`, `hvc`, `units` fields).
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

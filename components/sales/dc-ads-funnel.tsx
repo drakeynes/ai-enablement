@@ -22,11 +22,13 @@ function PlanChip({ label, count }: { label: string; count: number }) {
   )
 }
 
-// DC ads funnel — the Digital College paid-ads funnel, with AD SPEND as the
-// leading node: adspend → opt-ins → called → connected → closed, plus a
-// cash + ROAS row. Booked/Showed are computed but hidden, matching the
-// Outbound funnel's Connected → Closed model (Drake 2026-06-24). Monotonic
-// from opt-ins on (each stage ⊆ the prior). See lib/db/dc-ads.ts.
+// DC ads stage row — the boss's nine numbers (2026-08-13):
+//   Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed
+// Deliberately NOT a funnel: the stages overlap rather than nest (SMS ⊄
+// Qualified, HVC = SMS+MQL ∪ Connects, Units ≥ Closed when multi-unit deals
+// land), so the arrows carry no conversion percentages — the row just puts
+// the numbers side by side. Cash + ROAS keep their own line below.
+// Definitions in the page footer; per-lead facts in lib/db/dc-ads.ts (0133).
 
 const ACCENT = '#b48ead' // purple — distinct from Direct green / setter yellow / reactivation blue / outbound coral
 
@@ -34,52 +36,27 @@ function usd(n: number): string {
   return '$' + Math.round(n).toLocaleString('en-US')
 }
 
-function pct(n: number, d: number): string {
-  if (d === 0) return '—'
-  return Math.round((n / d) * 100) + '%'
-}
-
-function Stage({ label, value, display, bracket, accent }: { label: string; value: number; display?: string; bracket?: string; accent?: boolean }) {
+function Stage({ label, value, display, accent }: { label: string; value: number; display?: string; accent?: boolean }) {
   return (
-    <div style={{ flex: 1, textAlign: 'center', padding: '14px 6px' }}>
+    <div style={{ flex: 1, textAlign: 'center', padding: '14px 4px' }}>
       <div
         className="geg-numeric-serif"
-        style={{ fontSize: 26, lineHeight: 1, color: value === 0 ? 'var(--color-geg-text-faint)' : accent ? ACCENT : 'var(--color-geg-text)' }}
+        style={{ fontSize: 23, lineHeight: 1, color: value === 0 ? 'var(--color-geg-text-faint)' : accent ? ACCENT : 'var(--color-geg-text)' }}
       >
         {display ?? value.toLocaleString('en-US')}
       </div>
-      {bracket ? (
-        <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-2)', marginTop: 3 }}>
-          {bracket}
-        </div>
-      ) : null}
-      <div className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)', marginTop: 5 }}>
+      <div className="geg-mono" style={{ fontSize: 8.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)', marginTop: 6, whiteSpace: 'nowrap' }}>
         {label}
       </div>
     </div>
   )
 }
 
-// The conversion % from the previous stage, shown on the connecting arrow.
-function Conv({ from, to }: { from: number; to: number }) {
+// Plain separator — no conversion %: the stages aren't subsets of each other.
+function Arrow() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 44 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
       <div className="geg-mono" style={{ color: 'var(--color-geg-text-faint)', fontSize: 13 }}>→</div>
-      <div className="geg-mono" style={{ fontSize: 9.5, color: 'var(--color-geg-text)', marginTop: 2 }}>
-        {pct(to, from)}
-      </div>
-    </div>
-  )
-}
-
-// Adspend → opt-ins junction: cost per opt-in instead of a conversion %.
-function CostPer({ spendUsd, optIns }: { spendUsd: number; optIns: number }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 52 }}>
-      <div className="geg-mono" style={{ color: 'var(--color-geg-text-faint)', fontSize: 13 }}>→</div>
-      <div className="geg-mono" style={{ fontSize: 9.5, color: 'var(--color-geg-text)', marginTop: 2 }}>
-        {optIns > 0 ? `${usd(spendUsd / optIns)}/opt-in` : '—'}
-      </div>
     </div>
   )
 }
@@ -97,20 +74,29 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
           DC Ads
         </span>
         <span className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)' }}>
-          · Meta lead-form funnel · selected dates
+          · both acquisition paths · selected dates
         </span>
       </div>
 
-      {/* The funnel — ad spend leads it */}
+      {/* The stage row — ad spend leads it; numbers only, no conversion %
+          (the stages overlap rather than nest). */}
       <div style={{ display: 'flex', alignItems: 'stretch', padding: '4px 10px' }}>
         <Stage label="Adspend" value={spendUsd} display={usd(spendUsd)} accent />
-        <CostPer spendUsd={spendUsd} optIns={f.optIns} />
+        <Arrow />
         <Stage label="Opt-ins" value={f.optIns} accent />
-        <Conv from={f.optIns} to={f.called} />
-        <Stage label="Called" value={f.called} />
-        <Conv from={f.called} to={f.connected} />
-        <Stage label="Connected" value={f.connected} />
-        <Conv from={f.connected} to={f.closed} />
+        <Arrow />
+        <Stage label="Qualified" value={f.qualified} />
+        <Arrow />
+        <Stage label="SMS" value={f.sms} />
+        <Arrow />
+        <Stage label="SMS+MQL" value={f.smsMql} />
+        <Arrow />
+        <Stage label="Connects" value={f.connected} />
+        <Arrow />
+        <Stage label="HVC" value={f.hvc} />
+        <Arrow />
+        <Stage label="Units" value={f.units} />
+        <Arrow />
         <Stage label="Closed" value={f.closed} accent />
       </div>
 
