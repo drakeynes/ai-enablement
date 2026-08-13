@@ -42,9 +42,10 @@ Note `/training` exists on **both** hosts — match on full host, never path alo
 | `campaign_id` | PK. Meta campaign id. Joins `close_leads.campaign_id`, `cortana_campaign_daily.platform_entity_id`. |
 | `campaign_name` | Meta campaign name, for display/debugging. |
 | `source_kind` | `instant_form` \| `landing_page`. Drives the page's path facet. |
-| `funnel_label` | Matches `close_leads.funnel_name` for this campaign's leads (`Digital College`, `Aman Funnel`, `Luke Funnel`). The page's funnel facet. |
+| `funnel_label` | Matches `close_leads.funnel_name` for this campaign's leads (`Digital College`, `Aman Funnel`, `Luke Funnel`). Display metadata since 0132 — the filter key is `lp_slug`. |
+| `lp_slug` | (0132) The landing page this campaign drives to — FK `dc_landing_pages.slug`, derived from the normalized `destination_url` by `resolve_dc_landing_pages()` each sync. Null for `instant_form`. THE scoping key for the page's landing-page dropdown (facts `lp_slug` + spend scope). |
 | `destination_url` | Landing-page campaigns only — the creative destination, and the evidence for the host rule above. |
-| `typeform_id` | Landing-page campaigns only — the Typeform the LP embeds (joins `typeform_responses.form_id`). |
+| `typeform_id` | Landing-page campaigns only — the Typeform the LP embeds (joins `typeform_responses.form_id`). Inherited from the `dc_landing_pages` row by the resolver when null. |
 | `active` | `false` retires a campaign from the page **without deleting it** (spend history must stay scoped). Paused-in-Meta campaigns stay `active=true` — their history still counts. |
 | `first_seen_at` / `last_seen_at` | Detection window. |
 
@@ -53,9 +54,13 @@ Note `/training` exists on **both** hosts — match on full host, never path alo
 - **Writes:** seeded in 0130 (instant-form rows from `meta_leadgen_campaigns`;
   the three landing-page campaigns verified live against the Meta API on
   2026-08-12). The adset scan in `ingestion/meta_ads/leads_pipeline.py` keeps
-  the `instant_form` rows current.
-- **Reads:** `refresh_dc_ads_facts()` (membership) and `spendScope()` in
-  `lib/db/dc-ads.ts` (ad-spend scope).
+  the `instant_form` rows current; the creative scan (0130) auto-registers new
+  landing-page campaigns; `resolve_dc_landing_pages()` (0132) stamps
+  `lp_slug` + inherits `typeform_id` from the `dc_landing_pages` registry.
+- **Reads:** `refresh_dc_ads_facts()` (membership + `lp_slug` stamp),
+  `spendScope()` in `lib/db/dc-ads.ts` (ad-spend scope), and
+  `getDcAdsHierarchy()` (the campaign dropdown lists EVERY active row — a
+  registered campaign with zero leads still shows, matching the Meta view).
 
 ## Adding a new DC campaign
 

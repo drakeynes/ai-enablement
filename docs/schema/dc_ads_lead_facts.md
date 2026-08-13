@@ -52,8 +52,9 @@ buckets 0–11), `updated_at` — plus (0126) the lead's Meta attribution
 `campaign_id`/`adset_id`/`ad_id` (from `close_leads`), which power the page's
 ad-cascade filters on `dc_ads_funnel()` / `dc_ads_funnel_by_rep()` /
 `dc_ads_daily()` / `dc_ads_speed_cohort()` (all take optional
-`p_campaign_id`/`p_adset_id`/`p_ad_id`/`p_form_id`, plus `p_funnel_label` —
-the page's landing-page dropdown, 0131;
+`p_campaign_id`/`p_adset_id`/`p_ad_id`/`p_form_id`, plus `p_lp_slug` — the
+page's landing-page dropdown, 0132 — and `p_funnel_label`, 0131's facet kept
+as a deprecated rollout-compat alias;
 `dc_ads_daily(p_end_et, p_days, …)` returns the last-N-days cohort strip;
 `dc_ads_speed_cohort()` (0129) returns per-lead anchor/first-dial/dial-count
 rows for the page's speed-to-lead boxes) — and (0128) `form_id`, the Meta
@@ -68,6 +69,11 @@ label) and `typeform_id` (landing-page leads only, from
 `dc_ads_campaigns.typeform_id`). `form_id` stays the **Meta instant form** and is
 null for landing-page leads; `typeform_id` is its landing-page counterpart and is
 null for instant-form leads.
+
+**0132** adds `lp_slug` — the lead's landing page (`dc_landing_pages.slug`,
+via the campaign registry's `lp_slug` at refresh; `'instant-form'` pseudo-slug
+for instant-form leads). The landing-page dropdown's filter key (`p_lp_slug`);
+`funnel_label` stays as display metadata for the Paths strip.
 
 ## Populated by / read by
 
