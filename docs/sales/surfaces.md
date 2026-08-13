@@ -193,15 +193,33 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `meta_form_leads` hid every landing-page campaign, which never submits a Meta form); entity
   names come from the `cortana_*` spend mirrors.
 - **Landing-page dropdown** (2026-08-13; replaced the Forms dropdown) — a fourth select beside
-  the cascade (`?lp`), the DC counterpart of the hub's landing-page filter. Options are the
-  window's acquisition paths (`funnel_label`: "Aman Funnel", "Luke Funnel", "Digital College" for
-  the legacy instant-form path) with opt-in counts. An independent AND facet — a path spans many
-  ads — backed by `dc_ads_lead_facts.funnel_label` via the RPCs' `p_funnel_label` param (0131).
-  Spend under an LP-only selection = that path's registry campaigns summed from
-  `cortana_campaign_daily`; with a cascade entity selected too, the entity wins the spend read
-  while the funnel ANDs both. The retired Forms facet's plumbing (`form_id` column, `p_form_id`
-  RPC param, form→ads spend mapping in `lib/db/dc-ads.ts`) is all retained — the forms breakdown
-  is planned to resurface in its own section.
+  the cascade (`?lp`), the DC counterpart of the hub's landing-page filter. Options come from the
+  **`dc_landing_pages` registry** (0132) with URL-derived names ("join/training", "go") plus an
+  "Instant form (no LP)" pseudo-entry for the legacy path; counts are window opt-ins. An
+  independent AND facet — a page spans many ads — backed by `dc_ads_lead_facts.lp_slug` via the
+  RPCs' `p_lp_slug` param (0132; `p_funnel_label` from 0131 remains as a deprecated compat
+  alias). Spend under an LP-only selection = the campaigns driving to that page
+  (`dc_ads_campaigns.lp_slug`) summed from `cortana_campaign_daily`; with a cascade entity
+  selected too, the entity wins the spend read while the funnel ANDs both. **A new funnel
+  self-registers**: creative scan → registry row (URL-named) → dropdown + spend + facts, no
+  manual steps (`resolve_dc_landing_pages()`, see `docs/schema/dc_landing_pages.md`). The
+  retired Forms facet's plumbing (`form_id` column, `p_form_id` RPC param, form→ads spend
+  mapping) is all retained — the forms breakdown is planned to resurface in its own section.
+- **Campaign dropdown lists the FULL registry** (2026-08-13) — every active `dc_ads_campaigns`
+  row appears, newest launch first (leading M/D in the name), with 0-counts for campaigns that
+  have no window opt-ins — so the list matches the boss's Meta-manager view (a just-created or
+  never-run campaign is visible immediately).
+- **Ads & landing page section** (2026-08-13) — the hub's inline summary shaped to DC, under the
+  daily strip (`components/sales/dc-ads-lp-summary.tsx` + `lib/db/dc-ads-summary.ts`). Three
+  blocks: **Meta ads** (adspend/impressions/unique clicks/CTR/CPM/$-per-click/frequency from the
+  `cortana_*` mirrors over the active selection), **Landing page** (LP visits = Meta unique link
+  clicks of the LP scope — follows the LP dropdown, never the cascade, hub semantics — + Typeform
+  submissions from `typeform_responses`; starts/completion need Typeform's Insights API, not
+  mirrored), **Videos** (the LP's registered videos via the hub's `getVslMetrics` math over
+  `wistia_media_daily`; videos auto-attach to LPs by Wistia embed location —
+  `attach_dc_lp_videos()`). ⚠ Wistia stats are per-video across all its embeds: the same VSL runs
+  on both DC funnels today, so an LP selection scopes which videos show, not where they were
+  watched (footnoted on the page).
 - **Last 5 days strip** (added 2026-07-10) — the hub's daily cohort table shaped to the DC funnel:
   Day · Spend · Opt-ins · Called · Connected · Closed · Cash · Dials (no speed-to-lead, no
   bookings). Each row = that ET day's opt-in cohort + lifetime progression + dials received.

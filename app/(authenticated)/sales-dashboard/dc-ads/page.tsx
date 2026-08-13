@@ -2,6 +2,7 @@ import { HeaderBand } from '@/components/gregory/header-band'
 import { AdCascadeFilter } from '@/components/sales/ad-cascade-filter'
 import { DcAdsCalledSection } from '@/components/sales/dc-ads-called'
 import { DcAdsDailyTable } from '@/components/sales/dc-ads-daily-table'
+import { DcAdsLpSummarySection } from '@/components/sales/dc-ads-lp-summary'
 import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
@@ -17,6 +18,7 @@ import {
   getDcAdsSpeedCohort,
   type DcAdsEntityFilter,
 } from '@/lib/db/dc-ads'
+import { getDcAdsLpSummary } from '@/lib/db/dc-ads-summary'
 import { dateRangeFromExplicit, todayEtDate } from '@/lib/db/funnel-window'
 import { DateRangePicker } from '../funnel/landing-pages/date-range-picker'
 import { PersonPill } from '../header-pills'
@@ -69,14 +71,15 @@ export default async function DcAdsPage({
 
   // Ad cascade selection (?campaign / ?adset / ?ad) — same URL contract as the
   // Advertising Hub's chooser — plus the landing-page facet (?lp, an AND
-  // filter on funnel_label, the Hub's LandingPageFilter counterpart; 0131).
-  // Scopes everything: spend, funnel, by-rep, speed-to-lead, speed-to-dial,
-  // time-of-day, and the last-5-days strip.
+  // filter; the Hub's LandingPageFilter counterpart). Values are
+  // dc_landing_pages slugs ('join-training', 'go', or 'instant-form' for the
+  // legacy path; 0132). Scopes everything: spend, funnel, by-rep,
+  // speed-to-lead, speed-to-dial, time-of-day, and the last-5-days strip.
   const campaign = param(searchParams?.campaign)
   const adset = param(searchParams?.adset)
   const ad = param(searchParams?.ad)
   const lp = param(searchParams?.lp)
-  const filter: DcAdsEntityFilter = { campaignId: campaign, adsetId: adset, adId: ad, funnelLabel: lp }
+  const filter: DcAdsEntityFilter = { campaignId: campaign, adsetId: adset, adId: ad, lpSlug: lp }
   const filterActive = !!(ad || adset || campaign || lp)
 
   const range = dateRangeFromExplicit(startEt, endEt)
@@ -90,6 +93,7 @@ export default async function DcAdsPage({
     dailyRows,
     hierarchy,
     speedCohort,
+    adsLp,
   ] = await Promise.all([
     getDcAdsFunnel(rangeBounds, filter),
     getDcAdsByRep(rangeBounds, filter),
@@ -99,6 +103,7 @@ export default async function DcAdsPage({
     getDcAdsDaily(todayEt, filter),
     getDcAdsHierarchy(rangeBounds),
     getDcAdsSpeedCohort(rangeBounds, filter),
+    getDcAdsLpSummary(range, filter),
   ])
 
   return (
@@ -115,7 +120,7 @@ export default async function DcAdsPage({
           campaign={campaign}
           adset={adset}
           ad={ad}
-          landingPages={hierarchy.funnels.map((f) => ({ value: f.label, label: f.label, count: f.count }))}
+          landingPages={hierarchy.landingPages.map((p) => ({ value: p.slug, label: p.label, count: p.count }))}
           lp={lp}
           startEtDate={startEt}
           endEtDate={endEt}
@@ -187,6 +192,10 @@ export default async function DcAdsPage({
       <DcAdsFunnelSection funnel={funnel} spendUsd={spend.spendUsd} />
 
       <DcAdsDailyTable rows={dailyRows} />
+
+      {/* Ads + Landing page + Videos — the Hub's summary section shaped to
+          the DC funnel; follows the cascade + landing-page dropdown. */}
+      <DcAdsLpSummarySection summary={adsLp} />
 
       <DcAdsByRepSection rows={byRep.reps} totals={byRep.totals} />
 
