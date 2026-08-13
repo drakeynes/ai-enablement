@@ -263,14 +263,21 @@ export async function getDcAdsSpend(
   return { spendUsd: spend, campaigns: scope.campaigns }
 }
 
-// The last-5-days strip: per-ET-day cohort rows (opt-ins that day + lifetime
-// progression + dials received), newest first — the DC sibling of the hub's
-// getDailyFunnelTable, minus speed-to-lead and bookings. Pinned to the rolling
-// strip regardless of the date picker; scoped to the cascade selection.
+// The rolling daily cohort table (last 30 days on the page since 0134):
+// per-ET-day rows, newest first — the DC sibling of the hub's
+// getDailyFunnelTable. Spend + opt-ins freeze once the day ends; every other
+// column is the cohort's LIFETIME progression, so a day's SMS / Connects /
+// Units keep climbing on later visits. Pinned to the rolling window
+// regardless of the date picker; scoped to the cascade + LP selection.
 export type DcAdsDailyRow = {
   etDate: string
   spendUsd: number | null
   optIns: number
+  qualified: number
+  sms: number
+  smsMql: number
+  hvc: number
+  units: number
   called: number
   connected: number
   closed: number

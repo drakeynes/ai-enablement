@@ -230,11 +230,15 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `attach_dc_lp_videos()`). ⚠ Wistia stats are per-video across all its embeds: the same VSL runs
   on both DC funnels today, so an LP selection scopes which videos show, not where they were
   watched (footnoted on the page).
-- **Last 5 days strip** (added 2026-07-10) — the hub's daily cohort table shaped to the DC funnel:
-  Day · Spend · Opt-ins · Called · Connected · Closed · Cash · Dials (no speed-to-lead, no
-  bookings). Each row = that ET day's opt-in cohort + lifetime progression + dials received.
-  Pinned to the rolling strip regardless of the date picker; follows the ad chooser. Backed by the
-  `dc_ads_daily()` RPC (0126) + a per-day spend merge in `lib/db/dc-ads.ts`.
+- **Last 30 days table** (added 2026-07-10 as a 5-day strip; 30 days + stage metrics 2026-08-13,
+  migration 0134) — the hub's daily cohort table carrying the stage-row metrics: Day · Spend ·
+  Opt-ins · Qualified · SMS · SMS+MQL · Connects · HVC · Units · Closed, rows scrolling inside a
+  fixed-height box (header pinned). Each row = that ET day's opt-in cohort: spend + opt-ins
+  freeze when the day ends, every downstream column is LIFETIME progression and keeps climbing as
+  that cohort texts back / connects / closes — recent days always read lighter. Pinned to the
+  rolling window regardless of the date picker; follows the ad chooser + landing-page dropdown.
+  Backed by the `dc_ads_daily()` RPC (0126→0134; still returns called/cash/dials for other
+  consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close
   bridge is dropping leads). Unfiltered view only (the Meta count isn't cascade-scoped).

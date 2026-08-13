@@ -100,7 +100,7 @@ export default async function DcAdsPage({
     getDcAdsSpend(startEt, endEt, filter),
     getDcAdsMetaOptIns(rangeBounds),
     getDcAdsInstantFormOptIns(rangeBounds),
-    getDcAdsDaily(todayEt, filter),
+    getDcAdsDaily(todayEt, filter, 30),
     getDcAdsHierarchy(rangeBounds),
     getDcAdsSpeedCohort(rangeBounds, filter),
     getDcAdsLpSummary(range, filter),
