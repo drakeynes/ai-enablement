@@ -29,6 +29,12 @@ different landing page) catch up within ~15 minutes.
 > separate rows (that's the "NOT LINKED" tag you may see on the DC Ads page).
 > Verifying links the two identities permanently.
 
+## Scenario 1b — dismissed someone by accident
+
+Under the verify queue there's a collapsed **"Dismissed (N)"** line — click it,
+find the person, hit **Restore**. They pop straight back into the queue above.
+(Dismiss is only for test/junk rows; real people get verified or left waiting.)
+
 ## Scenario 2 — a rep left (high turnover path)
 
 DC Setup → **Current team** → find them → **Deactivate**. Their history stays

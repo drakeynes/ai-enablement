@@ -5,6 +5,7 @@ import { getCurrentUserAccessTier, tierAtLeast } from '@/lib/auth/access-tier'
 import {
   getDcRepCandidates,
   getDcTeam,
+  getDismissedCandidates,
   getUnmappedDcCallers,
   getAllDcLandingPagesAdmin,
   getAllDcCampaignsAdmin,
@@ -35,11 +36,12 @@ export default async function DcSetupPage() {
     if (!access || !tierAtLeast(access.tier, 'admin')) redirect('/sales-dashboard')
   }
 
-  const [{ candidates, closeUsers }, team, unmapped, pages, campaigns, wistia, typeforms] =
+  const [{ candidates, closeUsers }, team, unmapped, dismissed, pages, campaigns, wistia, typeforms] =
     await Promise.all([
       getDcRepCandidates(),
       getDcTeam(),
       getUnmappedDcCallers(),
+      getDismissedCandidates(),
       getAllDcLandingPagesAdmin(),
       getAllDcCampaignsAdmin(),
       getWistiaInventory(),
@@ -65,7 +67,13 @@ export default async function DcSetupPage() {
       </p>
 
       <Section title="Team" subtitle="Who appears on the DC Ads by-rep table and roster.">
-        <TeamManager candidates={candidates} closeUsers={closeUsers} team={team} unmapped={unmapped} />
+        <TeamManager
+          candidates={candidates}
+          closeUsers={closeUsers}
+          team={team}
+          unmapped={unmapped}
+          dismissed={dismissed}
+        />
       </Section>
 
       <Section

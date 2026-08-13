@@ -3,12 +3,19 @@
 import { useState, useTransition } from 'react'
 
 import type { SalesRole } from '@/lib/db/sales-rep-verify-shared'
-import type { CloseUserOption, DcRepCandidate, DcTeamMember, UnmappedDcCaller } from '@/lib/db/dc-setup'
+import type {
+  CloseUserOption,
+  DcRepCandidate,
+  DcTeamMember,
+  DismissedCandidate,
+  UnmappedDcCaller,
+} from '@/lib/db/dc-setup'
 import type { RepDraftInput } from '../../reps/actions'
 import {
   dcVerifyRep,
   dcSaveRepDraft,
   dcDismissRepCandidate,
+  dcRestoreRepCandidate,
   updateTeamMember,
   setTeamMemberActive,
 } from '../actions'
@@ -60,11 +67,13 @@ export function TeamManager({
   closeUsers,
   team,
   unmapped,
+  dismissed,
 }: {
   candidates: DcRepCandidate[]
   closeUsers: CloseUserOption[]
   team: DcTeamMember[]
   unmapped: UnmappedDcCaller[]
+  dismissed: DismissedCandidate[]
 }) {
   const activeCount = team.filter((t) => t.isActive).length
   return (
@@ -83,6 +92,7 @@ export function TeamManager({
             ))}
           </div>
         )}
+        {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
       </div>
 
       <div>
@@ -356,6 +366,54 @@ function MemberRow({ member, closeUsers }: { member: DcTeamMember; closeUsers: C
         </div>
       ) : null}
     </div>
+  )
+}
+
+// Collapsed safety net for accidental dismissals — Restore puts the person
+// straight back in the verify queue.
+function DismissedList({ dismissed }: { dismissed: DismissedCandidate[] }) {
+  const { pending, msg, run } = useAction()
+  return (
+    <details style={{ marginTop: 10 }}>
+      <summary
+        className="geg-mono"
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--color-geg-text-faint)',
+          cursor: 'pointer',
+        }}
+      >
+        Dismissed ({dismissed.length}) — click to show
+      </summary>
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {dismissed.map((d) => (
+          <div
+            key={d.airtableRecordId}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0' }}
+          >
+            <span className="geg-serif" style={{ fontSize: 13.5, color: 'var(--color-geg-text-2)', minWidth: 140 }}>
+              {d.fullName ?? d.airtableRecordId}
+            </span>
+            <span className="geg-mono" style={{ fontSize: 10, color: 'var(--color-geg-text-faint)' }}>
+              dismissed {d.dismissedAt ? d.dismissedAt.slice(0, 10) : '—'}
+            </span>
+            <button
+              type="button"
+              disabled={pending}
+              style={secondaryBtn(pending)}
+              onClick={() =>
+                run(() => dcRestoreRepCandidate(d.airtableRecordId), 'Restored — back in the queue above.')
+              }
+            >
+              Restore
+            </button>
+          </div>
+        ))}
+        {msg ? <Msg msg={msg} /> : null}
+      </div>
+    </details>
   )
 }
 

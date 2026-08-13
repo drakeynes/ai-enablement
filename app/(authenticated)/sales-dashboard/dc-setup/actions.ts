@@ -73,6 +73,30 @@ export async function dcDismissRepCandidate(recordId: string): Promise<RepAction
   return res
 }
 
+// Undo an accidental dismiss (Drake 2026-08-13): flip the verification back
+// to 'draft' — the candidate reappears in the verify queue (any pre-dismiss
+// draft fields survive, since dismissing only overwrote the status).
+export async function dcRestoreRepCandidate(recordId: string): Promise<RepActionResult> {
+  const access = await requireAdmin()
+  if (!access) return { ok: false, error: 'forbidden' }
+  const id = clean(recordId)
+  if (!id) return { ok: false, error: 'invalid_record_id' }
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('sales_rep_verifications' as never)
+    .upsert(
+      {
+        airtable_record_id: id,
+        status: 'draft',
+        updated_by: access.team_member.email,
+      } as never,
+      { onConflict: 'airtable_record_id' } as never,
+    )
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(PATH)
+  return { ok: true }
+}
+
 export type TeamMemberEditInput = {
   id: string
   fullName: string

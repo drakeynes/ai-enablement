@@ -66,6 +66,48 @@ export async function getDcRepCandidates(): Promise<{
   }
 }
 
+// Dismissed candidates — the accidental-dismiss safety net (Drake
+// 2026-08-13): a collapsed list in the Team section with a Restore button.
+// No auto-expiry; dismissals are rare and the list stays small.
+export type DismissedCandidate = {
+  airtableRecordId: string
+  fullName: string | null
+  dismissedAt: string | null
+}
+
+export async function getDismissedCandidates(): Promise<DismissedCandidate[]> {
+  const admin = createAdminClient()
+  const [{ data: vers }, { data: cands }, { data: tms }] = await Promise.all([
+    admin
+      .from('sales_rep_verifications' as never)
+      .select('airtable_record_id, status, updated_at')
+      .eq('status', 'deleted'),
+    admin.from('sales_rep_candidates' as never).select('airtable_record_id, full_name'),
+    admin
+      .from('team_members' as never)
+      .select('airtable_user_id')
+      .not('airtable_user_id', 'is', null)
+      .is('archived_at', null),
+  ])
+  const nameByRecord = new Map(
+    ((cands ?? []) as Array<Record<string, unknown>>).map((c) => [
+      c.airtable_record_id as string,
+      (c.full_name as string) ?? null,
+    ]),
+  )
+  const mapped = new Set(
+    ((tms ?? []) as Array<Record<string, unknown>>).map((t) => t.airtable_user_id as string),
+  )
+  return ((vers ?? []) as Array<Record<string, unknown>>)
+    .filter((v) => !mapped.has(v.airtable_record_id as string))
+    .map((v) => ({
+      airtableRecordId: v.airtable_record_id as string,
+      fullName: nameByRecord.get(v.airtable_record_id as string) ?? null,
+      dismissedAt: (v.updated_at as string) ?? null,
+    }))
+    .sort((a, b) => (b.dismissedAt ?? '').localeCompare(a.dismissedAt ?? ''))
+}
+
 // A current team member as the Team section edits it. Only sales rows —
 // engineering / CSM / leadership rows are invisible here on purpose.
 export type DcTeamMember = {
