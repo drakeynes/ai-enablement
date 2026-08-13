@@ -6,6 +6,7 @@ import { DcAdsLpSummarySection } from '@/components/sales/dc-ads-lp-summary'
 import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
+import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
 import { SpeedToLeadBoxes } from '@/components/sales/speed-to-lead-boxes'
 import {
   getDcAdsFunnel,
@@ -20,6 +21,7 @@ import {
   type DcAdsEntityFilter,
 } from '@/lib/db/dc-ads'
 import { getDcAdsLpSummary } from '@/lib/db/dc-ads-summary'
+import { getDcTeam } from '@/lib/db/dc-setup'
 import { dateRangeFromExplicit, todayEtDate } from '@/lib/db/funnel-window'
 import { DateRangePicker } from '../funnel/landing-pages/date-range-picker'
 import { PersonPill } from '../header-pills'
@@ -95,6 +97,7 @@ export default async function DcAdsPage({
     hierarchy,
     speedCohort,
     adsLp,
+    team,
   ] = await Promise.all([
     getDcAdsFunnel(rangeBounds, filter),
     getDcAdsByRep(rangeBounds, filter),
@@ -105,6 +108,7 @@ export default async function DcAdsPage({
     getDcAdsHierarchy(rangeBounds),
     getDcAdsSpeedCohort(rangeBounds, filter),
     getDcAdsLpSummary(range, filter),
+    getDcTeam(),
   ])
 
   return (
@@ -199,6 +203,10 @@ export default async function DcAdsPage({
       <DcAdsLpSummarySection summary={adsLp} />
 
       <DcAdsByRepSection rows={byRep.reps} totals={byRep.totals} />
+
+      {/* Roster — one card per human on the team (managed in DC Setup),
+          DC-cohort activity only. Below the by-rep table per boss item 8. */}
+      <DcAdsRosterSection team={team} reps={byRep.reps} />
 
       {/* Speed-to-lead boxes — the Leads page's top-line stats computed over
           the DC ads opt-in cohort, on the DC dial team's OWN clock (12p–12a

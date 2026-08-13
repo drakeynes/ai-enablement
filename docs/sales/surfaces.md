@@ -180,14 +180,20 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   actually file these dial-up pitches; the Full Closer Report went quiet with the program
   suspension) unioned with the closer report (0127): a filed form = showed, `Closed?=Yes` with ≥1
   plan = a close, `Closed?=Yes` with no plan = show + the marked-no-plan counter.
-- **By rep** — Dials / Connections / Closes / Cash, same Close-calls + closer-report bridge as
+- **By rep** (talent detail 2026-08-13, migration 0136) — Dials / Connections / **Shows / Closes /
+  Units / B44·Mo / B44·Yr / Wix·Mo / Wix·Yr** / Cash, same Close-calls + Airtable-forms bridge as
   Outbound's table (closes also from the DC sale form since 0127), but **every rep with activity is
-  listed** (not closers-only — this pool is dial-heavy). Connections are counted **per call** (a
-  lead reached twice counts twice; inbound ≥90s pickups count), so the column sum runs higher than
-  the funnel's lead-level Connected — footnoted on the page. ⚠ A DC-sale-form closer whose
-  `team_members` row is missing (or lacks `airtable_user_id`) shows as a SEPARATE row under the
-  form's nickname ("Seb", "Flo") instead of merging with their dials row — fix by completing the
-  roster mapping, not the SQL.
+  listed** (not closers-only — this pool is dial-heavy). Shows = filed pitches (the facts refresh's
+  is_showed semantics); a two-closer deal credits both while the header totals count deals once.
+  Connections are counted **per call** (a lead reached twice counts twice; inbound ≥90s pickups
+  count), so the column sum runs higher than the funnel's lead-level Connected — footnoted on the
+  page. A rep whose identities aren't linked in `team_members` shows a **NOT LINKED** tag and can
+  appear as two rows (dial name + form nickname) — fix in **DC Setup → Team** (verify them), never
+  the SQL.
+- **Roster** (added 2026-08-13) — the Talent Roster's card grid **scoped to the DC ad cohort**: one
+  card per team member (managed in DC Setup; active-first, "Show inactive" toggle, zero-activity
+  actives included so a new hire is visible before their first dial) with Dials / Connects / Shows /
+  Closes / Units / Cash from the by-rep RPC; unlinked activity rows get their own NOT-LINKED card.
 - **Speed to lead boxes** (added 2026-07-15; reclocked + SMS box 2026-08-13, migration 0135) —
   the Leads page's top-line stats computed over the DC-ads cohort, **on the DC dial team's own
   12p–12a ET clock** (boss 2026-08-13 — deliberately NOT comparable with the Leads page's
@@ -398,6 +404,42 @@ every 30 min) and Close → `close_users` (the daily close-users cron); draft/fi
 0112); this admin tool additionally re-checks **admin tier** and is hidden from the sidebar
 for sales reps (csm). See `docs/schema/sales_rep_candidates.md`, `sales_rep_verifications.md`,
 `close_users.md`, and `team_members.md` § Sales identity + § Department areas.
+
+---
+
+## DC Setup (admin) — `/sales-dashboard/dc-setup` (admin, added 2026-08-13)
+
+The ONE page where Zain/Aman run the whole DC Ads operation with no engineer
+(Drake 2026-08-13). Operator guide + Loom script:
+`docs/runbooks/dc_setup_admin.md`. Three sections:
+
+- **Team** — who appears on the DC Ads by-rep table + roster. (a) The
+  **verify queue**: `sales_rep_candidates` (Airtable "Sales Team Member" →
+  cron, migration 0109) with a **suggested Close match** pre-selected
+  (unambiguous first-name match against `close_users`; the human confirms).
+  Verifying delegates to the /sales-dashboard/reps `completeRep` action —
+  one write path for `team_members` — linking the Airtable form identity +
+  Close identity into one row. (b) **Current team**: edit (name / role /
+  email / Close link) + **deactivate / reactivate** (`is_active` — the
+  offboarding path; history stays). (c) **Unmapped-caller radar**:
+  `dc_ads_unmapped_callers()` (0136) — people dialing DC leads with no
+  `team_members` row.
+- **Landing pages** — the `dc_landing_pages` registry (0132): rename, URL
+  (normalized in lockstep with `shared/lp_urls.py` via `lib/lp-urls.ts`),
+  extra funnel pages, Typeform (dropdown), **qualification question +
+  qualifying answers** (picker over the form's mirrored choice fields —
+  drives the page's Qualified stage), videos (Wistia-inventory dropdown),
+  retire/restore. No hard delete (facts + campaigns reference the slug).
+  Saving marks the row curated (`auto_created=false`); the ingestion resolver
+  never overwrites curated fields.
+- **Campaigns** — `dc_ads_campaigns` (0130): per-campaign landing-page link
+  (`lp_slug`; facts re-stamp ≤15 min) and **retire/restore** (`active` —
+  retiring removes the campaign's spend AND leads from the page; paused-in-
+  Meta campaigns stay active so history counts).
+
+All actions are admin-gated server-side and `revalidatePath` the DC Ads +
+Talent pages. Aman was bumped to `access_tier='admin'` (2026-08-13) so both
+he and Zain can operate it.
 
 ---
 

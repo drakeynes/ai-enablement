@@ -84,6 +84,11 @@ email, newest response wins; null = no matched response (always null for
 instant-form leads). Powers the stage row's Qualified / SMS+MQL / HVC counts
 in `dc_ads_funnel()` (`qualified`, `sms`, `smsMql`, `hvc`, `units` fields).
 
+**0136** (no facts columns) reshapes `dc_ads_funnel_by_rep()` output: per-rep
+`shows` (the refresh's is_showed semantics over window-filed forms), `units` +
+plan splits, and `teamMemberId` (the DC Ads roster grid's identity join); adds
+`dc_ads_unmapped_callers()` (DC Setup's radar for unlinked dialers).
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

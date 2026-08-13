@@ -57,6 +57,8 @@ Note `/training` exists on **both** hosts — match on full host, never path alo
   the `instant_form` rows current; the creative scan (0130) auto-registers new
   landing-page campaigns; `resolve_dc_landing_pages()` (0132) stamps
   `lp_slug` + inherits `typeform_id` from the `dc_landing_pages` registry.
+  Humans curate via **DC Setup** (`/sales-dashboard/dc-setup` → Campaigns:
+  `active` toggle + `lp_slug` link only — membership stays ingestion-owned).
 - **Reads:** `refresh_dc_ads_facts()` (membership + `lp_slug` stamp),
   `spendScope()` in `lib/db/dc-ads.ts` (ad-spend scope), and
   `getDcAdsHierarchy()` (the campaign dropdown lists EVERY active row — a

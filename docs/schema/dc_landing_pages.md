@@ -37,7 +37,11 @@ so adding DC forms there would corrupt the Advertising Hub's numbers.
   `resolve_dc_landing_pages()` (`ingestion/meta_ads/leads_pipeline.py`, every
   Meta leads sync) auto-creates rows for unseen destination URLs + resolves
   typeforms, and `attach_dc_lp_videos()` (`ingestion/wistia/pipeline.py`,
-  every Wistia sync) auto-attaches videos by embed location.
+  every Wistia sync) auto-attaches videos by embed location. Humans edit via
+  **DC Setup** (`/sales-dashboard/dc-setup` → Landing pages; admin-gated
+  server actions — save marks the row curated, retire/restore toggles
+  `active`, URLs normalized by `lib/lp-urls.ts` in lockstep with
+  `shared/lp_urls.py`). See `docs/runbooks/dc_setup_admin.md`.
 - **Reads:** `lib/db/dc-ads.ts` (`getDcAdsHierarchy` — the dropdown options;
   `spendScope` — via `dc_ads_campaigns.lp_slug`), `lib/db/dc-ads-summary.ts`
   (the Ads & LP section: typeform + videos per LP),

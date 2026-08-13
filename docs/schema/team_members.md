@@ -86,6 +86,12 @@ Resolution: `getCurrentUserAccessTier()` (`lib/auth/access-tier.ts`) returns `ar
 - **GHL dials → person:** `ghl_messages.user_id == ghl_user_id` (GHL outbound campaigns; auto-synced by email via `ghl_sync_cron`, so unlike `airtable_user_id` it needs no manual step).
 - **Calendly meetings → person:** `calendly_scheduled_events.event_type_uri == calendly_event_type_uri`.
 
+**DC Setup (`/sales-dashboard/dc-setup`, 2026-08-13)** is the day-to-day admin surface for sales
+rows: it wraps the verify flow below (same `completeRep` write path, with a suggested Close match
+pre-selected by first-name matching), and adds the pieces turnover needs — **edit** (name / role /
+email / Close link via `updateTeamMember`) and **deactivate / reactivate** (`is_active` via
+`setTeamMemberActive`; history stays attributed). Operator guide: `docs/runbooks/dc_setup_admin.md`.
+
 **Onboarding a new sales rep — the verify page (`/sales-dashboard/reps`, migration 0109).** `airtable_user_id` is the one sales-identity key with no automatic sync (Sierra's was hand-backfilled in 0104). The admin verify page closes that gap: new reps from the Airtable "Sales Team Member" table (mirrored into `sales_rep_candidates`) surface as cards; an admin resolves the rep's `close_user_id` + `email` (a Close-user picker reading `close_users`, or manual entry), picks `sales_role` (setter/closer/dc_closer), optionally adds `calendly_event_type_uri`, and Completes — which writes this row (`role='sales'`, `access_tier='csm'`). The rep then auto-appears on every per-rep surface via the joins below. Forward-only (Airtable records created on/after the cutoff). See `docs/sales/surfaces.md` § Verify Reps and `docs/schema/sales_rep_candidates.md` / `sales_rep_verifications.md` / `close_users.md`. `close_user_id` still also auto-fills by email via `close_users_sync_cron` for rows that lack it.
 
 `sales_role` partitions the per-rep views: `setter` and `closer` feed the regular call-activity tables; `dc_closer` is excluded from those and instead feeds the People page's Digital College section. The DC view (`funnel-digital-college.ts`) selects `WHERE sales_role = 'dc_closer' AND archived_at IS NULL` and renders one row per closer keyed by `close_user_id` — so a closer whose forms store a short name ("Robby") and whose Calendly/dials path uses a fuller name ("Robby Bryant") no longer splits into two rows.

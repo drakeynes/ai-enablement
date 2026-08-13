@@ -7,9 +7,10 @@ const PLAN_COLS: { key: keyof Omit<DcAdsRepTotals, 'closes'>; label: string }[] 
   { key: 'wixYearly', label: 'Wix·Yr' },
 ]
 
-// Per-rep DC ads breakdown — one combined row per rep across Dials /
-// Connections / Closes / Cash, same bridge as the Outbound page's table
-// (Close calls + Airtable closer reports via team_members). ACTIVITY-scoped.
+// Per-rep DC ads breakdown — the Talent DC-table detail scoped to the DC ad
+// cohort (boss item 7, 2026-08-13): Dials / Connections / Shows / Closes /
+// Units / plan splits / Cash, same identity bridge as ever (Close calls +
+// Airtable forms via team_members — link people in DC Setup). ACTIVITY-scoped.
 // Unlike Outbound (closers only), EVERY rep with activity is listed: this
 // pool is dial-heavy and the dialing work is what the page manages.
 
@@ -76,10 +77,12 @@ export function DcAdsByRepSection({ rows, totals }: { rows: DcAdsRepRow[]; total
     (a, r) => ({
       dials: a.dials + r.dials,
       connections: a.connections + r.connections,
+      shows: a.shows + r.shows,
       closes: a.closes + r.closes,
+      units: a.units + r.units,
       cash: a.cash + r.cash,
     }),
-    { dials: 0, connections: 0, closes: 0, cash: 0 },
+    { dials: 0, connections: 0, shows: 0, closes: 0, units: 0, cash: 0 },
   )
 
   return (
@@ -123,7 +126,13 @@ export function DcAdsByRepSection({ rows, totals }: { rows: DcAdsRepRow[]; total
                 <HeadCell label="Rep" first />
                 <HeadCell label="Dials" />
                 <HeadCell label="Connections" />
+                <HeadCell label="Shows" />
                 <HeadCell label="Closes" />
+                <HeadCell label="Units" />
+                <HeadCell label="B44·Mo" />
+                <HeadCell label="B44·Yr" />
+                <HeadCell label="Wix·Mo" />
+                <HeadCell label="Wix·Yr" />
                 <HeadCell label="Cash" />
               </tr>
             </thead>
@@ -132,10 +141,25 @@ export function DcAdsByRepSection({ rows, totals }: { rows: DcAdsRepRow[]; total
                 <tr key={r.rep} style={{ borderBottom: '1px solid var(--color-geg-border)' }}>
                   <td className="geg-mono" style={{ padding: '9px 14px', fontSize: 12, letterSpacing: '0.02em', color: 'var(--color-geg-text)', whiteSpace: 'nowrap' }}>
                     {r.rep}
+                    {r.teamMemberId ? null : (
+                      <span
+                        title="Not linked to a team member yet — link identities in DC Setup so this person's dials and closes merge into one row."
+                        className="geg-mono"
+                        style={{ marginLeft: 7, fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', border: '1px dashed var(--color-geg-border)', borderRadius: 3, padding: '1px 4px' }}
+                      >
+                        NOT LINKED
+                      </span>
+                    )}
                   </td>
                   <Cell value={r.dials.toLocaleString('en-US')} />
                   <Cell value={r.connections.toLocaleString('en-US')} />
+                  <Cell value={r.shows.toLocaleString('en-US')} />
                   <Cell value={r.closes.toLocaleString('en-US')} strong />
+                  <Cell value={r.units.toLocaleString('en-US')} />
+                  <Cell value={r.base44Monthly.toLocaleString('en-US')} muted={r.base44Monthly === 0} />
+                  <Cell value={r.base44Yearly.toLocaleString('en-US')} muted={r.base44Yearly === 0} />
+                  <Cell value={r.wixMonthly.toLocaleString('en-US')} muted={r.wixMonthly === 0} />
+                  <Cell value={r.wixYearly.toLocaleString('en-US')} muted={r.wixYearly === 0} />
                   <Cell value={fmtCash(r.cash)} strong />
                 </tr>
               ))}
@@ -146,7 +170,13 @@ export function DcAdsByRepSection({ rows, totals }: { rows: DcAdsRepRow[]; total
                 </td>
                 <Cell value={colTotals.dials.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.connections.toLocaleString('en-US')} muted />
+                <Cell value={colTotals.shows.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.closes.toLocaleString('en-US')} strong />
+                <Cell value={colTotals.units.toLocaleString('en-US')} strong />
+                <Cell value={totals.base44Monthly.toLocaleString('en-US')} muted />
+                <Cell value={totals.base44Yearly.toLocaleString('en-US')} muted />
+                <Cell value={totals.wixMonthly.toLocaleString('en-US')} muted />
+                <Cell value={totals.wixYearly.toLocaleString('en-US')} muted />
                 <Cell value={fmtCash(colTotals.cash)} strong />
               </tr>
             </tbody>
@@ -159,9 +189,12 @@ export function DcAdsByRepSection({ rows, totals }: { rows: DcAdsRepRow[]; total
         Activity-scoped, not cohort-scoped: what each rep did in the selected dates, regardless of when the
         lead opted in. <b>Dials</b> = outbound calls · <b>Connections</b> = calls ≥90s, counted per CALL
         (a lead reached twice counts twice; inbound pickups count) — so the column sum runs higher than the
-        funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Closes</b> = DC closes with a plan ·
-        <b>Cash</b> = $300 per plan unit. Every rep with activity is listed. All rows cover DC-ads pool
-        leads only.
+        funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Shows</b> = leads pitched (a filed
+        DC sale form or closer report) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
+        (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
+        both; the header totals count each deal once. Every rep with activity is listed; a{' '}
+        <i>not linked</i> tag means the person&apos;s dialing and closing identities haven&apos;t been
+        connected yet — fix it in DC Setup. All rows cover DC-ads pool leads only.
       </div>
     </div>
   )

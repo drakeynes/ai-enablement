@@ -63,9 +63,19 @@ export type DcAdsHourBucket = { label: string; optIns: number; dials: number; co
 
 export type DcAdsRepRow = {
   rep: string
+  // team_members.id when the rep's identity is linked (0136); null = the raw
+  // Close-name or form-name fallback — a "not linked" row until the person is
+  // verified in DC Setup.
+  teamMemberId: string | null
   dials: number
   connections: number
+  shows: number
   closes: number
+  units: number
+  base44Monthly: number
+  base44Yearly: number
+  wixMonthly: number
+  wixYearly: number
   cash: number
 }
 

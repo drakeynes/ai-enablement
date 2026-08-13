@@ -52,8 +52,14 @@ const NAV: NavItem[] = [
   },
   // The Calls list page is gone — per-call review pages are reached from the
   // per-lead Lifecycle (each call links there, and returns "Back to lead").
+  // DC Setup = the ONE admin page for the DC Ads operation (Drake 2026-08-13):
+  // Team (verify new reps + offboard leavers — supersedes Verify Reps for
+  // day-to-day use), Landing pages (dc_landing_pages) and Campaigns
+  // (dc_ads_campaigns). Operator guide: docs/runbooks/dc_setup_admin.md.
+  { href: '/sales-dashboard/dc-setup', label: 'DC Setup', adminOnly: true },
   // Verify Reps = admin surface to add new sales reps (from Airtable) to
-  // team_members so their stats flow to every per-rep surface.
+  // team_members so their stats flow to every per-rep surface. The DC Setup
+  // Team section wraps the same actions; this page stays as the direct route.
   { href: '/sales-dashboard/reps', label: 'Verify Reps', adminOnly: true },
   // Landing Pages = admin registry manager — add/edit landing pages (DB-backed),
   // which then appear in the funnel's landing-page dropdown.
