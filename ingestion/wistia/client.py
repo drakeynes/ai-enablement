@@ -291,3 +291,21 @@ class WistiaClient:
         raise WistiaAPIError(
             f"timeseries for {hashed_id} returned non-list: {type(result).__name__}"
         )
+
+    def fetch_recent_events(
+        self, hashed_id: str, per_page: int = 100
+    ) -> list[dict[str, Any]]:
+        """GET /v1/stats/events.json — recent view events for one media.
+
+        Each event carries `embed_url` (the page the video played on,
+        query string included) — the source for the DC landing-page
+        video auto-attach (shared/lp_urls.py + dc_landing_pages).
+        Returns newest-first; one page is enough for embed discovery
+        (coverage accumulates across cron runs). Verified live
+        2026-08-13.
+        """
+        result = self._request(
+            "/stats/events.json",
+            params={"media_id": hashed_id, "per_page": per_page},
+        )
+        return result if isinstance(result, list) else []

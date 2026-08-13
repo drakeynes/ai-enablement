@@ -29,6 +29,7 @@ from ingestion.meta_ads.leads_parser import (
     parse_lead,
     parse_leadgen_adset,
 )
+from shared.lp_urls import lp_short_label, lp_slugify, normalize_lp_url
 
 logger = logging.getLogger("ai_enablement.meta_ads.leads_pipeline")
 
@@ -39,6 +40,9 @@ class LeadsSyncOutcome:
 
     campaigns_upserted: int = 0
     lp_campaigns_upserted: int = 0
+    lp_pages_created: int = 0
+    lp_campaigns_linked: int = 0
+    lp_typeforms_resolved: int = 0
     forms_upserted: int = 0
     leads_upserted: int = 0
     facts_rows: int | None = None
@@ -73,6 +77,132 @@ def fetch_landing_page_campaign_rows(client: MetaAdsClient) -> list[dict]:
     ads = client.account_ads_with_creatives()
     rows = [parse_landing_page_ad(a) for a in ads]
     return _dedup_by([r for r in rows if r], "campaign_id")
+
+
+def _majority(values: list[str]) -> str | None:
+    """Most frequent value; ties break to the more recent (later list order)."""
+    if not values:
+        return None
+    counts: dict[str, int] = {}
+    for v in values:
+        counts[v] = counts.get(v, 0) + 1
+    return max(counts, key=lambda v: (counts[v], values[::-1].index(v) * -1))
+
+
+def resolve_dc_landing_pages(db) -> tuple[int, int, int]:
+    """Auto-maintain the DC landing-page registry (migration 0132).
+
+    Runs after the creative scan so a brand-new funnel needs ZERO manual
+    steps to appear on the DC Ads page (Drake 2026-08-13):
+
+      1. A campaign whose normalized destination URL matches no
+         `dc_landing_pages.lp_url` gets a new registry row — auto_created,
+         label = the short URL ('join/training').
+      2. Every landing-page campaign gets `lp_slug` stamped from the registry;
+         campaigns missing `typeform_id` inherit the LP's.
+      3. An LP row missing `typeform_id` gets it resolved by MAJORITY VOTE over
+         `typeform_responses.hidden->>'campaign_id'` for its campaigns (the
+         Typeform hidden fields carry the Meta campaign id — 861/862 coverage
+         on the Aman form, verified 2026-08-13). Curated values are never
+         overwritten — the resolver only ever fills nulls (except lp_slug,
+         which follows the destination URL).
+
+    Videos attach separately (the Wistia embed-location scan,
+    ingestion/wistia/pipeline.py). Returns (pages_created, campaigns_linked,
+    typeforms_resolved).
+    """
+    camps = (
+        db.table("dc_ads_campaigns")
+        .select("campaign_id, destination_url, lp_slug, typeform_id")
+        .eq("source_kind", "landing_page")
+        .execute()
+        .data
+        or []
+    )
+    camps = [c for c in camps if c.get("destination_url")]
+    lps = (
+        db.table("dc_landing_pages")
+        .select("slug, lp_url, typeform_id")
+        .execute()
+        .data
+        or []
+    )
+    by_url = {lp["lp_url"]: lp for lp in lps}
+    slugs = {lp["slug"] for lp in lps}
+
+    # 1. Unseen destination URLs → new auto rows.
+    created = 0
+    for c in camps:
+        norm = normalize_lp_url(c["destination_url"])
+        if norm in by_url:
+            continue
+        label = lp_short_label(norm)
+        base = lp_slugify(label) or "lp"
+        slug = base
+        suffix = 2
+        while slug in slugs:
+            slug = f"{base}-{suffix}"
+            suffix += 1
+        db.table("dc_landing_pages").insert(
+            {"slug": slug, "label": label, "lp_url": norm, "auto_created": True}
+        ).execute()
+        by_url[norm] = {"slug": slug, "lp_url": norm, "typeform_id": None}
+        slugs.add(slug)
+        created += 1
+        logger.info("dc landing pages: auto-created %s (%s)", slug, norm)
+
+    # 2. Campaigns → lp_slug (follows the destination) + typeform inherit.
+    linked = 0
+    for c in camps:
+        lp = by_url[normalize_lp_url(c["destination_url"])]
+        patch: dict = {}
+        if c.get("lp_slug") != lp["slug"]:
+            patch["lp_slug"] = lp["slug"]
+        if not c.get("typeform_id") and lp.get("typeform_id"):
+            patch["typeform_id"] = lp["typeform_id"]
+        if patch:
+            db.table("dc_ads_campaigns").update(patch).eq(
+                "campaign_id", c["campaign_id"]
+            ).execute()
+            c.update(patch)
+            linked += 1
+
+    # 3. LP rows missing a typeform → majority vote over hidden-field
+    #    campaign attribution.
+    resolved = 0
+    for lp in by_url.values():
+        if lp.get("typeform_id"):
+            continue
+        camp_ids = [c["campaign_id"] for c in camps if c.get("lp_slug") == lp["slug"]]
+        if not camp_ids:
+            continue
+        responses = (
+            db.table("typeform_responses")
+            .select("form_id")
+            .in_("hidden->>campaign_id", camp_ids)
+            .order("submitted_at", desc=False)
+            .limit(2000)
+            .execute()
+            .data
+            or []
+        )
+        form_id = _majority([r["form_id"] for r in responses if r.get("form_id")])
+        if not form_id:
+            continue
+        db.table("dc_landing_pages").update({"typeform_id": form_id}).eq(
+            "slug", lp["slug"]
+        ).execute()
+        lp["typeform_id"] = form_id
+        for c in camps:
+            if c.get("lp_slug") == lp["slug"] and not c.get("typeform_id"):
+                db.table("dc_ads_campaigns").update({"typeform_id": form_id}).eq(
+                    "campaign_id", c["campaign_id"]
+                ).execute()
+                c["typeform_id"] = form_id
+        resolved += 1
+        logger.info("dc landing pages: %s typeform resolved → %s", lp["slug"], form_id)
+
+    return created, linked, resolved
 
 
 def sync_meta_leads(
@@ -129,6 +259,18 @@ def sync_meta_leads(
     except MetaAdsAPIError as exc:
         outcome.errors.append(f"creative_scan: {exc}")
         logger.warning("meta leads sync: creative scan failed: %s", exc)
+
+    # 1c. landing-page registry resolver — a NEW funnel self-registers here
+    # (dc_landing_pages row + lp_slug + typeform), no manual steps. Fail-soft:
+    # a resolver hiccup never costs the lead sync below.
+    try:
+        created, linked, resolved = resolve_dc_landing_pages(db)
+        outcome.lp_pages_created = created
+        outcome.lp_campaigns_linked = linked
+        outcome.lp_typeforms_resolved = resolved
+    except Exception as exc:  # noqa: BLE001 — third-party client raises broadly
+        outcome.errors.append(f"lp_resolver: {exc}")
+        logger.warning("meta leads sync: landing-page resolver failed: %s", exc)
 
     # 2. page token — everything below needs it
     try:

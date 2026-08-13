@@ -32,7 +32,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from ingestion.wistia.client import WistiaAPIError, WistiaClient
-from ingestion.wistia.parser import parse_media, parse_timeseries_entry
+from ingestion.wistia.parser import (
+    embed_urls_from_events,
+    parse_media,
+    parse_timeseries_entry,
+)
 
 logger = logging.getLogger("ai_enablement.wistia.pipeline")
 
@@ -45,6 +49,7 @@ class SyncOutcome:
     medias_failed: int = 0
     daily_rows_upserted: int = 0
     daily_rows_failed: int = 0
+    dc_videos_attached: int = 0
     days_in_window: int = 0
     window: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -132,6 +137,9 @@ def sync_wistia(
 
     start_iso = start_date.isoformat()
     end_iso = end_date.isoformat()
+    # Medias with any real activity in this window — the bounded candidate set
+    # for the DC embed-location scan below (quiet medias skip the events call).
+    active_hids: set[str] = set()
     for media in target_medias:
         hid = media["hashed_id"]
         try:
@@ -145,6 +153,8 @@ def sync_wistia(
             row = parse_timeseries_entry(hid, entry)
             if not row:
                 continue
+            if (row.get("unique_visitors") or 0) > 0 or (row.get("plays_filtered") or 0) > 0:
+                active_hids.add(hid)
             try:
                 # Upsert only the timeseries-sourced columns. The legacy
                 # load_count / play_count / hours_watched columns are
@@ -160,16 +170,89 @@ def sync_wistia(
                 outcome.daily_rows_failed += 1
                 outcome.record_error(f"upsert daily {hid} {row.get('day')}", e)
 
+    # ---- 4. DC landing-page video auto-attach --------------------------
+    # A video that plays on a registered DC landing page (or one of its
+    # funnel pages) attaches itself to that page's registry row — so a new
+    # funnel's VSL appears on the DC Ads page with zero manual steps
+    # (Drake 2026-08-13). Fail-soft: never costs the stats sync above.
+    try:
+        outcome.dc_videos_attached = attach_dc_lp_videos(
+            client, db, target_medias, active_hids
+        )
+    except Exception as e:  # noqa: BLE001 — third-party client raises broadly
+        outcome.record_error("dc_video_attach", e)
+
     logger.info(
-        "wistia sync: medias=%d/%d daily_upserted=%d daily_failed=%d window=%s..%s",
+        "wistia sync: medias=%d/%d daily_upserted=%d daily_failed=%d dc_attached=%d window=%s..%s",
         outcome.medias_synced,
         outcome.medias_synced + outcome.medias_failed,
         outcome.daily_rows_upserted,
         outcome.daily_rows_failed,
+        outcome.dc_videos_attached,
         start_iso,
         end_iso,
     )
     return outcome
+
+
+def attach_dc_lp_videos(
+    client: WistiaClient,
+    db,
+    target_medias: list[dict[str, Any]],
+    active_hids: set[str],
+) -> int:
+    """Map recently-active medias to DC landing pages by embed location.
+
+    For each media with activity in the sync window, sample its recent view
+    events (embed_url per view), normalize the pages, and match them against
+    `dc_landing_pages.lp_url` + `page_urls`. A match appends
+    {hashedId, label} to that LP's `vsl` list (never removes, never
+    duplicates — curated entries stay). One embed can serve several LPs
+    (DC_VSL_Thank you_v2 plays on both funnels today).
+    """
+    if not active_hids:
+        return 0
+    lps = (
+        db.table("dc_landing_pages")
+        .select("slug, lp_url, page_urls, vsl")
+        .eq("active", True)
+        .execute()
+        .data
+        or []
+    )
+    if not lps:
+        return 0
+    slugs_by_url: dict[str, list[dict[str, Any]]] = {}
+    for lp in lps:
+        for url in [lp["lp_url"], *(lp.get("page_urls") or [])]:
+            slugs_by_url.setdefault(url, []).append(lp)
+
+    name_by_hid = {
+        m["hashed_id"]: (m.get("name") or m["hashed_id"]) for m in target_medias
+    }
+    attached = 0
+    for hid in sorted(active_hids):
+        try:
+            events = client.fetch_recent_events(hid)
+        except WistiaAPIError as e:
+            logger.warning("wistia dc attach: events for %s failed: %s", hid, e)
+            continue
+        for url in embed_urls_from_events(events):
+            for lp in slugs_by_url.get(url, []):
+                vsl = lp.get("vsl") or []
+                if any(v.get("hashedId") == hid for v in vsl):
+                    continue
+                vsl = [*vsl, {"hashedId": hid, "label": name_by_hid.get(hid, hid)}]
+                db.table("dc_landing_pages").update({"vsl": vsl}).eq(
+                    "slug", lp["slug"]
+                ).execute()
+                lp["vsl"] = vsl
+                attached += 1
+                logger.info(
+                    "wistia dc attach: %s (%s) → %s via %s",
+                    hid, name_by_hid.get(hid, "?"), lp["slug"], url,
+                )
+    return attached
 
 
 def sync_wistia_rolling(

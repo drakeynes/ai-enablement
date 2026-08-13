@@ -35,6 +35,19 @@ One pass (`ingestion/meta_ads/leads_pipeline.py :: sync_meta_leads`):
    `dc_ads_campaigns` is THE ad-spend scoping set for the DC ads funnel page:
    spend rows in `cortana_campaign_daily` whose `platform_entity_id` is in it
    count as DC ads spend.
+1c. **Landing-page resolver** (0132) — `resolve_dc_landing_pages()`: normalizes
+   each landing-page campaign's `destination_url` (`shared/lp_urls.py`) and
+   (a) creates a `dc_landing_pages` row for any unseen URL (auto_created,
+   label = short URL like `join/training`), (b) stamps
+   `dc_ads_campaigns.lp_slug`, (c) resolves a missing LP `typeform_id` by
+   majority vote over `typeform_responses.hidden->>'campaign_id'`. This is what
+   makes a NEW funnel self-register on the DC Ads page — dropdown, spend scope,
+   and (after the next facts refresh) funnel filtering, zero manual steps.
+   Videos attach separately (Wistia embed scan, `docs/runbooks/wistia_ingestion.md`).
+   Fail-soft in its own try block; outcome fields `lp_pages_created` /
+   `lp_campaigns_linked` / `lp_typeforms_resolved` in the cron audit row.
+   Curated registry fields are never overwritten — the resolver only fills
+   nulls (lp_slug excepted: it follows the destination URL).
 2. **Page token** — `GET /{page_id}?fields=access_token` with the user token.
    Lead reads are page-scoped; the page token is derived per run, never stored.
 3. **Forms** — `GET /{page_id}/leadgen_forms` → upsert **`meta_lead_forms`**.

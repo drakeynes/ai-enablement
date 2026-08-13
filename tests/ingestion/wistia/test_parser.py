@@ -308,3 +308,25 @@ def test_parse_timeseries_does_not_touch_legacy_columns():
     row = parse_timeseries_entry("x", entry)
     for legacy_col in ("load_count", "play_count", "hours_watched"):
         assert legacy_col not in row, f"legacy column {legacy_col!r} leaked into timeseries row"
+
+
+# ---------------------------------------------------------------------------
+# embed_urls_from_events — the DC landing-page video auto-attach source
+# ---------------------------------------------------------------------------
+
+
+def test_embed_urls_normalizes_and_dedupes_utm_variants():
+    from ingestion.wistia.parser import embed_urls_from_events
+
+    events = [
+        {"embed_url": "https://join.digitalcollege.ai/training"},
+        {"embed_url": "https://join.digitalcollege.ai/training?utm_source=fb&utm_campaign=x"},
+        {"embed_url": "https://join.digitalcollege.ai/t-2"},
+        {"embed_url": ""},
+        {"embed_url": None},
+        {},
+    ]
+    assert embed_urls_from_events(events) == {
+        "join.digitalcollege.ai/training",
+        "join.digitalcollege.ai/t-2",
+    }

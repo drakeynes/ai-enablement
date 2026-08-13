@@ -22,6 +22,8 @@ The Engine sheet's four Wistia metrics (VSL Engagement Rate, VSL Average View Du
               │ GET /modern/analytics/medias/{id}/timeseries (per-day, post-2026-05-24)
               │   — replaced /modern/stats/medias/{id}/by_date (legacy; synthesized
               │     hours_watched — fake daily engagement)
+              │ GET /v1/stats/events.json?media_id= (recent view events — embed_url
+              │     per view; only for medias ACTIVE in the sync window)
               ▼
    ┌─────────────────────┐
    │ api/wistia_sync_    │  every 3h via Vercel Cron
@@ -61,6 +63,22 @@ Wistia caps at **600 req/min per account**. Violations return **HTTP 503 (NOT 42
 ### Date semantics gotcha (CRITICAL)
 
 The new `/timeseries` endpoint uses **`end_date` EXCLUSIVE**. The legacy `by_date` used inclusive on both. To preserve the inclusive convention every other source in the codebase uses, `WistiaClient.fetch_timeseries(start_date, end_date)` takes an INCLUSIVE end_date and adds +1 day internally before hitting the API. Get this wrong (bypass the wrapper, pass exclusive bounds directly) and you silently drop the latest day.
+
+## DC landing-page video auto-attach (0132)
+
+After the daily-stats loop, `attach_dc_lp_videos()` samples recent view events
+(`/v1/stats/events.json`, `embed_url` per view) for every media that had
+activity in the sync window, normalizes the pages (`shared/lp_urls.py` — strips
+the utm-laden query strings Meta appends), and matches them against
+`dc_landing_pages.lp_url` + `page_urls`. A match appends `{hashedId, label}` to
+that LP's `vsl` list — so a new funnel's VSL shows up in the DC Ads page's
+Videos block once Wistia sees it play, zero manual steps. Never removes or
+duplicates entries; curated rows stay. Bounded: quiet medias skip the events
+call (~10-15 extra API calls per tick in practice). Fail-soft
+(`dc_video_attach` in the outcome's errors; `dc_videos_attached` counts).
+Caveat: a video playing on a funnel page that is NOT the ad destination (e.g.
+Luke's mid-funnel VSL page `/t-2`) only matches if that page is listed in the
+LP row's `page_urls` — one manual registry edit per such page.
 
 ## Cron cadence
 

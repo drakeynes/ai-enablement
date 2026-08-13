@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from shared.lp_urls import DC_LANDING_HOSTS
+
 
 def _first_value(field_data: list[dict[str, Any]], name: str) -> str | None:
     for item in field_data:
@@ -79,10 +81,11 @@ def parse_lead(row: dict[str, Any], page_id: str) -> dict[str, Any]:
     }
 
 
-# Hosts whose traffic belongs to the Digital College funnel. Deliberately NOT
-# theaipartner.io — that is the separate ANDROMEDA / Closer Funnel motion on the
-# same ad account, and counting it here would corrupt DC spend and ROAS.
-DC_LANDING_HOSTS: tuple[str, ...] = ("digitalcollege.ai",)
+# DC_LANDING_HOSTS (imported above) — the hosts whose traffic belongs to the
+# Digital College funnel; canonical definition in shared/lp_urls.py (the Wistia
+# embed scan shares it). Deliberately NOT theaipartner.io — that is the separate
+# ANDROMEDA / Closer Funnel motion on the same ad account, and counting it here
+# would corrupt DC spend and ROAS.
 
 
 def creative_destination_urls(creative: dict[str, Any] | None) -> set[str]:

@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.lp_urls import normalize_lp_url
+
 
 def parse_media(
     media_json: dict[str, Any],
@@ -170,3 +172,20 @@ def parse_timeseries_entry(
         "cta_conversion_rate": entry.get("cta_conversion_rate"),
         "form_conversions": entry.get("form_conversions"),
     }
+
+
+def embed_urls_from_events(events: list[dict[str, Any]]) -> set[str]:
+    """The distinct NORMALIZED pages a media's view events played on.
+
+    Feeds the DC landing-page video auto-attach: normalization
+    (shared/lp_urls.py) strips the utm-laden query strings Meta appends,
+    so 'https://join.digitalcollege.ai/training?utm_source=fb&…' and the
+    bare page collapse to one key that matches dc_landing_pages.lp_url /
+    page_urls.
+    """
+    urls: set[str] = set()
+    for event in events:
+        raw = event.get("embed_url")
+        if isinstance(raw, str) and raw.strip():
+            urls.add(normalize_lp_url(raw))
+    return urls
