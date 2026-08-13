@@ -132,12 +132,20 @@ function CandidateCard({
   closeUsers: CloseUserOption[]
 }) {
   const c = candidate
-  const [state, setState] = useState(() => ({
-    fullName: c.draft?.fullName ?? c.fullName ?? '',
-    salesRole: (c.draft?.salesRole ?? 'setter') as SalesRole | '',
-    email: c.draft?.email ?? '',
-    closeUserId: c.draft?.closeUserId ?? c.suggestedCloseUserId ?? '',
-  }))
+  const [state, setState] = useState(() => {
+    // The pre-selected Close account (saved draft, else the suggestion) must
+    // ALSO seed the email — a pre-selection never fires the picker's
+    // onChange, so without this the email field sits empty while the
+    // dropdown clearly shows one (Drake 2026-08-13, verifying Justin).
+    const preselected = c.draft?.closeUserId ?? c.suggestedCloseUserId ?? ''
+    const preselectedEmail = closeUsers.find((x) => x.closeUserId === preselected)?.email ?? ''
+    return {
+      fullName: c.draft?.fullName ?? c.fullName ?? '',
+      salesRole: (c.draft?.salesRole ?? 'setter') as SalesRole | '',
+      email: c.draft?.email ?? preselectedEmail,
+      closeUserId: preselected,
+    }
+  })
   const { pending, msg, setMsg, run } = useAction()
 
   const set = (patch: Partial<typeof state>) => setState((prev) => ({ ...prev, ...patch }))
@@ -208,8 +216,15 @@ function CandidateCard({
             if (!state.fullName.trim()) return setMsg('Error: full name is required.')
             if (!state.salesRole) return setMsg('Error: pick a role.')
             if (!state.closeUserId) return setMsg('Error: pick their Close account.')
-            if (!state.email.trim()) return setMsg('Error: email is required.')
-            run(() => dcVerifyRep(toInput()), 'Verified — they now show up everywhere.')
+            // Self-heal: an empty email fills from the selected Close account
+            // before validating (belt to the pre-selection seeding above).
+            const email =
+              state.email.trim() ||
+              closeUsers.find((x) => x.closeUserId === state.closeUserId)?.email ||
+              ''
+            if (!email) return setMsg('Error: that Close account has no email on file — type one in.')
+            if (email !== state.email) set({ email })
+            run(() => dcVerifyRep({ ...toInput(), email }), 'Verified — they now show up everywhere.')
           }}
         >
           Verify
