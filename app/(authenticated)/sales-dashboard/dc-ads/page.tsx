@@ -130,18 +130,6 @@ export default async function DcAdsPage({
         </span>
       </div>
 
-      <div
-        className="geg-mono"
-        style={{ marginTop: 14, fontSize: 10, letterSpacing: '0.04em', color: 'var(--color-geg-text-2)', lineHeight: 1.7 }}
-      >
-        The <b>Digital College ads</b> funnel, across <b>both</b> acquisition paths. Someone clicks a
-        Meta ad and either fills the <b>Meta instant form</b> (name + phone, no landing page) or lands
-        on a <b>landing page</b> and fills its <b>Typeform</b>; either way they reach Close within
-        seconds and get dialed. Ad spend covers the registered DC campaigns only ({spend.campaigns}{' '}
-        detected) — no outbound leads on this page, no ad leads on Outbound, and none of the
-        Closer&nbsp;Funnel campaigns that run against a different domain.
-      </div>
-
       {/* Bridge-drift check only reads on the unfiltered view — the Meta-side
           count isn't cascade-scoped, so comparing it under a filter would
           false-alarm. Compared against INSTANT-FORM opt-ins only: landing-page
