@@ -583,9 +583,18 @@ export async function getDcAdsHierarchy(range: {
 }
 
 // The speed-to-lead boxes (ported from /sales-dashboard/leads), computed over
-// the DC ads opt-in cohort only. The RPC hands back per-lead timing/effort
-// facts; the business-hours speed clock (10a–10p ET) runs here with the SAME
-// helper + summarize math the Leads page uses, so the two pages can't drift.
+// the DC ads opt-in cohort only — with the SAME helper + summarize math the
+// Leads page uses, but a DIFFERENT business-hours clock: the DC dial team
+// works 12p–12a ET (boss 2026-08-13), so this page's speed counts noon→
+// midnight, while the Leads page stays on 10a–10p. The clock is labeled on
+// the box, so the two pages' numbers are visibly not comparable.
+
+// The DC dial team's working window (ET hours; 24 = midnight — the DST switch
+// at 2am can never fall inside noon→midnight, so the day-offset math holds).
+const DC_CLOCK_OPEN_HOUR = 12
+const DC_CLOCK_CLOSE_HOUR = 24
+export const DC_CLOCK_LABEL = '12p–12a ET'
+
 export type DcAdsSpeedStats = CohortStats & {
   // The funnel's broad Connected (≥90s call OR a later stage) — lead-level.
   connectedBroad: number
@@ -593,6 +602,14 @@ export type DcAdsSpeedStats = CohortStats & {
   // (dialed or reached), so never-touched leads don't dilute it — same rule
   // as the Leads page (Drake 2026-06-18).
   dialedOrConnected: number
+  // SMS engagement (0135): of the leads we TEXTED (any outbound SMS after the
+  // opt-in), how many texted back. Texted, not cohort, as the denominator —
+  // the same never-touched-leads-don't-dilute rule as the connected rate. A
+  // lead who texted US first (inbound with no outbound) counts in BOTH the
+  // numerator and the denominator, so the rate can't exceed 100% — same
+  // guard as the connected rate's form-reached leads.
+  smsEngaged: number
+  smsTexted: number
 }
 
 export async function getDcAdsSpeedCohort(
@@ -611,11 +628,18 @@ export async function getDcAdsSpeedCohort(
     firstDial: string | null
     dials: number
     connected: boolean
+    smsIn: boolean
+    smsOut: boolean
   }>
   const stats = summarizeCohortRows(
     rows.map((r) => ({
       speedSec: r.firstDial
-        ? businessHoursElapsedSec(new Date(r.anchor), new Date(r.firstDial))
+        ? businessHoursElapsedSec(
+            new Date(r.anchor),
+            new Date(r.firstDial),
+            DC_CLOCK_OPEN_HOUR,
+            DC_CLOCK_CLOSE_HOUR,
+          )
         : null,
       firstCallAt: r.firstDial,
       anyCallConnected: r.connected,
@@ -626,6 +650,8 @@ export async function getDcAdsSpeedCohort(
     ...stats,
     connectedBroad: rows.filter((r) => r.connected).length,
     dialedOrConnected: rows.filter((r) => r.firstDial != null || r.connected).length,
+    smsEngaged: rows.filter((r) => r.smsIn).length,
+    smsTexted: rows.filter((r) => r.smsOut || r.smsIn).length,
   }
 }
 

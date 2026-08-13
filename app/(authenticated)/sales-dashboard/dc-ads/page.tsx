@@ -16,6 +16,7 @@ import {
   getDcAdsDaily,
   getDcAdsHierarchy,
   getDcAdsSpeedCohort,
+  DC_CLOCK_LABEL,
   type DcAdsEntityFilter,
 } from '@/lib/db/dc-ads'
 import { getDcAdsLpSummary } from '@/lib/db/dc-ads-summary'
@@ -199,9 +200,11 @@ export default async function DcAdsPage({
 
       <DcAdsByRepSection rows={byRep.reps} totals={byRep.totals} />
 
-      {/* Speed-to-lead boxes — the Leads page's four top-line stats, computed
-          over the DC ads opt-in cohort only (same 10a–10p ET business-hours
-          clock + 24h cap, so the numbers are comparable across pages). */}
+      {/* Speed-to-lead boxes — the Leads page's top-line stats computed over
+          the DC ads opt-in cohort, on the DC dial team's OWN clock (12p–12a
+          ET, boss 2026-08-13 — deliberately not comparable with the Leads
+          page's 10a–10p numbers; the clock is labeled on the box), plus the
+          SMS engagement rate (texted-back ÷ texted). Same 24h cap. */}
       <div style={{ marginTop: 26 }}>
         <div
           className="geg-mono"
@@ -213,6 +216,8 @@ export default async function DcAdsPage({
           cohort={speedCohort}
           connectedLeads={speedCohort.connectedBroad}
           connectedDenominator={speedCohort.dialedOrConnected}
+          clockLabel={DC_CLOCK_LABEL}
+          sms={{ engaged: speedCohort.smsEngaged, texted: speedCohort.smsTexted }}
         />
       </div>
 

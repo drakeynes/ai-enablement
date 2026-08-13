@@ -188,11 +188,17 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `team_members` row is missing (or lacks `airtable_user_id`) shows as a SEPARATE row under the
   form's nickname ("Seb", "Flo") instead of merging with their dials row — fix by completing the
   roster mapping, not the SQL.
-- **Speed to lead boxes** (added 2026-07-15) — the Leads page's four top-line stats (avg
-  business-hours speed 10a–10p ET w/ 24h cap, avg intensity, true connected rate over
-  dialed-or-reached, cohort size) computed over the DC-ads cohort only. Backed by the
-  `dc_ads_speed_cohort()` RPC (0129) + the SAME `businessHoursElapsedSec` +
-  `summarizeCohortRows` math the Leads page uses, so the two pages can't drift.
+- **Speed to lead boxes** (added 2026-07-15; reclocked + SMS box 2026-08-13, migration 0135) —
+  the Leads page's top-line stats computed over the DC-ads cohort, **on the DC dial team's own
+  12p–12a ET clock** (boss 2026-08-13 — deliberately NOT comparable with the Leads page's
+  10a–10p numbers; the clock is labeled on the box; verified against an independent
+  implementation to the second across the full cohort incl. DST days), plus an **SMS engagement
+  rate**: of the leads we texted (any outbound SMS after the opt-in), how many texted back —
+  texted, not cohort, as the denominator (never-touched-leads-don't-dilute, Drake 2026-06-18;
+  a text-first lead sits in both sides so the rate caps at 100%). Backed by the
+  `dc_ads_speed_cohort()` RPC (0129→0135: + `smsIn`/`smsOut`) + the SAME
+  `businessHoursElapsedSec` (with DC's open/close hours) + `summarizeCohortRows` math the Leads
+  page uses. Same 24h outlier cap.
 - **Speed to dial** — form submit → first outbound dial (the opt-in is the hand-raise; no
   reply-first precondition like Outbound's).
 - **Time of day** — opt-ins vs dials vs connects, 2-hour ET buckets.

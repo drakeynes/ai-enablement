@@ -20,6 +20,8 @@ export function SpeedToLeadBoxes({
   filter,
   connectedLeads,
   connectedDenominator,
+  clockLabel = '10a–10p ET',
+  sms,
 }: {
   cohort: CohortStats
   activeCaller?: string | null
@@ -34,6 +36,14 @@ export function SpeedToLeadBoxes({
   // (a form/text reach — e.g. a self-booked direct who showed) stay in BOTH
   // the numerator and this denominator, so the rate can't exceed 100%.
   connectedDenominator?: number
+  // The business-hours clock the CALLER used to compute avgSpeedToLeadSec —
+  // label only, shown on the box + tooltip. The DC Ads page runs 12p–12a ET
+  // (its dial team's window); the Leads page keeps the 10a–10p default.
+  clockLabel?: string
+  // Renders a fifth cell (SMS engagement rate) when provided: of the leads we
+  // texted, how many texted back (engaged ⊆ texted — the caller keeps
+  // text-first leads in both, so the rate can't exceed 100%).
+  sms?: { engaged: number; texted: number }
 }) {
   const reached = connectedLeads ?? cohort.leadsConnected
   const denom = connectedDenominator ?? cohort.leadsCalled
@@ -43,11 +53,14 @@ export function SpeedToLeadBoxes({
         ? reached / denom
         : null
       : cohort.connectedRate
+  const statCols = sms ? 5 : 4
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: filter ? 'repeat(4, minmax(0, 1fr)) auto' : 'repeat(4, minmax(0, 1fr))',
+        gridTemplateColumns: filter
+          ? `repeat(${statCols}, minmax(0, 1fr)) auto`
+          : `repeat(${statCols}, minmax(0, 1fr))`,
         gap: 1,
         background: 'var(--color-geg-border)',
         border: '1px solid var(--color-geg-border)',
@@ -57,11 +70,11 @@ export function SpeedToLeadBoxes({
       }}
     >
       <StatCell
-        label="Avg speed to lead (10a–10p ET)"
+        label={`Avg speed to lead (${clockLabel})`}
         value={cohort.avgSpeedToLeadSec !== null ? formatDuration(cohort.avgSpeedToLeadSec) : '—'}
         subtext={
           <div
-            title="Opt-in → first dial, counting only business-hours time (10am–10pm ET). Overnight waits don't count — a lead that opts in at 1am and is first dialled at noon is a 2h speed-to-lead. Every called lead included; 24h outlier cap per lead."
+            title={`Opt-in → first dial, counting only working-hours time (${clockLabel}). Off-hours waits don't count — time before the window opens or after it closes never accrues. Every called lead included; 24h outlier cap per lead.`}
           >
             {`${cohort.leadsCalled} leads called${activeCaller ? ' (filtered)' : ''}`}
           </div>
@@ -81,6 +94,13 @@ export function SpeedToLeadBoxes({
             : `${cohort.leadsConnected} / ${cohort.leadsCalled} leads reached (any dial)`
         }
       />
+      {sms ? (
+        <StatCell
+          label="SMS engagement rate"
+          value={sms.texted > 0 ? `${((sms.engaged / sms.texted) * 100).toFixed(0)}%` : '—'}
+          subtext={`${sms.engaged} / ${sms.texted} texted back · of leads we texted`}
+        />
+      ) : null}
       <StatCell
         label="Cohort size"
         value={cohort.cohortSize.toString()}
