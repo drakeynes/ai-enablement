@@ -44,8 +44,14 @@ back, **Reactivate** — same row, nothing lost. Never ask for a delete.
 ## Scenario 3 — someone's dialing but not showing right
 
 Check the **"Seen dialing DC leads, not on the team"** list at the bottom of
-the Team section. Anyone there is making calls without being set up — add them
-to the Airtable Sales Team Member table and verify them (Scenario 1).
+the Team section. Two cases:
+
+- **They're a current rep** → add them to the Airtable Sales Team Member table
+  and verify them (Scenario 1).
+- **They're already gone, or were never really a rep** (an old name cluttering
+  the DC Ads page) → click **Mark as former** on their row. Their activity
+  stays counted but folds into the collapsed "Former & unlinked" group on the
+  DC Ads page. If they ever come back, they're in Current team → Reactivate.
 
 ## Scenario 4 — a new funnel / landing page launched
 

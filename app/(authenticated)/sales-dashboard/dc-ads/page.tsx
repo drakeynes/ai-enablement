@@ -244,6 +244,7 @@ export default async function DcAdsPage({
           connectedDenominator={speedCohort.dialedOrConnected}
           clockLabel={DC_CLOCK_LABEL}
           sms={{ engaged: speedCohort.smsEngaged, texted: speedCohort.smsTexted }}
+          connectedHint="of leads dialed · calls ≥90s only"
         />
       </div>
 
@@ -289,9 +290,10 @@ export default async function DcAdsPage({
         question with &ldquo;Yes I can pay for the AI tools&rdquo; (matched by phone/email; instant-form
         leads have no Typeform, so they never qualify) · SMS = the lead <b>texted us back</b> (an
         inbound SMS after the opt-in; texting alone never counts as connected) · SMS+MQL = qualified{' '}
-        <i>and</i> texted back · Connects = a <b>call ≥90s</b> (either direction) or a filed pitch
-        form — calls only · HVC = high-value connect: <b>connected and</b> (qualified <i>or</i>{' '}
-        texted us) — always a subset of Connects · Units = Digital College <b>plan units</b> closed · Closed = a DC
+        <i>and</i> texted back · Connects = a <b>call ≥90s only</b> (either direction) — a filed form
+        no longer counts as a connect, so Shows can exceed Connects when a pitch happened without a
+        90-second call landing in Close · HVC = high-value connect: <b>connected and</b> (qualified{' '}
+        <i>or</i> texted us) — always a subset of Connects · Units = Digital College <b>plan units</b> closed · Closed = a DC
         close <b>with an explicit plan</b> — from the DC sale form or a closer report (a closed form
         with no plan counts as a show, not a close) · Cash = $300 per plan unit · Adspend = the
         registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,

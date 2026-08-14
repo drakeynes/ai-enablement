@@ -22,6 +22,7 @@ export function SpeedToLeadBoxes({
   connectedDenominator,
   clockLabel = '10a–10p ET',
   sms,
+  connectedHint,
 }: {
   cohort: CohortStats
   activeCaller?: string | null
@@ -44,6 +45,10 @@ export function SpeedToLeadBoxes({
   // texted, how many texted back (engaged ⊆ texted — the caller keeps
   // text-first leads in both, so the rate can't exceed 100%).
   sms?: { engaged: number; texted: number }
+  // Subtitle for the connected-rate box when connectedLeads is provided —
+  // callers with a narrower Connected definition (DC Ads: calls only, 0140)
+  // override it; the default keeps the Leads page's wording untouched.
+  connectedHint?: string
 }) {
   const reached = connectedLeads ?? cohort.leadsConnected
   const denom = connectedDenominator ?? cohort.leadsCalled
@@ -90,7 +95,7 @@ export function SpeedToLeadBoxes({
         value={reachedRate !== null ? `${(reachedRate * 100).toFixed(0)}%` : '—'}
         subtext={
           connectedLeads !== undefined
-            ? `${reached} / ${denom} connected · of leads dialed or form-reached`
+            ? `${reached} / ${denom} connected · ${connectedHint ?? 'of leads dialed or form-reached'}`
             : `${cohort.leadsConnected} / ${cohort.leadsCalled} leads reached (any dial)`
         }
       />

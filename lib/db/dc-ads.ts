@@ -635,7 +635,8 @@ const DC_CLOCK_CLOSE_HOUR = 24
 export const DC_CLOCK_LABEL = '12p–12a ET'
 
 export type DcAdsSpeedStats = CohortStats & {
-  // The funnel's broad Connected (≥90s call OR a later stage) — lead-level.
+  // Lead-level Connected — a call ≥90s ONLY since 0140 (the name predates the
+  // narrowing; kept to avoid touching every consumer).
   connectedBroad: number
   // Denominator for the true connection rate: leads we actually WORKED
   // (dialed or reached), so never-touched leads don't dilute it — same rule

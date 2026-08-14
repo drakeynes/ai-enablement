@@ -169,10 +169,13 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   forms have NO "$2,000+" budget question; the shared discriminator is the affordability
   question "Yes I can pay for the AI tools"; matched to the lead by phone/email, newest response
   wins → `dc_ads_lead_facts.tf_qualified`); SMS = inbound SMS after the opt-in (`has_inbound`);
-  SMS+MQL = qualified AND texted back; Connects = the Connected roll (call ≥90s or a later
-  stage — calls only, SMS never connects a lead); HVC = **connected AND (qualified OR
-  texted-us)** — corrected 2026-08-14 (migration 0137), guaranteed ⊆ Connects; Units =
-  `plan_units` sum (cash = units × $300).
+  SMS+MQL = qualified AND texted back; Connects = **a call ≥90s ONLY** (0140, Nabeel — the
+  filed-form fallback was removed to cut human error; Shows can therefore exceed Connects when a
+  pitch happened without a 90s call landing in Close; SMS never connects a lead); HVC =
+  **connected AND (qualified OR texted-us)** (0137 shape, 0140 call-only base) — guaranteed ⊆
+  Connects; Units = `plan_units` sum (cash = units × $300). The lead-roster toggles and the
+  speed-box connected rate use the same call-only Connected; Called/Booked/Showed/Closed keep
+  their form evidence.
   Called/Booked/Showed are still computed for the page's other sections.
   Adspend = `cortana_campaign_daily` summed over ONLY
   the registered DC campaigns (`dc_ads_campaigns` — instant-form campaigns detected by the adset
@@ -199,9 +202,10 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
 - **Leads roster** (added 2026-08-14, migration 0137) — the Leads page's list scoped to DC ad
   leads, embedded right under the speed-to-lead boxes: one row per cohort lead (name / phone /
   email / opt-in day / landing page / dials / qualified / disposition), all inside a fixed-height
-  scrollable box. **Search + disposition toggles (SMS · Connected · HVC · Closed) filter fully
-  client-side — they never navigate.** Disposition = the lead's furthest stage
-  (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
+  scrollable box. **Search + stage toggles (SMS · Connected · HVC · Closed) filter fully
+  client-side — they never navigate.** Toggles are CUMULATIVE (Nabeel 2026-08-14): each shows
+  every lead that reached that stage, so toggle counts equal the stage row's numbers; the badge
+  on each row is still the lead's furthest stage (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
   `close_leads.display_name` + first contact phone/email — the search keys); follows the cascade +
   LP dropdown + window like every other section.
 - **Speed to lead boxes** (added 2026-07-15; reclocked + SMS box 2026-08-13, migration 0135) —

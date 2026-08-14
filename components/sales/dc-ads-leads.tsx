@@ -5,13 +5,17 @@ import { useMemo, useState } from 'react'
 import type { DcAdsLeadRow } from '@/lib/db/dc-ads'
 
 // DC ads — the embedded lead roster (boss 2026-08-14): the Leads page's list
-// scoped to DC ad leads, living INSIDE the DC Ads page. Search and the
-// disposition toggles narrow the list in place — no navigation, ever. All
-// rows render inside one fixed-height scrollable box (header pinned) so the
-// page never grows with the cohort. Disposition ladder (0137):
-//   Closed > HVC > Connected > SMS > Opt-in
-// where Connected is CALL-only (≥90s roll — an SMS never makes a lead
-// "connected") and HVC = connected AND (qualified OR texted us) ⊆ Connected.
+// scoped to DC ad leads, living INSIDE the DC Ads page. Search and the stage
+// toggles narrow the list in place — no navigation, ever. All rows render
+// inside one fixed-height scrollable box (header pinned) so the page never
+// grows with the cohort.
+//
+// Toggles are CUMULATIVE (Nabeel 2026-08-14): "Connected" shows every lead
+// that connected — including those who went on to close — so the toggle
+// counts equal the stage row's numbers. Each ROW still shows one disposition
+// badge, the lead's furthest stage: Closed > HVC > Connected > SMS > Opt-in.
+// Connected = a call ≥90s ONLY (0140 — no form fallback, no SMS);
+// HVC = connected AND (qualified OR texted us) ⊆ Connected.
 
 const ACCENT = '#b48ead'
 
@@ -67,11 +71,16 @@ export function DcAdsLeadsSection({
     [rows],
   )
 
+  // A toggle matches every lead that REACHED that stage (cumulative), so the
+  // counts line up with the stage row above.
+  const hasStage = (r: DcAdsLeadRow, d: Disposition): boolean =>
+    d === 'closed' ? r.closed : d === 'hvc' ? r.hvc : d === 'connected' ? r.connected : d === 'sms' ? r.sms : true
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     const qDigits = q.replace(/[^0-9]/g, '')
     return withDisposition.filter((r) => {
-      if (disp && r.disposition !== disp) return false
+      if (disp && !hasStage(r, disp)) return false
       if (!q) return true
       if (r.name.toLowerCase().includes(q)) return true
       if (r.email && r.email.toLowerCase().includes(q)) return true
@@ -83,7 +92,12 @@ export function DcAdsLeadsSection({
 
   const counts = useMemo(() => {
     const c: Record<Disposition, number> = { closed: 0, hvc: 0, connected: 0, sms: 0, optin: 0 }
-    for (const r of withDisposition) c[r.disposition] += 1
+    for (const r of withDisposition) {
+      if (r.sms) c.sms += 1
+      if (r.connected) c.connected += 1
+      if (r.hvc) c.hvc += 1
+      if (r.closed) c.closed += 1
+    }
     return c
   }, [withDisposition])
 
@@ -215,11 +229,12 @@ export function DcAdsLeadsSection({
         style={{ marginTop: 10, fontSize: 9, letterSpacing: '0.05em', color: 'var(--color-geg-text-faint)', lineHeight: 1.7 }}
       >
         Every DC ad lead in the selected dates (follows the campaign chooser + landing-page dropdown).
-        Search and the toggles narrow this list in place — they never leave the page. Disposition is the
-        lead&apos;s furthest stage: <b>SMS</b> = texted us back · <b>Connected</b> = a call ≥90s or a
-        later stage (calls only — texting alone never counts as connected) · <b>HVC</b> = connected{' '}
-        <i>and</i> (qualified or texted us) · <b>Closed</b> = DC close with a plan · Opt-in = none of
-        those yet.
+        Search and the toggles narrow this list in place — they never leave the page. Toggles are{' '}
+        <b>cumulative</b>: each shows every lead that reached that stage (a closed lead appears under
+        all of its stages), so the counts match the stage row above. The badge on each row is the
+        lead&apos;s furthest stage. <b>SMS</b> = texted us back · <b>Connected</b> = a <b>call ≥90s
+        only</b> — no form or text evidence counts · <b>HVC</b> = connected <i>and</i> (qualified or
+        texted us) · <b>Closed</b> = DC close with a plan · Opt-in = none of those yet.
       </div>
     </div>
   )
