@@ -10,11 +10,20 @@ import type { DcAdsDailyRow } from '@/lib/db/dc-ads'
 // box (header stays put); pinned to the rolling window, independent of the
 // date picker; scoped to the ad cascade + landing-page dropdown.
 
-const COLS = '1.15fr 0.95fr 0.85fr 0.95fr 0.7fr 0.95fr 0.95fr 0.7fr 0.7fr 0.8fr'
+const COLS =
+  '1.15fr 0.95fr 0.85fr 0.95fr 0.7fr 0.95fr 0.95fr 0.7fr 0.7fr 0.8fr 0.6fr 0.6fr 0.6fr 0.75fr 0.75fr 0.75fr 0.75fr'
+// 17 columns — give them room and let the whole table scroll sideways.
+const MIN_TABLE_WIDTH = 1420
 
 // Rows visible before scrolling — the box clips at ~9 so the table doesn't
 // dominate the page; the remaining days scroll.
 const SCROLL_MAX_HEIGHT = 420
+
+// dN ROAS = dN units × $300 ÷ the day's spend.
+function roas(units: number, spendUsd: number | null): string {
+  if (spendUsd == null || spendUsd <= 0) return '—'
+  return ((units * 300) / spendUsd).toFixed(2)
+}
 
 function fmtUsd(value: number | null): string {
   if (value == null) return '—'
@@ -52,62 +61,84 @@ export function DcAdsDailyTable({ rows }: { rows: DcAdsDailyRow[] }) {
       >
         Each row is the cohort that opted in that ET day. Spend and opt-ins are fixed once the day
         ends; every column to their right keeps climbing as that day&apos;s leads text back, connect,
-        and close — recent days always look lighter. Follows the ad chooser and landing-page
-        dropdown above.
+        and close — recent days always look lighter. <b>D0 / D3 / D7 U</b> = units closed the same
+        day / under 3 days / under 7 days after the opt-in (cumulative); the matching ROAS columns =
+        those units × $300 ÷ the day&apos;s spend, next to overall ROAS — how fast each day&apos;s
+        spend pays back. Follows the ad chooser and landing-page dropdown above.
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: COLS,
-          gap: 10,
-          padding: '6px 4px 12px',
-          borderBottom: '1px solid var(--color-geg-border)',
-          scrollbarGutter: 'stable',
-          overflowY: 'hidden',
-        }}
-      >
-        <ColH label="Day" align="left" />
-        <ColH label="Spend" />
-        <ColH label="Opt-ins" />
-        <ColH label="Qualified" />
-        <ColH label="SMS" />
-        <ColH label="SMS+MQL" />
-        <ColH label="Connects" />
-        <ColH label="HVC" />
-        <ColH label="Units" />
-        <ColH label="Closed" />
-      </div>
-
-      {/* The scrollable box — header stays put above. scrollbarGutter on both
-          keeps the header grid aligned with the scrolling rows. */}
-      <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflowY: 'auto', scrollbarGutter: 'stable' }}>
-        {rows.map((r) => (
+      {/* Horizontal scroller wraps BOTH the header and the vertical box so the
+          17 columns stay aligned while the page never scrolls sideways. */}
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{ minWidth: MIN_TABLE_WIDTH }}>
           <div
-            key={r.etDate}
             style={{
               display: 'grid',
               gridTemplateColumns: COLS,
               gap: 10,
-              padding: '13px 4px',
-              borderBottom: '1px dashed var(--color-geg-border)',
-              alignItems: 'center',
+              padding: '6px 4px 12px',
+              borderBottom: '1px solid var(--color-geg-border)',
+              scrollbarGutter: 'stable',
+              overflowY: 'hidden',
             }}
           >
-            <span className="geg-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)', letterSpacing: '-0.002em' }}>
-              {fmtDay(r.etDate)}
-            </span>
-            <Num value={fmtUsd(r.spendUsd)} />
-            <Num value={fmtCount(r.optIns)} accent />
-            <Num value={fmtCount(r.qualified)} />
-            <Num value={fmtCount(r.sms)} />
-            <Num value={fmtCount(r.smsMql)} />
-            <Num value={fmtCount(r.connected)} />
-            <Num value={fmtCount(r.hvc)} />
-            <Num value={fmtCount(r.units)} />
-            <Num value={fmtCount(r.closed)} />
+            <ColH label="Day" align="left" />
+            <ColH label="Spend" />
+            <ColH label="Opt-ins" />
+            <ColH label="Qualified" />
+            <ColH label="SMS" />
+            <ColH label="SMS+MQL" />
+            <ColH label="Connects" />
+            <ColH label="HVC" />
+            <ColH label="Units" />
+            <ColH label="Closed" />
+            <ColH label="D0 U" />
+            <ColH label="D3 U" />
+            <ColH label="D7 U" />
+            <ColH label="D0 ROAS" />
+            <ColH label="D3 ROAS" />
+            <ColH label="D7 ROAS" />
+            <ColH label="ROAS" />
           </div>
-        ))}
+
+          {/* The scrollable box — header stays put above. scrollbarGutter on
+              both keeps the header grid aligned with the scrolling rows. */}
+          <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflowY: 'auto', scrollbarGutter: 'stable' }}>
+            {rows.map((r) => (
+              <div
+                key={r.etDate}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: COLS,
+                  gap: 10,
+                  padding: '13px 4px',
+                  borderBottom: '1px dashed var(--color-geg-border)',
+                  alignItems: 'center',
+                }}
+              >
+                <span className="geg-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)', letterSpacing: '-0.002em' }}>
+                  {fmtDay(r.etDate)}
+                </span>
+                <Num value={fmtUsd(r.spendUsd)} />
+                <Num value={fmtCount(r.optIns)} accent />
+                <Num value={fmtCount(r.qualified)} />
+                <Num value={fmtCount(r.sms)} />
+                <Num value={fmtCount(r.smsMql)} />
+                <Num value={fmtCount(r.connected)} />
+                <Num value={fmtCount(r.hvc)} />
+                <Num value={fmtCount(r.units)} />
+                <Num value={fmtCount(r.closed)} />
+                <Num value={fmtCount(r.unitsD0)} />
+                <Num value={fmtCount(r.unitsD3)} />
+                <Num value={fmtCount(r.unitsD7)} />
+                <Num value={roas(r.unitsD0, r.spendUsd)} />
+                <Num value={roas(r.unitsD3, r.spendUsd)} />
+                <Num value={roas(r.unitsD7, r.spendUsd)} />
+                <Num value={r.spendUsd && r.spendUsd > 0 ? (r.cashUsd / r.spendUsd).toFixed(2) : '—'} accent />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

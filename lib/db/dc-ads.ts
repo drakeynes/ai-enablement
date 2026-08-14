@@ -298,6 +298,12 @@ export type DcAdsDailyRow = {
   smsMql: number
   hvc: number
   units: number
+  // Speed-to-unit (0142): valid-adjusted units closed within 0 / <3 / <7 ET
+  // calendar days of the opt-in — cumulative (d0 ⊆ d3 ⊆ d7 ⊆ units). The dN
+  // ROAS columns derive in the table (units × $300 ÷ the day's spend).
+  unitsD0: number
+  unitsD3: number
+  unitsD7: number
   called: number
   connected: number
   closed: number
@@ -655,6 +661,17 @@ export type DcAdsSpeedStats = CohortStats & {
   // guard as the connected rate's form-reached leads.
   smsEngaged: number
   smsTexted: number
+  // Dial-speed spread (boss item #20), on the SAME 12p–12a business-hours
+  // clock as the average. under-X counts are CUMULATIVE (under30 ⊇ under10 ⊇
+  // under5); under30 + over30 + neverDialed = cohortSize, so the displayed
+  // percentages sum to 100.
+  dialedUnder5m: number
+  dialedUnder10m: number
+  dialedUnder30m: number
+  dialedOver30m: number
+  neverDialed: number
+  // Median opt-in → first dial (business-hours seconds), among dialed leads.
+  medianDialSec: number | null
 }
 
 export async function getDcAdsSpeedCohort(
@@ -676,27 +693,46 @@ export async function getDcAdsSpeedCohort(
     smsIn: boolean
     smsOut: boolean
   }>
+  // Business-hours speed per lead, computed once — feeds both the summarize
+  // math and the dial-speed spread.
+  const speeds = rows.map((r) =>
+    r.firstDial
+      ? businessHoursElapsedSec(
+          new Date(r.anchor),
+          new Date(r.firstDial),
+          DC_CLOCK_OPEN_HOUR,
+          DC_CLOCK_CLOSE_HOUR,
+        )
+      : null,
+  )
   const stats = summarizeCohortRows(
-    rows.map((r) => ({
-      speedSec: r.firstDial
-        ? businessHoursElapsedSec(
-            new Date(r.anchor),
-            new Date(r.firstDial),
-            DC_CLOCK_OPEN_HOUR,
-            DC_CLOCK_CLOSE_HOUR,
-          )
-        : null,
+    rows.map((r, i) => ({
+      speedSec: speeds[i],
       firstCallAt: r.firstDial,
       anyCallConnected: r.connected,
       intensity: r.dials,
     })),
   )
+  const dialed = speeds.filter((s): s is number => s !== null).sort((a, b) => a - b)
+  const under = (min: number) => dialed.filter((s) => s < min * 60).length
+  const medianDialSec =
+    dialed.length === 0
+      ? null
+      : dialed.length % 2
+        ? dialed[(dialed.length - 1) / 2]
+        : (dialed[dialed.length / 2 - 1] + dialed[dialed.length / 2]) / 2
   return {
     ...stats,
     connectedBroad: rows.filter((r) => r.connected).length,
     dialedOrConnected: rows.filter((r) => r.firstDial != null || r.connected).length,
     smsEngaged: rows.filter((r) => r.smsIn).length,
     smsTexted: rows.filter((r) => r.smsOut || r.smsIn).length,
+    dialedUnder5m: under(5),
+    dialedUnder10m: under(10),
+    dialedUnder30m: under(30),
+    dialedOver30m: dialed.length - under(30),
+    neverDialed: rows.length - dialed.length,
+    medianDialSec,
   }
 }
 

@@ -215,7 +215,10 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   12p–12a ET clock** (boss 2026-08-13 — deliberately NOT comparable with the Leads page's
   10a–10p numbers; the clock is labeled on the box; verified against an independent
   implementation to the second across the full cohort incl. DST days), plus an **SMS engagement
-  rate**: of the leads we texted (any outbound SMS after the opt-in), how many texted back —
+  rate** and (boss item #20, 2026-08-14) a second stat strip — dial-speed spread (% dialed
+  <5m/<10m/<30m cumulative · >30m · never dialed — <30m + >30m + never = 100% — and the median
+  time to dial, all on the DC clock) plus MQL→Close / HVC→Close / Connect→Close rates and CPU
+  (adspend ÷ Valid-adjusted units). The SMS engagement rate: of the leads we texted (any outbound SMS after the opt-in), how many texted back —
   texted, not cohort, as the denominator (never-touched-leads-don't-dilute, Drake 2026-06-18;
   a text-first lead sits in both sides so the rate caps at 100%). Backed by the
   `dc_ads_speed_cohort()` RPC (0129→0135: + `smsIn`/`smsOut`) + the SAME
@@ -269,7 +272,10 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   freeze when the day ends, every downstream column is LIFETIME progression and keeps climbing as
   that cohort texts back / connects / closes — recent days always read lighter. Pinned to the
   rolling window regardless of the date picker; follows the ad chooser + landing-page dropdown.
-  Backed by the `dc_ads_daily()` RPC (0126→0134; still returns called/cash/dials for other
+  **D0/D3/D7 Units + ROAS** (boss item #19, migration 0142): valid-adjusted units closed within
+  0/<3/<7 ET calendar days of the opt-in (cumulative) and each × $300 ÷ the day's spend, beside
+  overall ROAS — the speed-to-payback read; the 17 columns scroll horizontally inside the box.
+  Backed by the `dc_ads_daily()` RPC (0126→0142; still returns called/cash/dials for other
   consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close

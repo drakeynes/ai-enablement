@@ -7,6 +7,7 @@ import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
 import { DcAdsLeadsSection } from '@/components/sales/dc-ads-leads'
+import { DcAdsSpeedExtras } from '@/components/sales/dc-ads-speed-extras'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
 import { SpeedToLeadBoxes } from '@/components/sales/speed-to-lead-boxes'
 import {
@@ -246,6 +247,10 @@ export default async function DcAdsPage({
           sms={{ engaged: speedCohort.smsEngaged, texted: speedCohort.smsTexted }}
           connectedHint="of leads dialed · calls ≥90s only"
         />
+        {/* Boss item #20: dial-speed spread (<5m/<10m/<30m/>30m/never sums to
+            100% via the cumulative <30m) + median, and the close-rate/CPU
+            strip. Same clock, same filters. */}
+        <DcAdsSpeedExtras speed={speedCohort} funnel={funnel} spendUsd={spend.spendUsd} />
       </div>
 
       {/* The embedded lead roster (boss 2026-08-14) — the Leads page scoped to
