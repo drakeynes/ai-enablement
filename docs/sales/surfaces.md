@@ -170,7 +170,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   question "Yes I can pay for the AI tools"; matched to the lead by phone/email, newest response
   wins → `dc_ads_lead_facts.tf_qualified`); SMS = inbound SMS after the opt-in (`has_inbound`);
   SMS+MQL = qualified AND texted back; Connects = the Connected roll (call ≥90s or a later
-  stage); HVC = SMS+MQL OR Connects; Units = `plan_units` sum (cash = units × $300).
+  stage — calls only, SMS never connects a lead); HVC = **connected AND (qualified OR
+  texted-us)** — corrected 2026-08-14 (migration 0137), guaranteed ⊆ Connects; Units =
+  `plan_units` sum (cash = units × $300).
   Called/Booked/Showed are still computed for the page's other sections.
   Adspend = `cortana_campaign_daily` summed over ONLY
   the registered DC campaigns (`dc_ads_campaigns` — instant-form campaigns detected by the adset
@@ -194,6 +196,14 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   card per team member (managed in DC Setup; active-first, "Show inactive" toggle, zero-activity
   actives included so a new hire is visible before their first dial) with Dials / Connects / Shows /
   Closes / Units / Cash from the by-rep RPC; unlinked activity rows get their own NOT-LINKED card.
+- **Leads roster** (added 2026-08-14, migration 0137) — the Leads page's list scoped to DC ad
+  leads, embedded right under the speed-to-lead boxes: one row per cohort lead (name / phone /
+  email / opt-in day / landing page / dials / qualified / disposition), all inside a fixed-height
+  scrollable box. **Search + disposition toggles (SMS · Connected · HVC · Closed) filter fully
+  client-side — they never navigate.** Disposition = the lead's furthest stage
+  (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
+  `close_leads.display_name` + first contact phone/email — the search keys); follows the cascade +
+  LP dropdown + window like every other section.
 - **Speed to lead boxes** (added 2026-07-15; reclocked + SMS box 2026-08-13, migration 0135) —
   the Leads page's top-line stats computed over the DC-ads cohort, **on the DC dial team's own
   12p–12a ET clock** (boss 2026-08-13 — deliberately NOT comparable with the Leads page's

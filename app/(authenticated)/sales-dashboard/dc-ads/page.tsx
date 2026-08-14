@@ -6,6 +6,7 @@ import { DcAdsLpSummarySection } from '@/components/sales/dc-ads-lp-summary'
 import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
+import { DcAdsLeadsSection } from '@/components/sales/dc-ads-leads'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
 import { SpeedToLeadBoxes } from '@/components/sales/speed-to-lead-boxes'
 import {
@@ -17,6 +18,7 @@ import {
   getDcAdsDaily,
   getDcAdsHierarchy,
   getDcAdsSpeedCohort,
+  getDcAdsLeadRoster,
   DC_CLOCK_LABEL,
   type DcAdsEntityFilter,
 } from '@/lib/db/dc-ads'
@@ -98,6 +100,7 @@ export default async function DcAdsPage({
     speedCohort,
     adsLp,
     team,
+    leadRoster,
   ] = await Promise.all([
     getDcAdsFunnel(rangeBounds, filter),
     getDcAdsByRep(rangeBounds, filter),
@@ -109,6 +112,7 @@ export default async function DcAdsPage({
     getDcAdsSpeedCohort(rangeBounds, filter),
     getDcAdsLpSummary(range, filter),
     getDcTeam(),
+    getDcAdsLeadRoster(rangeBounds, filter),
   ])
 
   return (
@@ -229,6 +233,15 @@ export default async function DcAdsPage({
         />
       </div>
 
+      {/* The embedded lead roster (boss 2026-08-14) — the Leads page scoped to
+          DC ad leads, right under the speed-to-lead boxes. Search + the
+          disposition toggles filter in place; the box scrolls, the page
+          doesn't grow. */}
+      <DcAdsLeadsSection
+        rows={leadRoster}
+        lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
+      />
+
       <DcAdsCalledSection called={called} />
 
       <div
@@ -261,9 +274,10 @@ export default async function DcAdsPage({
         newest opt-in) · Qualified = the lead&apos;s own <b>Typeform</b> answered the qualifying
         question with &ldquo;Yes I can pay for the AI tools&rdquo; (matched by phone/email; instant-form
         leads have no Typeform, so they never qualify) · SMS = the lead <b>texted us back</b> (an
-        inbound SMS after the opt-in) · SMS+MQL = qualified <i>and</i> texted back · Connects = a{' '}
-        <b>call ≥90s</b> (either direction) or a filed pitch form · HVC = high-value connect —
-        SMS+MQL <i>or</i> a connect · Units = Digital College <b>plan units</b> closed · Closed = a DC
+        inbound SMS after the opt-in; texting alone never counts as connected) · SMS+MQL = qualified{' '}
+        <i>and</i> texted back · Connects = a <b>call ≥90s</b> (either direction) or a filed pitch
+        form — calls only · HVC = high-value connect: <b>connected and</b> (qualified <i>or</i>{' '}
+        texted us) — always a subset of Connects · Units = Digital College <b>plan units</b> closed · Closed = a DC
         close <b>with an explicit plan</b> — from the DC sale form or a closer report (a closed form
         with no plan counts as a show, not a close) · Cash = $300 per plan unit · Adspend = the
         registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,

@@ -89,6 +89,12 @@ in `dc_ads_funnel()` (`qualified`, `sms`, `smsMql`, `hvc`, `units` fields).
 plan splits, and `teamMemberId` (the DC Ads roster grid's identity join); adds
 `dc_ads_unmapped_callers()` (DC Setup's radar for unlinked dialers).
 
+**0137** (no facts columns) corrects HVC in `dc_ads_funnel()` /
+`dc_ads_daily()` to `connected AND (tf_qualified OR has_inbound)` — a subset
+of Connected by construction — and adds `dc_ads_lead_roster()`: per-lead rows
+(display name + first contact phone/email, `lp_slug`, dials, disposition
+flags) for the page's embedded, client-filtered lead list.
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

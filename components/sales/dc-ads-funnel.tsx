@@ -25,10 +25,11 @@ function PlanChip({ label, count }: { label: string; count: number }) {
 // DC ads stage row — the boss's nine numbers (2026-08-13):
 //   Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed
 // Deliberately NOT a funnel: the stages overlap rather than nest (SMS ⊄
-// Qualified, HVC = SMS+MQL ∪ Connects, Units ≥ Closed when multi-unit deals
-// land), so the arrows carry no conversion percentages — the row just puts
-// the numbers side by side. Cash + ROAS keep their own line below.
-// Definitions in the page footer; per-lead facts in lib/db/dc-ads.ts (0133).
+// Qualified, Units ≥ Closed when multi-unit deals land), so the arrows carry
+// no conversion percentages — the row just puts the numbers side by side.
+// One exception is guaranteed (0137): HVC = connected AND (qualified OR
+// texted-us), so HVC ≤ Connects always. Cash + ROAS keep their own line
+// below. Definitions in the page footer; per-lead facts in lib/db/dc-ads.ts.
 
 const ACCENT = '#b48ead' // purple — distinct from Direct green / setter yellow / reactivation blue / outbound coral
 

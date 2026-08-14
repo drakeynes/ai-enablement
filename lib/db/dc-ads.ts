@@ -665,6 +665,38 @@ export async function getDcAdsSpeedCohort(
   }
 }
 
+// The embedded lead roster (0137) — the Leads page's list scoped to DC ad
+// leads, filtered IN PLACE on the client (search + disposition toggles never
+// navigate). Disposition precedence: Closed > HVC > Connected > SMS > Opt-in.
+export type DcAdsLeadRow = {
+  closeId: string
+  name: string
+  phone: string | null
+  email: string | null
+  anchor: string
+  lpSlug: string | null
+  dials: number
+  sms: boolean
+  qualified: boolean
+  connected: boolean
+  hvc: boolean
+  closed: boolean
+}
+
+export async function getDcAdsLeadRoster(
+  range: { startUtcIso: string; endUtcIso: string },
+  filter?: DcAdsEntityFilter,
+): Promise<DcAdsLeadRow[]> {
+  const sb = createAdminClient()
+  const { data, error } = await sb.rpc('dc_ads_lead_roster' as never, {
+    p_start: range.startUtcIso,
+    p_end: range.endUtcIso,
+    ...entityArgs(filter),
+  } as never)
+  if (error) throw new Error(`dc_ads_lead_roster RPC failed: ${error.message}`)
+  return (data ?? []) as unknown as DcAdsLeadRow[]
+}
+
 // Close-side opt-ins on the INSTANT-FORM path only, for the bridge-drift check.
 // Since 0130 the funnel's optIns spans both paths, so comparing the Meta-side
 // count (instant form by definition — landing-page leads never submit a Meta
