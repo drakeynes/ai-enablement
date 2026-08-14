@@ -216,7 +216,11 @@ export default async function DcAdsPage({
           the DC funnel; follows the cascade + landing-page dropdown. */}
       <DcAdsLpSummarySection summary={adsLp} />
 
-      <DcAdsByRepSection rows={byRep.reps} totals={byRep.totals} />
+      <DcAdsByRepSection
+        rows={byRep.reps}
+        totals={byRep.totals}
+        activeTeamMemberIds={team.filter((t) => t.isActive).map((t) => t.id)}
+      />
 
       {/* Roster — one card per human on the team (managed in DC Setup),
           DC-cohort activity only. Below the by-rep table per boss item 8. */}
