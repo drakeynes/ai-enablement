@@ -113,7 +113,7 @@ def resolve_dc_landing_pages(db) -> tuple[int, int, int]:
     """
     camps = (
         db.table("dc_ads_campaigns")
-        .select("campaign_id, destination_url, lp_slug, typeform_id")
+        .select("campaign_id, destination_url, lp_slug, lp_slugs, typeform_id")
         .eq("source_kind", "landing_page")
         .execute()
         .data
@@ -152,12 +152,17 @@ def resolve_dc_landing_pages(db) -> tuple[int, int, int]:
         logger.info("dc landing pages: auto-created %s (%s)", slug, norm)
 
     # 2. Campaigns → lp_slug (follows the destination) + typeform inherit.
+    #    lp_slugs (0138, split tests) keeps every page: the destination page
+    #    becomes/stays the primary (first) entry; human-added extra pages are
+    #    preserved, never removed.
     linked = 0
     for c in camps:
         lp = by_url[normalize_lp_url(c["destination_url"])]
         patch: dict = {}
-        if c.get("lp_slug") != lp["slug"]:
+        current_slugs: list[str] = c.get("lp_slugs") or []
+        if c.get("lp_slug") != lp["slug"] or lp["slug"] not in current_slugs:
             patch["lp_slug"] = lp["slug"]
+            patch["lp_slugs"] = [lp["slug"], *[s for s in current_slugs if s != lp["slug"]]]
         if not c.get("typeform_id") and lp.get("typeform_id"):
             patch["typeform_id"] = lp["typeform_id"]
         if patch:

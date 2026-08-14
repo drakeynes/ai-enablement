@@ -296,26 +296,29 @@ export async function setDcCampaignActive(campaignId: string, active: boolean): 
   return { ok: true }
 }
 
-// Point a campaign at a different landing page. Facts re-stamp on the next
-// refresh tick (≤15 min); spend scoping follows immediately.
-export async function setDcCampaignLp(campaignId: string, lpSlug: string | null): Promise<SimpleResult> {
+// Set the landing page(s) a campaign drives to — several when split-testing
+// (0138). The first is the primary (lp_slug — the fallback for leads whose
+// Typeform can't say which page they hit). Facts re-stamp on the next refresh
+// tick (≤15 min); spend scoping + the page's dropdowns follow immediately.
+export async function setDcCampaignLps(campaignId: string, lpSlugs: string[]): Promise<SimpleResult> {
   const access = await requireAdmin()
   if (!access) return { ok: false, error: 'forbidden' }
   const id = clean(campaignId)
   if (!id) return { ok: false, error: 'invalid_campaign_id' }
-  const slug = clean(lpSlug)
+  const slugs = Array.from(new Set((lpSlugs ?? []).map((s) => clean(s)).filter((s): s is string => !!s)))
   const admin = createAdminClient()
-  if (slug) {
-    const { data: lp } = await admin
+  if (slugs.length) {
+    const { data: found } = await admin
       .from('dc_landing_pages' as never)
       .select('slug')
-      .eq('slug', slug)
-      .maybeSingle()
-    if (!lp) return { ok: false, error: 'unknown_landing_page' }
+      .in('slug', slugs)
+    const known = new Set(((found ?? []) as Array<Record<string, unknown>>).map((r) => r.slug as string))
+    const missing = slugs.filter((s) => !known.has(s))
+    if (missing.length) return { ok: false, error: `unknown_landing_page:${missing[0]}` }
   }
   const { error } = await admin
     .from('dc_ads_campaigns' as never)
-    .update({ lp_slug: slug } as never)
+    .update({ lp_slugs: slugs, lp_slug: slugs[0] ?? null } as never)
     .eq('campaign_id', id)
   if (error) return { ok: false, error: error.message }
   revalidateAll()

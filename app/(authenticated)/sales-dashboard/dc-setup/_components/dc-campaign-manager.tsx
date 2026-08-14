@@ -3,14 +3,16 @@
 import { useState, useTransition } from 'react'
 
 import type { AdminDcCampaign, AdminDcLandingPage } from '@/lib/db/dc-setup'
-import { setDcCampaignActive, setDcCampaignLp } from '../actions'
-import { primaryBtn, dangerBtn, inputStyle, SectionNote } from './ui'
+import { setDcCampaignActive, setDcCampaignLps } from '../actions'
+import { primaryBtn, dangerBtn, SectionNote } from './ui'
 
 // DC Setup · Campaigns — the dc_ads_campaigns registry (0130). Campaigns are
 // AUTO-DETECTED (instant-form scan + creative destination scan) — this editor
-// only curates: which landing page a campaign belongs to, and whether it
+// only curates: which landing page(s) a campaign drives to (tick several when
+// split-testing — 0138; the first ticked is the primary), and whether it
 // counts on the DC Ads page at all. Retiring one removes its spend AND its
-// leads from every number on the page.
+// leads from every number on the page. Whatever is ticked here is exactly
+// what the DC Ads page's landing-page dropdown offers.
 
 export function DcCampaignManager({
   campaigns,
@@ -60,25 +62,44 @@ function CampaignRow({ campaign, pages }: { campaign: AdminDcCampaign; pages: Ad
           {c.sourceKind === 'instant_form' ? 'instant form (no LP)' : 'landing page'}
         </span>
         {c.sourceKind === 'landing_page' ? (
-          <select
-            style={{ ...inputStyle, width: 180 }}
-            value={c.lpSlug ?? ''}
-            disabled={pending}
-            onChange={(e) =>
-              run(
-                () => setDcCampaignLp(c.campaignId, e.target.value || null),
-                'Landing page updated — numbers re-stamp within ~15 min.',
-              )
-            }
-            aria-label={`Landing page for ${c.campaignName}`}
-          >
-            <option value="">— no landing page —</option>
-            {pages.map((p) => (
-              <option key={p.slug} value={p.slug}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <span style={{ display: 'inline-flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {pages
+              .filter((p) => p.active || c.lpSlugs.includes(p.slug))
+              .map((p) => {
+                const checked = c.lpSlugs.includes(p.slug)
+                return (
+                  <label
+                    key={p.slug}
+                    className="geg-mono"
+                    style={{
+                      fontSize: 11,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      color: checked ? 'var(--color-geg-text)' : 'var(--color-geg-text-faint)',
+                      cursor: pending ? 'default' : 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={pending}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...c.lpSlugs, p.slug]
+                          : c.lpSlugs.filter((s) => s !== p.slug)
+                        run(
+                          () => setDcCampaignLps(c.campaignId, next),
+                          'Landing pages updated — lead numbers re-stamp within ~15 min.',
+                        )
+                      }}
+                    />
+                    {p.label}
+                    {checked && c.lpSlugs[0] === p.slug && c.lpSlugs.length > 1 ? ' (primary)' : ''}
+                  </label>
+                )
+              })}
+          </span>
         ) : null}
         <span style={{ marginLeft: 'auto' }}>
           <button

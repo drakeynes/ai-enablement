@@ -43,7 +43,8 @@ Note `/training` exists on **both** hosts — match on full host, never path alo
 | `campaign_name` | Meta campaign name, for display/debugging. |
 | `source_kind` | `instant_form` \| `landing_page`. Drives the page's path facet. |
 | `funnel_label` | Matches `close_leads.funnel_name` for this campaign's leads (`Digital College`, `Aman Funnel`, `Luke Funnel`). Display metadata since 0132 — the filter key is `lp_slug`. |
-| `lp_slug` | (0132) The landing page this campaign drives to — FK `dc_landing_pages.slug`, derived from the normalized `destination_url` by `resolve_dc_landing_pages()` each sync. Null for `instant_form`. THE scoping key for the page's landing-page dropdown (facts `lp_slug` + spend scope). |
+| `lp_slug` | (0132) The PRIMARY landing page — FK `dc_landing_pages.slug`, derived from the normalized `destination_url` by `resolve_dc_landing_pages()` each sync (= `lp_slugs[0]`). Null for `instant_form`. |
+| `lp_slugs` | (0138) EVERY landing page the campaign drives to — several when split-testing (DC Setup checkboxes). The union over ACTIVE campaigns is exactly what the DC Ads page's LP dropdown + Ads & LP summary show. Facts stamping for a >1-LP campaign resolves per lead via the matched Typeform (each page embeds its own form), falling back to the primary. The resolver keeps the destination page present/first and never removes human-added extras. |
 | `destination_url` | Landing-page campaigns only — the creative destination, and the evidence for the host rule above. |
 | `typeform_id` | Landing-page campaigns only — the Typeform the LP embeds (joins `typeform_responses.form_id`). Inherited from the `dc_landing_pages` row by the resolver when null. |
 | `active` | `false` retires a campaign from the page **without deleting it** (spend history must stay scoped). Paused-in-Meta campaigns stay `active=true` — their history still counts. |

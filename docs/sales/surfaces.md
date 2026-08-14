@@ -231,8 +231,12 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   independent AND facet — a page spans many ads — backed by `dc_ads_lead_facts.lp_slug` via the
   RPCs' `p_lp_slug` param (0132; `p_funnel_label` from 0131 remains as a deprecated compat
   alias). Spend under an LP-only selection = the campaigns driving to that page
-  (`dc_ads_campaigns.lp_slug`) summed from `cortana_campaign_daily`; with a cascade entity
-  selected too, the entity wins the spend read while the funnel ANDs both. **A new funnel
+  (`dc_ads_campaigns.lp_slugs`) summed from `cortana_campaign_daily`; with a cascade entity
+  selected too, the entity wins the spend read while the funnel ANDs both. **Corroborated with
+  the campaign registry (2026-08-14, 0138):** the options are exactly the pages ACTIVE
+  campaigns drive to (+ any page with window opt-ins so data never hides); with a campaign
+  selected the dropdown narrows to THAT campaign's page(s); the Ads & LP summary's "All landing
+  pages" block aggregates the same linked set. **A new funnel
   self-registers**: creative scan → registry row (URL-named) → dropdown + spend + facts, no
   manual steps (`resolve_dc_landing_pages()`, see `docs/schema/dc_landing_pages.md`). The
   retired Forms facet's plumbing (`form_id` column, `p_form_id` RPC param, form→ads spend
@@ -442,10 +446,13 @@ The ONE page where Zain/Aman run the whole DC Ads operation with no engineer
   retire/restore. No hard delete (facts + campaigns reference the slug).
   Saving marks the row curated (`auto_created=false`); the ingestion resolver
   never overwrites curated fields.
-- **Campaigns** — `dc_ads_campaigns` (0130): per-campaign landing-page link
-  (`lp_slug`; facts re-stamp ≤15 min) and **retire/restore** (`active` —
-  retiring removes the campaign's spend AND leads from the page; paused-in-
-  Meta campaigns stay active so history counts).
+- **Campaigns** — `dc_ads_campaigns` (0130): per-campaign landing-page
+  **checkboxes** (`lp_slugs`, 0138 — tick several when split-testing; first
+  ticked = primary; facts re-stamp ≤15 min, per-lead attribution via the
+  matched Typeform when >1) and **retire/restore** (`active` — retiring
+  removes the campaign's spend AND leads from the page; paused-in-Meta
+  campaigns stay active so history counts). Whatever is ticked here is
+  exactly what the DC Ads page's LP dropdown and Ads & LP summary cover.
 
 All actions are admin-gated server-side and `revalidatePath` the DC Ads +
 Talent pages. Aman was bumped to `access_tier='admin'` (2026-08-13) so both

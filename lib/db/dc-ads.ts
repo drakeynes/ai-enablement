@@ -214,12 +214,13 @@ export async function spendScope(
   const sb = createAdminClient()
   const { data: camps, error } = await sb
     .from('dc_ads_campaigns' as never)
-    .select('campaign_id, lp_slug, source_kind')
+    .select('campaign_id, lp_slug, lp_slugs, source_kind')
     .eq('active', true)
   if (error) throw new Error(`dc_ads_campaigns read failed: ${error.message}`)
   const rows = (camps ?? []) as Array<{
     campaign_id: string
     lp_slug: string | null
+    lp_slugs: string[] | null
     source_kind: string
   }>
   const all = rows.map((c) => c.campaign_id)
@@ -240,9 +241,13 @@ export async function spendScope(
   }
   if (filter?.lpSlug) {
     const slug = filter.lpSlug
+    // A split-test campaign (several lp_slugs, 0138) counts toward EACH of its
+    // pages' spend — Meta can't split one campaign's spend per destination.
     const ids = rows
       .filter((c) =>
-        slug === INSTANT_FORM_SLUG ? c.source_kind === 'instant_form' : c.lp_slug === slug,
+        slug === INSTANT_FORM_SLUG
+          ? c.source_kind === 'instant_form'
+          : (c.lp_slugs?.length ? c.lp_slugs.includes(slug) : c.lp_slug === slug),
       )
       .map((c) => c.campaign_id)
     return { table: 'cortana_campaign_daily', ids, campaigns: all.length }
@@ -362,6 +367,9 @@ export type DcAdHierarchy = {
   typeforms: DcFormOption[]
   funnels: DcFunnelOption[]
   landingPages: DcLandingPageOption[]
+  // campaign_id → the landing pages it drives to (dc_ads_campaigns.lp_slugs,
+  // 0138) — the page narrows the LP dropdown to the selected campaign's set.
+  campaignLps: Record<string, string[]>
 }
 
 // Campaign names lead with a launch date ('07/25 | …', '08/12 | …'); parse it
@@ -433,7 +441,10 @@ export async function getDcAdsHierarchy(range: {
     // The FULL registry — the campaign dropdown lists every registered
     // campaign (Drake's boss 2026-08-13: all six, like the Meta view), not
     // just the ones with opt-ins in the window.
-    sb.from('dc_ads_campaigns' as never).select('campaign_id, campaign_name').eq('active', true),
+    sb
+      .from('dc_ads_campaigns' as never)
+      .select('campaign_id, campaign_name, lp_slug, lp_slugs')
+      .eq('active', true),
   ])
   if (error) throw new Error(`dc_ads_lead_facts hierarchy read failed: ${error.message}`)
   if (fErr) throw new Error(`meta_lead_forms registry read failed: ${fErr.message}`)
@@ -526,8 +537,17 @@ export async function getDcAdsHierarchy(range: {
   }
   // The campaign dropdown = the FULL registry, window counts where leads
   // exist and 0 where none (the CBO campaign that never ran still shows).
-  // Registry names win over the spend-mirror lookup.
-  for (const c of (campRows ?? []) as Array<{ campaign_id: string; campaign_name: string | null }>) {
+  // Registry names win over the spend-mirror lookup. Also collect each
+  // campaign's landing pages (0138) — the LP dropdown corroborates with them.
+  const campaignLps: Record<string, string[]> = {}
+  const activeLpSlugs = new Set<string>()
+  type CampRow = {
+    campaign_id: string
+    campaign_name: string | null
+    lp_slug: string | null
+    lp_slugs: string[] | null
+  }
+  for (const c of (campRows ?? []) as CampRow[]) {
     const existing = camps.get(c.campaign_id)
     if (existing) {
       if (c.campaign_name) existing.campaignName = c.campaign_name
@@ -538,6 +558,9 @@ export async function getDcAdsHierarchy(range: {
         adsets: new Map(),
       })
     }
+    const slugs = c.lp_slugs?.length ? c.lp_slugs : c.lp_slug ? [c.lp_slug] : []
+    campaignLps[c.campaign_id] = slugs
+    for (const s of slugs) activeLpSlugs.add(s)
   }
   const adNodes = (ads: Map<string, { adName: string; count: number }>): DcAdNode[] => {
     const list = Array.from(ads.entries()).map(([adId, v]) => ({ adId, adName: v.adName, count: v.count }))
@@ -552,12 +575,17 @@ export async function getDcAdsHierarchy(range: {
     Array.from(m.entries())
       .map(([adsetId, v]) => ({ adsetId, adsetName: v.adsetName, count: v.count, ads: adNodes(v.ads) }))
       .sort((x, y) => y.count - x.count)
-  // Landing-page options: active registry rows in sort order (0-count rows
-  // included — a just-launched funnel shows before its first lead), plus the
-  // instant-form pseudo-entry when the legacy path has window opt-ins.
+  // Landing-page options: CORROBORATED with the campaign registry (boss
+  // 2026-08-14) — only pages an ACTIVE campaign drives to (plus any page that
+  // still has window opt-ins, so real data never hides), in sort order.
+  // 0-count linked pages show (a just-launched funnel is visible before its
+  // first lead); an unlinked page disappears from the dropdown. Instant-form
+  // pseudo-entry when the legacy path has window opt-ins.
   const landingPages: DcLandingPageOption[] = (
     (lpRows ?? []) as Array<{ slug: string; label: string }>
-  ).map((lp) => ({ slug: lp.slug, label: lp.label, count: lpAgg.get(lp.slug) ?? 0 }))
+  )
+    .filter((lp) => activeLpSlugs.has(lp.slug) || (lpAgg.get(lp.slug) ?? 0) > 0)
+    .map((lp) => ({ slug: lp.slug, label: lp.label, count: lpAgg.get(lp.slug) ?? 0 }))
   const instantCount = lpAgg.get(INSTANT_FORM_SLUG) ?? 0
   if (instantCount > 0)
     landingPages.push({ slug: INSTANT_FORM_SLUG, label: 'Instant form (no LP)', count: instantCount })
@@ -589,6 +617,7 @@ export async function getDcAdsHierarchy(range: {
       .map(([label, v]) => ({ label, sourceKind: v.sourceKind, count: v.count }))
       .sort((x, y) => y.count - x.count),
     landingPages,
+    campaignLps,
   }
 }
 

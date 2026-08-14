@@ -129,7 +129,17 @@ export default async function DcAdsPage({
           campaign={campaign}
           adset={adset}
           ad={ad}
-          landingPages={hierarchy.landingPages.map((p) => ({ value: p.slug, label: p.label, count: p.count }))}
+          // With a campaign selected, offer only ITS landing pages (0138 —
+          // boss: don't show the other pages). The current selection stays
+          // listed either way so the dropdown can't strand itself.
+          landingPages={hierarchy.landingPages
+            .filter(
+              (p) =>
+                !campaign ||
+                (hierarchy.campaignLps[campaign] ?? []).includes(p.slug) ||
+                p.slug === lp,
+            )
+            .map((p) => ({ value: p.slug, label: p.label, count: p.count }))}
           lp={lp}
           startEtDate={startEt}
           endEtDate={endEt}

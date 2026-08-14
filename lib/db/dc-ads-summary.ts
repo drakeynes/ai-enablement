@@ -98,16 +98,29 @@ export async function getDcAdsLpSummary(
   filter: DcAdsEntityFilter,
 ): Promise<DcAdsLpSummary> {
   const sb = createAdminClient()
-  const { data: lpData, error } = await sb
-    .from('dc_landing_pages' as never)
-    .select('slug, label, typeform_id, vsl, confirm_video_hashed_id, confirm_video_label')
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
+  const [{ data: lpData, error }, { data: campData, error: cErr }] = await Promise.all([
+    sb
+      .from('dc_landing_pages' as never)
+      .select('slug, label, typeform_id, vsl, confirm_video_hashed_id, confirm_video_label')
+      .eq('active', true)
+      .order('sort_order', { ascending: true }),
+    sb.from('dc_ads_campaigns' as never).select('lp_slug, lp_slugs').eq('active', true),
+  ])
   if (error) throw new Error(`dc_landing_pages read failed: ${error.message}`)
-  const lps = (lpData ?? []) as unknown as LpRow[]
+  if (cErr) throw new Error(`dc_ads_campaigns read failed: ${cErr.message}`)
+  const allLps = (lpData ?? []) as unknown as LpRow[]
+
+  // "All landing pages" = the pages ACTIVE campaigns drive to (boss
+  // 2026-08-14) — a registered page no live campaign uses stays out of the
+  // aggregate. A directly selected page still resolves either way.
+  const linked = new Set<string>()
+  for (const c of (campData ?? []) as Array<{ lp_slug: string | null; lp_slugs: string[] | null }>) {
+    for (const s of c.lp_slugs?.length ? c.lp_slugs : c.lp_slug ? [c.lp_slug] : []) linked.add(s)
+  }
+  const lps = allLps.filter((l) => linked.has(l.slug))
 
   const isInstant = filter.lpSlug === INSTANT_FORM_SLUG
-  const selected = !isInstant && filter.lpSlug ? (lps.find((l) => l.slug === filter.lpSlug) ?? null) : null
+  const selected = !isInstant && filter.lpSlug ? (allLps.find((l) => l.slug === filter.lpSlug) ?? null) : null
   const cascadeActive = !!(filter.adId || filter.adsetId || filter.campaignId || filter.formId)
 
   // Ads block follows the full selection; the LP block ignores the cascade.

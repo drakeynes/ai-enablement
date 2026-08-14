@@ -70,10 +70,15 @@ the videos attach once Wistia sees them play on the page. Afterwards, in the
   campaigns that never belonged there. A campaign that's merely paused in
   Meta should stay active here (its history still counts).
 
-## Scenario 6 — a campaign is pointing at the wrong landing page
+## Scenario 6 — a campaign is pointing at the wrong landing page(s)
 
-Campaigns section → change the landing-page dropdown on that campaign's row.
-Spend re-scopes immediately; the lead numbers re-stamp within ~15 minutes.
+Campaigns section → tick/untick the landing-page checkboxes on that campaign's
+row. Spend re-scopes immediately; the lead numbers re-stamp within ~15
+minutes. **Split-testing two pages under one campaign?** Tick both — each
+lead is attributed to the page whose form they filled (the first ticked page
+is the fallback when a lead never reached a form). The DC Ads page's
+landing-page dropdown and the "All landing pages" summary always show exactly
+the pages ticked on active campaigns.
 
 ---
 

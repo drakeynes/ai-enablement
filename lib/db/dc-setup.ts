@@ -214,7 +214,9 @@ export type AdminDcCampaign = {
   campaignId: string
   campaignName: string
   sourceKind: string
-  lpSlug: string | null
+  // Every landing page the campaign drives to (0138) — several when
+  // split-testing. lpSlug (the primary) = lpSlugs[0].
+  lpSlugs: string[]
   funnelLabel: string | null
   destinationUrl: string | null
   active: boolean
@@ -226,18 +228,22 @@ export async function getAllDcCampaignsAdmin(): Promise<AdminDcCampaign[]> {
   const { data, error } = await admin
     .from('dc_ads_campaigns' as never)
     .select(
-      'campaign_id, campaign_name, source_kind, lp_slug, funnel_label, destination_url, active, last_seen_at',
+      'campaign_id, campaign_name, source_kind, lp_slug, lp_slugs, funnel_label, destination_url, active, last_seen_at',
     )
     .order('last_seen_at', { ascending: false })
   if (error) throw new Error(`dc_ads_campaigns read failed: ${error.message}`)
-  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    campaignId: r.campaign_id as string,
-    campaignName: (r.campaign_name as string) ?? (r.campaign_id as string),
-    sourceKind: (r.source_kind as string) ?? 'landing_page',
-    lpSlug: (r.lp_slug as string) ?? null,
-    funnelLabel: (r.funnel_label as string) ?? null,
-    destinationUrl: (r.destination_url as string) ?? null,
-    active: r.active === true,
-    lastSeenAt: (r.last_seen_at as string) ?? null,
-  }))
+  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const slugs = (r.lp_slugs as string[]) ?? []
+    const primary = (r.lp_slug as string) ?? null
+    return {
+      campaignId: r.campaign_id as string,
+      campaignName: (r.campaign_name as string) ?? (r.campaign_id as string),
+      sourceKind: (r.source_kind as string) ?? 'landing_page',
+      lpSlugs: slugs.length ? slugs : primary ? [primary] : [],
+      funnelLabel: (r.funnel_label as string) ?? null,
+      destinationUrl: (r.destination_url as string) ?? null,
+      active: r.active === true,
+      lastSeenAt: (r.last_seen_at as string) ?? null,
+    }
+  })
 }
