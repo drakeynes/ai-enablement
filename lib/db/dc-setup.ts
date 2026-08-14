@@ -164,6 +164,48 @@ export async function getUnmappedDcCallers(): Promise<UnmappedDcCaller[]> {
   return (data ?? []) as unknown as UnmappedDcCaller[]
 }
 
+// ------------------------------------------------------------ system health --
+
+// The SYSTEM HEALTH panel at the bottom of DC Setup (boss 2026-08-14): per
+// data source feeding the DC Ads page, when it last succeeded — read from the
+// webhook_deliveries audit trail via dc_setup_system_health() (0139).
+// staleAfterMin is ~4× each source's cadence, so a hiccup doesn't false-alarm
+// but a real outage shows within the hour.
+export type DcHealthRow = {
+  key: string
+  label: string
+  detail: string
+  lastOkIso: string | null
+  status: 'ok' | 'stale' | 'down'
+}
+
+const HEALTH_SOURCES: { key: string; label: string; detail: string; staleAfterMin: number }[] = [
+  { key: 'meta_leads_sync', label: 'Meta Ads', detail: 'leads + campaign detection', staleAfterMin: 60 },
+  { key: 'meta_sync', label: 'Meta Ads spend', detail: 'adspend mirrors', staleAfterMin: 240 },
+  { key: 'close_webhook', label: 'Close CRM', detail: 'leads · calls · SMS', staleAfterMin: 360 },
+  { key: 'typeform_sync_cron', label: 'Typeform', detail: 'form submissions', staleAfterMin: 60 },
+  { key: 'airtable_sync_cron', label: 'Airtable', detail: 'sale forms · closer reports', staleAfterMin: 60 },
+  { key: 'wistia_sync', label: 'Wistia', detail: 'video stats', staleAfterMin: 720 },
+  { key: 'outbound_facts_refresh', label: 'Dashboard numbers', detail: 'DC Ads page refresh', staleAfterMin: 60 },
+]
+
+export async function getDcSystemHealth(): Promise<DcHealthRow[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.rpc('dc_setup_system_health' as never, {} as never)
+  if (error) throw new Error(`dc_setup_system_health RPC failed: ${error.message}`)
+  const lastBySource = (data ?? {}) as Record<string, string>
+  const now = Date.now()
+  return HEALTH_SOURCES.map((s) => {
+    const lastOkIso = lastBySource[s.key] ?? null
+    let status: DcHealthRow['status'] = 'down'
+    if (lastOkIso) {
+      const ageMin = (now - new Date(lastOkIso).getTime()) / 60_000
+      status = ageMin <= s.staleAfterMin ? 'ok' : 'stale'
+    }
+    return { key: s.key, label: s.label, detail: s.detail, lastOkIso, status }
+  })
+}
+
 // ---------------------------------------------------------------- registries --
 
 export type AdminDcLandingPage = {

@@ -9,6 +9,8 @@ import {
   getUnmappedDcCallers,
   getAllDcLandingPagesAdmin,
   getAllDcCampaignsAdmin,
+  getDcSystemHealth,
+  type DcHealthRow,
 } from '@/lib/db/dc-setup'
 import { getWistiaInventory, getTypeformForms } from '@/lib/db/landing-page-assets'
 import { TeamManager } from './_components/team-manager'
@@ -36,17 +38,27 @@ export default async function DcSetupPage() {
     if (!access || !tierAtLeast(access.tier, 'admin')) redirect('/sales-dashboard')
   }
 
-  const [{ candidates, closeUsers }, team, unmapped, dismissed, pages, campaigns, wistia, typeforms] =
-    await Promise.all([
-      getDcRepCandidates(),
-      getDcTeam(),
-      getUnmappedDcCallers(),
-      getDismissedCandidates(),
-      getAllDcLandingPagesAdmin(),
-      getAllDcCampaignsAdmin(),
-      getWistiaInventory(),
-      getTypeformForms(),
-    ])
+  const [
+    { candidates, closeUsers },
+    team,
+    unmapped,
+    dismissed,
+    pages,
+    campaigns,
+    wistia,
+    typeforms,
+    health,
+  ] = await Promise.all([
+    getDcRepCandidates(),
+    getDcTeam(),
+    getUnmappedDcCallers(),
+    getDismissedCandidates(),
+    getAllDcLandingPagesAdmin(),
+    getAllDcCampaignsAdmin(),
+    getWistiaInventory(),
+    getTypeformForms(),
+    getDcSystemHealth(),
+  ])
 
   return (
     <div>
@@ -89,8 +101,54 @@ export default async function DcSetupPage() {
       >
         <DcCampaignManager campaigns={campaigns} pages={pages} />
       </Section>
+
+      <Section
+        title="System health"
+        subtitle="The data feeds behind the DC Ads page. All green = nothing to do; anything else, ping Drake."
+      >
+        <SystemHealth rows={health} />
+      </Section>
     </div>
   )
+}
+
+function SystemHealth({ rows }: { rows: DcHealthRow[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
+      {rows.map((r) => (
+        <div
+          key={r.key}
+          style={{
+            border: '1px solid var(--color-geg-border)',
+            background: 'var(--color-geg-bg-elev)',
+            borderRadius: 8,
+            padding: '12px 14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 13 }}>{r.status === 'ok' ? '✅' : r.status === 'stale' ? '⚠️' : '❌'}</span>
+            <span className="geg-serif" style={{ fontSize: 14.5, color: 'var(--color-geg-text)' }}>{r.label}</span>
+            <span className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)' }}>{r.detail}</span>
+          </div>
+          <div className="geg-mono" style={{ marginTop: 5, fontSize: 10.5, color: r.status === 'ok' ? 'var(--color-geg-text-2)' : 'var(--color-geg-danger, #c0392b)' }}>
+            {r.status === 'down'
+              ? 'No successful sync in 7 days'
+              : `${r.status === 'ok' ? 'Connected' : 'Stale'} · last sync ${agoLabel(r.lastOkIso)}`}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// "2m ago" / "3h ago" / "2d ago" — server-rendered; the page is
+// force-dynamic so every load recomputes.
+function agoLabel(iso: string | null): string {
+  if (!iso) return '—'
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (min < 60) return `${min}m ago`
+  if (min < 48 * 60) return `${Math.round(min / 60)}h ago`
+  return `${Math.round(min / (24 * 60))}d ago`
 }
 
 function Section({

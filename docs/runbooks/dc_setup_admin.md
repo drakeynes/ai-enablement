@@ -82,6 +82,14 @@ the pages ticked on active campaigns.
 
 ---
 
+## Scenario 7 — "are the numbers up to date?"
+
+Bottom of DC Setup: **System health** — one card per data feed (Meta Ads,
+Close, Typeform, Airtable, Wistia, and the page's own refresh) with
+✅ Connected · last sync time. All green = nothing to do. A ⚠ (stale) or
+❌ (silent for days) means that feed stopped — ping Drake with a screenshot;
+nothing on this page can break it further.
+
 ## What you never need to touch
 
 - **Adding campaigns** — auto-detected from Meta within ~15 minutes of ads

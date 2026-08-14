@@ -454,6 +454,12 @@ The ONE page where Zain/Aman run the whole DC Ads operation with no engineer
   campaigns stay active so history counts). Whatever is ticked here is
   exactly what the DC Ads page's LP dropdown and Ads & LP summary cover.
 
+- **System health** (2026-08-14, migration 0139) — bottom of the page: one card per data feed
+  (Meta leads/spend, Close, Typeform, Airtable, Wistia, the facts refresh) with ✅/⚠/❌ + "last
+  sync Xm ago", read from `dc_setup_system_health()` (per-source last PROCESSED
+  `webhook_deliveries` tick; the new `(source, received_at)` index makes it ~50ms). Staleness
+  thresholds ≈4× each source's cadence.
+
 All actions are admin-gated server-side and `revalidatePath` the DC Ads +
 Talent pages. Aman was bumped to `access_tier='admin'` (2026-08-13) so both
 he and Zain can operate it.
