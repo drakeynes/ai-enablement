@@ -41,17 +41,13 @@ DC Setup → **Current team** → find them → **Deactivate**. Their history st
 counted forever; they just stop showing as an active member. If they come
 back, **Reactivate** — same row, nothing lost. Never ask for a delete.
 
-## Scenario 3 — someone's dialing but not showing right
+## Scenario 3 — someone's dialing but not showing on the DC Ads page
 
-Check the **"Seen dialing DC leads, not on the team"** list at the bottom of
-the Team section. Two cases:
-
-- **They're a current rep** → add them to the Airtable Sales Team Member table
-  and verify them (Scenario 1).
-- **They're already gone, or were never really a rep** (an old name cluttering
-  the DC Ads page) → click **Mark as former** on their row. Their activity
-  stays counted but folds into the collapsed "Former & unlinked" group on the
-  DC Ads page. If they ever come back, they're in Current team → Reactivate.
+The page shows **confirmed team members only**. If someone's calls aren't
+appearing, they're not on the team yet: add them to the **Airtable Sales Team
+Member table** and verify them (Scenario 1) — their past activity appears
+retroactively the moment they're verified. Anyone you don't add simply never
+shows on the page.
 
 ## Scenario 4 — a new funnel / landing page launched
 

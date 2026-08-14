@@ -192,13 +192,15 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   is_showed semantics); a two-closer deal credits both while the header totals count deals once.
   Connections are counted **per call** (a lead reached twice counts twice; inbound ≥90s pickups
   count), so the column sum runs higher than the funnel's lead-level Connected — footnoted on the
-  page. A rep whose identities aren't linked in `team_members` shows a **NOT LINKED** tag and can
-  appear as two rows (dial name + form nickname) — fix in **DC Setup → Team** (verify them), never
-  the SQL.
+  page. Only CONFIRMED team members render (Drake 2026-08-14): active members are the main rows,
+  deactivated members collapse into the "Former reps" group, and activity from identities with no
+  `team_members` row is not shown at all — adding someone to the Airtable roster + verifying in DC
+  Setup makes their history appear retroactively.
 - **Roster** (added 2026-08-13) — the Talent Roster's card grid **scoped to the DC ad cohort**: one
   card per team member (managed in DC Setup; active-first, "Show inactive" toggle, zero-activity
   actives included so a new hire is visible before their first dial) with Dials / Connects / Shows /
-  Closes / Units / Cash from the by-rep RPC; unlinked activity rows get their own NOT-LINKED card.
+  Closes / Units / Cash from the by-rep RPC; confirmed members only — unlinked activity is not
+  rendered.
 - **Leads roster** (added 2026-08-14, migration 0137) — the Leads page's list scoped to DC ad
   leads, embedded right under the speed-to-lead boxes: one row per cohort lead (name / phone /
   email / opt-in day / landing page / dials / qualified / disposition), all inside a fixed-height
@@ -439,9 +441,10 @@ The ONE page where Zain/Aman run the whole DC Ads operation with no engineer
   one write path for `team_members` — linking the Airtable form identity +
   Close identity into one row. (b) **Current team**: edit (name / role /
   email / Close link) + **deactivate / reactivate** (`is_active` — the
-  offboarding path; history stays). (c) **Unmapped-caller radar**:
-  `dc_ads_unmapped_callers()` (0136) — people dialing DC leads with no
-  `team_members` row.
+  offboarding path; history stays). The DC Ads page renders CONFIRMED
+  team members only (Drake 2026-08-14) — membership is controlled here, so the
+  Airtable roster table is the single front door for new people.
+  (`dc_ads_unmapped_callers()` from 0136 is currently unused.)
 - **Landing pages** — the `dc_landing_pages` registry (0132): rename, URL
   (normalized in lockstep with `shared/lp_urls.py` via `lib/lp-urls.ts`),
   extra funnel pages, Typeform (dropdown), **qualification question +

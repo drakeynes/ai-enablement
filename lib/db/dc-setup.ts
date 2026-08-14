@@ -151,19 +151,6 @@ export async function getDcTeam(): Promise<DcTeamMember[]> {
   }))
 }
 
-// People seen DIALING DC ad leads who have no team_members row — the "someone
-// new is on the phones" radar. Read-only: the fix is adding them to the
-// Airtable Sales Team Member table (→ the verify queue above), never a direct
-// insert from here.
-export type UnmappedDcCaller = { closeUserId: string; name: string; dials: number }
-
-export async function getUnmappedDcCallers(): Promise<UnmappedDcCaller[]> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.rpc('dc_ads_unmapped_callers' as never, {} as never)
-  if (error) throw new Error(`dc_ads_unmapped_callers RPC failed: ${error.message}`)
-  return (data ?? []) as unknown as UnmappedDcCaller[]
-}
-
 // ------------------------------------------------------------ system health --
 
 // The SYSTEM HEALTH panel at the bottom of DC Setup (boss 2026-08-14): per

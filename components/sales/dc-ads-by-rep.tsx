@@ -57,15 +57,6 @@ function RepTr({ r, faded = false }: { r: DcAdsRepRow; faded?: boolean }) {
     <tr style={{ borderBottom: '1px solid var(--color-geg-border)', opacity: faded ? 0.65 : 1 }}>
       <td className="geg-mono" style={{ padding: '9px 14px', fontSize: 12, letterSpacing: '0.02em', color: 'var(--color-geg-text)', whiteSpace: 'nowrap' }}>
         {r.rep}
-        {r.teamMemberId ? null : (
-          <span
-            title="Not linked to a team member yet — link identities in DC Setup so this person's dials and closes merge into one row."
-            className="geg-mono"
-            style={{ marginLeft: 7, fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', border: '1px dashed var(--color-geg-border)', borderRadius: 3, padding: '1px 4px' }}
-          >
-            NOT LINKED
-          </span>
-        )}
       </td>
       <Cell value={r.dials.toLocaleString('en-US')} />
       <Cell value={r.connections.toLocaleString('en-US')} />
@@ -108,16 +99,18 @@ export function DcAdsByRepSection({
 }: {
   rows: DcAdsRepRow[]
   totals: DcAdsRepTotals
-  // team_members ids of the ACTIVE sales roster (DC Setup). Rows not owned by
-  // one — leavers and unlinked identities — collapse into a "former reps"
-  // group so the table reads as the current team (boss 2026-08-14). Totals
-  // still cover everyone: the work happened.
+  // team_members ids of the ACTIVE sales roster (DC Setup). Rows of CONFIRMED
+  // former members collapse into a "former reps" group so the table reads as
+  // the current team (boss 2026-08-14); activity from identities with NO team
+  // row at all is not rendered — membership is controlled via the Airtable
+  // Sales Team Member table → DC Setup verify (Drake 2026-08-14).
   activeTeamMemberIds: string[]
 }) {
   const activeIds = new Set(activeTeamMemberIds)
-  const current = rows.filter((r) => r.teamMemberId && activeIds.has(r.teamMemberId))
-  const former = rows.filter((r) => !(r.teamMemberId && activeIds.has(r.teamMemberId)))
-  const colTotals = rows.reduce(
+  const confirmed = rows.filter((r) => r.teamMemberId)
+  const current = confirmed.filter((r) => activeIds.has(r.teamMemberId as string))
+  const former = confirmed.filter((r) => !activeIds.has(r.teamMemberId as string))
+  const colTotals = confirmed.reduce(
     (a, r) => ({
       dials: a.dials + r.dials,
       connections: a.connections + r.connections,
@@ -219,7 +212,7 @@ export function DcAdsByRepSection({
                   cursor: 'pointer',
                 }}
               >
-                Former &amp; unlinked reps · {former.length} · {former.reduce((a, r) => a + r.dials, 0).toLocaleString('en-US')} dials ·{' '}
+                Former reps · {former.length} · {former.reduce((a, r) => a + r.dials, 0).toLocaleString('en-US')} dials ·{' '}
                 {former.reduce((a, r) => a + r.closes, 0)} closes — click to show
               </summary>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -243,9 +236,9 @@ export function DcAdsByRepSection({
         DC sale form or closer report) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
         (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);
-        people deactivated there — and any identity not linked to a team member — collapse into the
-        &ldquo;Former &amp; unlinked&rdquo; group, still counted in the totals. All rows cover DC-ads
-        pool leads only.
+        people deactivated there collapse into the &ldquo;Former reps&rdquo; group, still counted in
+        the column totals. Activity from anyone not confirmed on the team is not shown. All rows cover
+        DC-ads pool leads only.
       </div>
     </div>
   )

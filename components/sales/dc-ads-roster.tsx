@@ -9,9 +9,10 @@ import type { DcTeamMember } from '@/lib/db/dc-setup'
 // (boss item 8, 2026-08-13). One card per human: every ACTIVE team member
 // (zero-activity cards included — a new hire shows before their first dial)
 // merged with the window's per-rep activity rows. A "Show inactive" toggle
-// reveals offboarded people who still had window activity. Rows the identity
-// bridge can't attach to a team member yet render as their own card with a
-// NOT LINKED tag — the cue to link them in DC Setup.
+// reveals offboarded people who still had window activity. CONFIRMED team
+// members only (Drake 2026-08-14): activity the identity bridge can't attach
+// to a team member is not rendered at all — membership is controlled via the
+// Airtable Sales Team Member table → DC Setup verify.
 
 const ACCENT = '#b48ead' // purple — the DC accent
 
@@ -20,7 +21,6 @@ type Card = {
   name: string
   role: string | null
   active: boolean
-  linked: boolean
   dials: number
   connections: number
   shows: number
@@ -37,10 +37,9 @@ const ROLE_LABEL: Record<string, string> = {
 
 function buildCards(team: DcTeamMember[], reps: DcAdsRepRow[]): Card[] {
   const byTm = new Map<string, DcAdsRepRow[]>()
-  const unlinked: DcAdsRepRow[] = []
   for (const r of reps) {
     if (r.teamMemberId) byTm.set(r.teamMemberId, [...(byTm.get(r.teamMemberId) ?? []), r])
-    else unlinked.push(r)
+    // Unlinked activity rows are dropped — confirmed members only.
   }
   const zero = { dials: 0, connections: 0, shows: 0, closes: 0, units: 0, cash: 0 }
   const sum = (rows: DcAdsRepRow[]) =>
@@ -61,24 +60,8 @@ function buildCards(team: DcTeamMember[], reps: DcAdsRepRow[]): Card[] {
     name: m.fullName,
     role: m.salesRole ? (ROLE_LABEL[m.salesRole] ?? m.salesRole) : null,
     active: m.isActive,
-    linked: true,
     ...sum(byTm.get(m.id) ?? []),
   }))
-  for (const r of unlinked) {
-    cards.push({
-      key: `raw:${r.rep}`,
-      name: r.rep,
-      role: null,
-      active: true,
-      linked: false,
-      dials: r.dials,
-      connections: r.connections,
-      shows: r.shows,
-      closes: r.closes,
-      units: r.units,
-      cash: r.cash,
-    })
-  }
   const score = (c: Card) => c.dials + c.connections + 5 * c.shows + 10 * c.closes
   return cards.sort((a, b) => {
     if (a.active !== b.active) return a.active ? -1 : 1
@@ -141,10 +124,9 @@ export function DcAdsRosterSection({ team, reps }: { team: DcTeamMember[]; reps:
         className="geg-mono"
         style={{ marginTop: 10, fontSize: 9, letterSpacing: '0.05em', color: 'var(--color-geg-text-faint)', lineHeight: 1.7 }}
       >
-        One card per person on the team (managed in DC Setup — new hires appear once verified, leavers
-        once deactivated), stats = their DC-ad activity in the selected dates. A card with no team link
-        means the person&apos;s identities aren&apos;t connected yet; until then their dialing and closing
-        can show as two cards.
+        One card per person on the team (managed in DC Setup — new hires appear once verified via the
+        Airtable Sales Team Member table, leavers once deactivated), stats = their DC-ad activity in
+        the selected dates. Activity from anyone not confirmed on the team is not shown.
       </div>
     </div>
   )
@@ -199,7 +181,7 @@ function RepCard({ card: c }: { card: Card }) {
             {c.name}
           </span>
           <span className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)' }}>
-            {c.role ?? (c.linked ? '—' : 'not linked')}
+            {c.role ?? '—'}
             {!c.active ? ' · inactive' : ''}
           </span>
         </span>

@@ -146,60 +146,6 @@ export async function updateTeamMember(input: TeamMemberEditInput): Promise<Simp
   return { ok: true }
 }
 
-// "Mark as former rep" (Drake 2026-08-14): give an UNLINKED Close caller an
-// INACTIVE team_members row in one click, so their stray activity folds into
-// the DC Ads "former & unlinked" group / behind the roster's inactive toggle
-// — for people who left before the verify queue existed (or one-off callers
-// who were never reps). Same write shape as the Verify flow, minus a
-// candidate. Email comes from the close_users mirror; when the mirror has
-// none, a unique non-routable placeholder satisfies the NOT NULL + auth-join
-// column without ever colliding with a real login.
-export async function markCallerFormer(closeUserId: string, name: string): Promise<SimpleResult> {
-  const access = await requireAdmin()
-  if (!access) return { ok: false, error: 'forbidden' }
-  const cu = clean(closeUserId)
-  const fullName = clean(name)
-  if (!cu || !fullName) return { ok: false, error: 'invalid_input' }
-
-  const admin = createAdminClient()
-  const { data: existing } = await admin
-    .from('team_members' as never)
-    .select('id')
-    .eq('close_user_id', cu)
-    .is('archived_at', null)
-    .maybeSingle()
-  if (existing) return { ok: false, error: 'already_linked' }
-
-  const { data: closeUser } = await admin
-    .from('close_users' as never)
-    .select('email, full_name')
-    .eq('close_user_id', cu)
-    .maybeSingle()
-  const cuRow = closeUser as Record<string, unknown> | null
-  const email =
-    clean((cuRow?.email as string) ?? null) ??
-    `former-${cu.slice(-12).toLowerCase()}@placeholder.invalid`
-
-  const { error } = await admin.from('team_members' as never).insert({
-    full_name: clean((cuRow?.full_name as string) ?? null) ?? fullName,
-    email,
-    role: 'sales',
-    sales_role: 'other',
-    close_user_id: cu,
-    access_tier: 'csm',
-    areas: ['sales'],
-    is_active: false,
-  } as never)
-  if (error) {
-    if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      return { ok: false, error: 'duplicate_identity' }
-    }
-    return { ok: false, error: error.message }
-  }
-  revalidateAll()
-  return { ok: true }
-}
-
 // Deactivate / reactivate. Deactivation is the offboarding path — history
 // stays attributed (the row keeps its identity links); the person just stops
 // counting as active on rosters. Never a hard delete.

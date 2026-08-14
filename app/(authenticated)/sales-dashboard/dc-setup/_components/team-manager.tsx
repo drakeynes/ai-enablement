@@ -8,7 +8,6 @@ import type {
   DcRepCandidate,
   DcTeamMember,
   DismissedCandidate,
-  UnmappedDcCaller,
 } from '@/lib/db/dc-setup'
 import type { RepDraftInput } from '../../reps/actions'
 import {
@@ -16,7 +15,6 @@ import {
   dcSaveRepDraft,
   dcDismissRepCandidate,
   dcRestoreRepCandidate,
-  markCallerFormer,
   updateTeamMember,
   setTeamMemberActive,
 } from '../actions'
@@ -67,13 +65,11 @@ export function TeamManager({
   candidates,
   closeUsers,
   team,
-  unmapped,
   dismissed,
 }: {
   candidates: DcRepCandidate[]
   closeUsers: CloseUserOption[]
   team: DcTeamMember[]
-  unmapped: UnmappedDcCaller[]
   dismissed: DismissedCandidate[]
 }) {
   const activeCount = team.filter((t) => t.isActive).length
@@ -108,19 +104,6 @@ export function TeamManager({
         </div>
       </div>
 
-      {unmapped.length > 0 ? (
-        <div>
-          <BlockTitle
-            title={`Seen dialing DC leads, not on the team · ${unmapped.length}`}
-            hint="Current rep? Add them to the Airtable Sales Team Member table — they'll appear in the verify queue above. Someone who's already gone (or was never a rep)? Mark them as former — their activity folds into the “former” group on the DC Ads page."
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {unmapped.map((u) => (
-              <UnmappedRow key={u.closeUserId} caller={u} />
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -358,40 +341,6 @@ function MemberRow({ member, closeUsers }: { member: DcTeamMember; closeUsers: C
           <Msg msg={msg} />
         </div>
       ) : null}
-    </div>
-  )
-}
-
-function UnmappedRow({ caller }: { caller: UnmappedDcCaller }) {
-  const { pending, msg, run } = useAction()
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <span className="geg-mono" style={{ fontSize: 12, color: 'var(--color-geg-text-2)', minWidth: 180 }}>
-        {caller.name}
-      </span>
-      <span className="geg-mono" style={{ fontSize: 10, color: 'var(--color-geg-text-faint)' }}>
-        {caller.dials.toLocaleString('en-US')} dials
-      </span>
-      <button
-        type="button"
-        disabled={pending}
-        style={secondaryBtn(pending)}
-        onClick={() => {
-          if (
-            !window.confirm(
-              `Mark ${caller.name} as a FORMER rep? Their activity stays counted but moves into the "former" group on the DC Ads page. If they're a current rep, add them to Airtable instead.`,
-            )
-          )
-            return
-          run(
-            () => markCallerFormer(caller.closeUserId, caller.name),
-            'Marked as former — their rows fold away on the next page load.',
-          )
-        }}
-      >
-        Mark as former
-      </button>
-      {msg ? <Msg msg={msg} /> : null}
     </div>
   )
 }

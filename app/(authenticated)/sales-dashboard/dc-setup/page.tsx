@@ -6,7 +6,6 @@ import {
   getDcRepCandidates,
   getDcTeam,
   getDismissedCandidates,
-  getUnmappedDcCallers,
   getAllDcLandingPagesAdmin,
   getAllDcCampaignsAdmin,
   getDcSystemHealth,
@@ -41,7 +40,6 @@ export default async function DcSetupPage() {
   const [
     { candidates, closeUsers },
     team,
-    unmapped,
     dismissed,
     pages,
     campaigns,
@@ -51,7 +49,6 @@ export default async function DcSetupPage() {
   ] = await Promise.all([
     getDcRepCandidates(),
     getDcTeam(),
-    getUnmappedDcCallers(),
     getDismissedCandidates(),
     getAllDcLandingPagesAdmin(),
     getAllDcCampaignsAdmin(),
@@ -83,7 +80,6 @@ export default async function DcSetupPage() {
           candidates={candidates}
           closeUsers={closeUsers}
           team={team}
-          unmapped={unmapped}
           dismissed={dismissed}
         />
       </Section>
