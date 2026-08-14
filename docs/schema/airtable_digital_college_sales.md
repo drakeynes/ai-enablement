@@ -38,7 +38,8 @@ NOT here. So a lead's DC close can originate from either table.
 | `setter_record_ids` | text[] | `Setter` | Airtable `rec…` ids (link). |
 | `setter_names` | text[] | `Name (from Setter)` | Resolved inline — e.g. `["Connor"]`, `["Aman Ali"]`. |
 | `closed` | text | `Closed?` | `Yes` / `No`. The explicit DC close flag. |
-| `plans` | text[] | `What plan did we get them on?` | Base/Wix × Monthly/Yearly multi-select. |
+| `plans` | text[] | `What plan did we get them on?` | Base/Wix × Monthly/Yearly multi-select. RAW — never rewritten; the Valid verdict filters at read time. |
+| `valid` | text | `Valid` | (0141) The team's QA verdict: `Yes` / `No` / `Has Wix, Missing Base` / `Has Base, Missing Wix` / null. Null/Yes = count fully; No = the submission doesn't count (record survives as the log); partials keep only the verified plan type. Applied by `dc_valid_plans()` in the DC-ads refresh + by-rep RPC. Reaches the mirror because this table is in `FULL_RESCAN_TABLES` (the created-time cron window never re-pulls edited records, and the Airtable edit webhook can silently die). |
 | `follow_up` | text | `Follow Up?` | `Yes` / `No`. |
 | `follow_up_date` | date | `Follow Up Date` | |
 | `call_notes` | text | `Call Notes` | |

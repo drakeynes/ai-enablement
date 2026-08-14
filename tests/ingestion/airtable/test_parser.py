@@ -353,3 +353,39 @@ def test_parse_full_closer_cash_paid_today_ambiguity_both_columns_distinct():
     row = parse_full_closer(record, region="US")
     assert row["amount_paid_today_currency"] == 2500.0
     assert row["amount_paid_today_number"] == 2000.0
+
+
+# ---------------------------------------------------------------------------
+# parse_digital_college — the Valid QA verdict (0141)
+# ---------------------------------------------------------------------------
+
+
+def test_digital_college_maps_valid_verdict():
+    from ingestion.airtable.parser import parse_digital_college
+
+    row = parse_digital_college(
+        {
+            "id": "recDCsale1",
+            "createdTime": "2026-08-14T12:00:00.000Z",
+            "fields": {
+                "Lead ID": "lead_abc",
+                "Closed?": "Yes",
+                "What plan did we get them on?": ["Base44 Monthly", "Wix Monthly"],
+                "Valid": "Has Wix, Missing Base",
+            },
+        }
+    )
+    assert row is not None
+    assert row["valid"] == "Has Wix, Missing Base"
+    # plans stay RAW — the verdict filters at read time, never at ingest.
+    assert row["plans"] == ["Base44 Monthly", "Wix Monthly"]
+
+
+def test_digital_college_valid_absent_is_none():
+    from ingestion.airtable.parser import parse_digital_college
+
+    row = parse_digital_college(
+        {"id": "recDCsale2", "createdTime": "2026-08-14T12:00:00.000Z", "fields": {"Closed?": "No"}}
+    )
+    assert row is not None
+    assert row["valid"] is None

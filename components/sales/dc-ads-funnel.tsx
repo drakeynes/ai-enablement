@@ -125,6 +125,16 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
         <span className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)' }}>
           · $300 per DC plan unit
         </span>
+        {f.qaInvalidForms > 0 || f.qaExcludedUnits > 0 ? (
+          <span
+            className="geg-mono"
+            title="The team's Valid verdicts on the Airtable Commission table — invalid submissions and unverified units are excluded from Units / Closed / Cash / ROAS."
+            style={{ fontSize: 9, color: 'var(--color-geg-text-faint)' }}
+          >
+            · QA: {f.qaInvalidForms} invalid submission{f.qaInvalidForms === 1 ? '' : 's'} ·{' '}
+            {f.qaExcludedUnits} unit{f.qaExcludedUnits === 1 ? '' : 's'} excluded
+          </span>
+        ) : null}
         {f.markedNoPlan > 0 ? (
           <span className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginLeft: 'auto' }}>
             {f.markedNoPlan} marked “DC Closed” w/o a plan → counted as showed, not closed

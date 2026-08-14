@@ -181,6 +181,16 @@ def _count_attribution_signal(
         outcome.setter_name_fill_count += 1
 
 
+# Tables whose EDITS to old records matter, not just new rows. The created-time
+# window (below) never re-pulls an old record, so a team edit — e.g. the DC
+# sale form's Valid QA verdict (2026-08-14) — would never reach the mirror.
+# These tables ignore `since` and re-pull everything each tick. Keep this set
+# small-table-only: the DC sale form is ~1.1k records ≈ 11 API pages / 15 min.
+FULL_RESCAN_TABLES: frozenset[str] = frozenset({
+    "tbljmzRoMoE5B26lt",  # Digital College sale form (Valid QA edits)
+})
+
+
 def sync_table(
     client: AirtableClient,
     db,
@@ -209,7 +219,7 @@ def sync_table(
     _label, region, target_table = TARGET_TABLES[table_id]
 
     filter_formula: str | None = None
-    if since:
+    if since and table_id not in FULL_RESCAN_TABLES:
         # IS_AFTER(CREATED_TIME(), DATETIME_PARSE('...')) — Airtable
         # formula. CREATED_TIME() returns the record-level metadata
         # regardless of whether a stored createdTime field exists.

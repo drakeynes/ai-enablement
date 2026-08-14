@@ -426,6 +426,10 @@ def parse_digital_college(record: dict[str, Any]) -> dict[str, Any] | None:
         "setter_names": _to_str_array(fields.get("Name (from Setter)")),
         "closed": _to_str(fields.get("Closed?")),
         "plans": _to_str_array(fields.get("What plan did we get them on?")),
+        # The team's QA verdict (2026-08-14): Yes / No / "Has Wix, Missing
+        # Base" / "Has Base, Missing Wix" / blank. Blank counts fully; the
+        # DC-ads SQL (dc_valid_plans, migration 0141) applies the rest.
+        "valid": _to_str(fields.get("Valid")),
         "follow_up": _to_str(fields.get("Follow Up?")),
         "follow_up_date": _to_iso_date(fields.get("Follow Up Date")),
         "call_notes": _to_str(fields.get("Call Notes")),

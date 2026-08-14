@@ -45,6 +45,11 @@ export type DcAdsFunnel = {
   closedPlans: DcPlanCounts
   cashUsd: number
   markedNoPlan: number
+  // The Valid QA audit line (0141): submissions the team marked invalid in
+  // Airtable, and closed-form units the verdicts excluded — the receipt that
+  // closes/units/cash are QA-adjusted.
+  qaInvalidForms: number
+  qaExcludedUnits: number
 }
 
 export type DcAdsSpeedBucket = { label: string; count: number; connected: number }

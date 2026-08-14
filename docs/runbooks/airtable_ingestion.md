@@ -26,6 +26,7 @@ After each sync the cron also calls `db.rpc("tag_reactivated_leads")` (migration
 **Neither target table has a stored `lastModifiedTime` or `createdTime` field.** Incremental ingestion can only use Airtable's record-level `createdTime` metadata — which is created-only.
 
 - The cron backstop catches missed webhook CREATIONS via `IS_AFTER(CREATED_TIME(), ...)` filter, 6h overlap window on a 15-min cadence.
+- **`FULL_RESCAN_TABLES`** (pipeline.py, 2026-08-14): tables whose EDITS to old records matter ignore the created-time window and re-pull everything each tick. Currently the DC sale form (`tbljmzRoMoE5B26lt`, ~1.1k records ≈ 11 API pages) — its `Valid` QA verdict is edited on old records, and relying on the edit webhook proved fragile (it silently died ~Jul 25). Keep this set small-table-only.
 - The cron CANNOT catch EDITS. A closer updating `Closed? = No → Yes` after initial save produces NO new-record signal.
 - The live webhook is the only edit-detection path. If the webhook is down for >7 days (Airtable's idle-expiry window), it disables silently — make sure the cron's `refresh_webhook()` actually fires (see § Webhook refresh).
 

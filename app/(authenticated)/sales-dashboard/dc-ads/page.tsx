@@ -295,7 +295,10 @@ export default async function DcAdsPage({
         90-second call landing in Close · HVC = high-value connect: <b>connected and</b> (qualified{' '}
         <i>or</i> texted us) — always a subset of Connects · Units = Digital College <b>plan units</b> closed · Closed = a DC
         close <b>with an explicit plan</b> — from the DC sale form or a closer report (a closed form
-        with no plan counts as a show, not a close) · Cash = $300 per plan unit · Adspend = the
+        with no plan counts as a show, not a close) · Cash = $300 per plan unit · Closes, Units and
+        Cash honor the team&apos;s <b>Valid</b> verdicts on the Airtable Commission table (blank/Yes
+        counts; No excludes the submission; the partial options keep only the verified plan type —
+        the QA note by the cash line shows what&apos;s excluded) · Adspend = the
         registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,
         that path&apos;s campaigns) · ROAS = cash ÷ adspend. The stage row is <b>not</b> a funnel —
         stages overlap rather than nest, so no stage need be smaller than the one before it.
