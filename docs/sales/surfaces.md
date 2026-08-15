@@ -326,8 +326,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `<table>` in ONE scroll container: sticky header + **sticky Day column** (scroll the ~32
   columns, always see the day); every stage count carries its per-that-day **cost-per** as a
   sub-line (spend ÷ count — "$0" when spend is 0/null per the boss's no-dash rule, "—" only when
-  the count is 0); **D0/D3/D7 cells (units + their ROAS) show a dash while the window hasn't
-  matured** (age < 0/3/7 days) instead of a misleading 0 — early units still show; and the
+  the count is 0); **D0/D3/D7 cells (units + their ROAS) stay a dash until the window has FULLY
+  elapsed** (age ≥ 1/3/7 days) — strict per the boss 2026-08-15: even early units stay dashed
+  (the stage columns tell that story), so a DN number only ever appears final; and the
   **full per-day speed-to-lead block** on the right (avg speed · median dial · intensity · conn
   rate · dialed <1m/<5m/<10m/<30m/>30m/never as % of that day's opt-ins · SMS engagement ·
   MQL→C / NonQ→C / HVC→C / Conn→C), computed in `getDcAdsDaily()` from the same

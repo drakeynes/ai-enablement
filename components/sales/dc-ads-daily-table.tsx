@@ -139,7 +139,8 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
         small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).{' '}
         <b>D0 / D3 / D7 U</b> = units closed the same day / under 3 days / under 7 days after the
-        opt-in (cumulative); a dash means the window hasn&apos;t matured yet (not a zero); the
+        opt-in (cumulative); a cell stays a dash until its window has FULLY elapsed — a DN number
+        only ever appears final (early closes show in the stage columns meanwhile); the
         matching ROAS columns = those units × $300 ÷ the day&apos;s spend. The right block is the
         speed-to-lead set per day (12p–12a ET clock, same math as the boxes below): dialed-within
         shares are % of that day&apos;s opt-ins. Follows the ad chooser and landing-page dropdown.
@@ -208,12 +209,16 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
                   <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} />
                   <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} />
-                  <Td top={age >= 1 || r.unitsD0 > 0 ? fmtCount(r.unitsD0) : '—'} />
-                  <Td top={age >= 3 || r.unitsD3 > 0 ? fmtCount(r.unitsD3) : '—'} />
-                  <Td top={age >= 7 || r.unitsD7 > 0 ? fmtCount(r.unitsD7) : '—'} />
-                  <Td top={age >= 1 || r.unitsD0 > 0 ? roas(r.unitsD0, r.spendUsd) : '—'} />
-                  <Td top={age >= 3 || r.unitsD3 > 0 ? roas(r.unitsD3, r.spendUsd) : '—'} />
-                  <Td top={age >= 7 || r.unitsD7 > 0 ? roas(r.unitsD7, r.spendUsd) : '—'} />
+                  {/* STRICT maturity dashes (boss 2026-08-15): a DN cell is a
+                      dash until the window has fully elapsed — even if units
+                      already landed (the stage columns tell that story). A DN
+                      number only ever appears final. */}
+                  <Td top={age >= 1 ? fmtCount(r.unitsD0) : '—'} />
+                  <Td top={age >= 3 ? fmtCount(r.unitsD3) : '—'} />
+                  <Td top={age >= 7 ? fmtCount(r.unitsD7) : '—'} />
+                  <Td top={age >= 1 ? roas(r.unitsD0, r.spendUsd) : '—'} />
+                  <Td top={age >= 3 ? roas(r.unitsD3, r.spendUsd) : '—'} />
+                  <Td top={age >= 7 ? roas(r.unitsD7, r.spendUsd) : '—'} />
                   <Td top={r.spendUsd && r.spendUsd > 0 ? (r.cashUsd / r.spendUsd).toFixed(2) : '—'} accent />
                   <Td top={fmtDur(r.avgSpeedSec)} />
                   <Td top={fmtDur(r.medianDialSec)} />
