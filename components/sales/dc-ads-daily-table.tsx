@@ -135,7 +135,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         Last 30 days · by opt-in day
       </div>
       <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 12 }} summary="How to read this table">
-        Each row is the cohort that opted in that ET day; the Day column stays frozen while the rest
+        Each row is the cohort that opted in that ET day; the Day and Spend columns stay frozen while the rest
         scrolls. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
         small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).{' '}
@@ -160,11 +160,16 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
               {HEADERS.map((h, i) => (
                 <th
                   key={h.label}
-                  className={h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}
+                  // Day (i=0) is sticky-left everywhere; Spend (i=1) joins it
+                  // on md+ (boss 2026-08-15, desktop only) — pinned at the Day
+                  // column's fixed 132px width.
+                  className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
+                    i === 0 ? ' md:w-[132px]' : i === 1 ? ' md:left-[132px]' : ''
+                  }`}
                   style={{
                     position: 'sticky',
                     top: 0,
-                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: 2 }),
+                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
                     background: 'var(--color-geg-bg-elev)',
                     padding: '9px 12px',
                     fontSize: 9.5,
@@ -188,7 +193,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
               return (
                 <tr key={r.etDate}>
                   <td
-                    className="geg-serif"
+                    className="geg-serif md:w-[132px]"
                     style={{
                       position: 'sticky',
                       left: 0,
@@ -205,7 +210,11 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   >
                     {fmtDay(r.etDate)}
                   </td>
-                  <Td top={fmtUsd(r.spendUsd)} m />
+                  <Td
+                    top={fmtUsd(r.spendUsd)}
+                    m
+                    xcls="md:sticky md:left-[132px] md:z-[1] md:bg-[var(--color-geg-bg)] md:shadow-[1px_0_0_var(--color-geg-border)]"
+                  />
                   <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m />
                   <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} />
                   <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} />
@@ -253,10 +262,24 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
   )
 }
 
-function Td({ top, sub, accent, m }: { top: string; sub?: string; accent?: boolean; m?: boolean }) {
+function Td({
+  top,
+  sub,
+  accent,
+  m,
+  xcls,
+}: {
+  top: string
+  sub?: string
+  accent?: boolean
+  m?: boolean
+  // Extra classes — the Spend cell uses this for its md-only sticky-left
+  // treatment (frozen beside Day on desktop; normal cell on the phone).
+  xcls?: string
+}) {
   return (
     <td
-      className={m ? undefined : 'hidden md:table-cell'}
+      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
       style={{
         padding: sub ? '8px 12px 7px' : '10px 12px',
         textAlign: 'right',
