@@ -1,3 +1,5 @@
+import { Fragment } from 'react'
+
 import type { DcAdsFunnel } from '@/lib/db/dc-ads'
 import type { DcPlanCounts } from '@/lib/db/funnel-dc'
 
@@ -76,6 +78,24 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
   const f = funnel
   const roas = spendUsd > 0 ? f.cashUsd / spendUsd : null
 
+  // One data list, two renders (mobile pass 2026-08-15): desktop keeps the
+  // chevron row; the phone gets a 3-across tile grid — no sideways swiping
+  // through nine stages. `ratio` is the junction AFTER the stage (next ÷
+  // prev; $/opt-in on the adspend junction).
+  const pct = (from: number, to: number): string | null =>
+    from > 0 ? `${Math.round((to / from) * 100)}%` : null
+  const stages: { label: string; value: number; display?: string; accent?: boolean; ratio: string | null }[] = [
+    { label: 'Adspend', value: spendUsd, display: usd(spendUsd), accent: true, ratio: f.optIns > 0 ? `${usd(spendUsd / f.optIns)}/opt-in` : null },
+    { label: 'Opt-ins', value: f.optIns, accent: true, ratio: pct(f.optIns, f.qualified) },
+    { label: 'Qualified', value: f.qualified, ratio: pct(f.qualified, f.sms) },
+    { label: 'SMS', value: f.sms, ratio: pct(f.sms, f.smsMql) },
+    { label: 'SMS+MQL', value: f.smsMql, ratio: pct(f.smsMql, f.connected) },
+    { label: 'Connects', value: f.connected, ratio: pct(f.connected, f.hvc) },
+    { label: 'HVC', value: f.hvc, ratio: pct(f.hvc, f.units) },
+    { label: 'Units', value: f.units, ratio: pct(f.units, f.closed) },
+    { label: 'Closed', value: f.closed, accent: true, ratio: null },
+  ]
+
   return (
     <div style={{ marginTop: 14, border: '1px solid var(--color-geg-border)', borderRadius: 8, overflow: 'hidden' }}>
       {/* Header */}
@@ -90,30 +110,39 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
       </div>
 
       {/* The stage row — ad spend leads it; numbers only, no conversion %
-          (the stages overlap rather than nest). overflowX: the nine stages
-          swipe sideways on a phone instead of crushing (mobile 2026-08-15). */}
-      <div style={{ display: 'flex', alignItems: 'stretch', padding: '4px 10px', overflowX: 'auto' }}>
-        <Stage label="Adspend" value={spendUsd} display={usd(spendUsd)} accent />
-        <Arrow label={f.optIns > 0 ? `${usd(spendUsd / f.optIns)}/opt-in` : undefined} />
-        <Stage label="Opt-ins" value={f.optIns} accent />
-        <Arrow from={f.optIns} to={f.qualified} />
-        <Stage label="Qualified" value={f.qualified} />
-        <Arrow from={f.qualified} to={f.sms} />
-        <Stage label="SMS" value={f.sms} />
-        <Arrow from={f.sms} to={f.smsMql} />
-        <Stage label="SMS+MQL" value={f.smsMql} />
-        <Arrow from={f.smsMql} to={f.connected} />
-        <Stage label="Connects" value={f.connected} />
-        <Arrow from={f.connected} to={f.hvc} />
-        <Stage label="HVC" value={f.hvc} />
-        <Arrow from={f.hvc} to={f.units} />
-        <Stage label="Units" value={f.units} />
-        <Arrow from={f.units} to={f.closed} />
-        <Stage label="Closed" value={f.closed} accent />
+          (the stages overlap rather than nest). Desktop only. */}
+      <div className="hidden md:flex" style={{ alignItems: 'stretch', padding: '4px 10px' }}>
+        {stages.map((s, i) => (
+          <Fragment key={s.label}>
+            <Stage label={s.label} value={s.value} display={s.display} accent={s.accent} />
+            {i < stages.length - 1 ? <Arrow label={s.ratio ?? undefined} /> : null}
+          </Fragment>
+        ))}
+      </div>
+
+      {/* Phone: the same nine stages as a tile grid — the junction ratio
+          rides under each tile ("→ 52%" = to the NEXT stage). */}
+      <div className="grid grid-cols-3 md:hidden" style={{ gap: 1, background: 'var(--color-geg-border)' }}>
+        {stages.map((s) => (
+          <div key={s.label} style={{ background: 'var(--color-geg-bg)', textAlign: 'center', padding: '12px 4px 10px' }}>
+            <div
+              className="geg-numeric-serif"
+              style={{ fontSize: 19, lineHeight: 1, color: s.value === 0 ? 'var(--color-geg-text-faint)' : s.accent ? ACCENT : 'var(--color-geg-text)' }}
+            >
+              {s.display ?? s.value.toLocaleString('en-US')}
+            </div>
+            <div className="geg-mono" style={{ fontSize: 8, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)', marginTop: 5 }}>
+              {s.label}
+            </div>
+            <div className="geg-mono" style={{ fontSize: 8, color: 'var(--color-geg-text-2)', marginTop: 3, minHeight: 10 }}>
+              {s.ratio ? `→ ${s.ratio}` : ''}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Cash + ROAS line */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderTop: '1px solid var(--color-geg-border)', background: 'var(--color-geg-bg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderTop: '1px solid var(--color-geg-border)', background: 'var(--color-geg-bg)', flexWrap: 'wrap' }}>
         <span className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)' }}>
           Cash collected
         </span>

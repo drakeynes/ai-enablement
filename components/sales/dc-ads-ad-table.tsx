@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 
 import type { DcAdsAdTableRow } from '@/lib/db/dc-ads'
 
+import { FineNote } from './fine-note'
+
 // DC ads page — the PER-AD table (boss item 10, 2026-08-15), directly under
 // the 30-day daily table: one row per ad with window activity (spend, opt-ins,
 // or clicks — so zero-opt-in spend is visible), same construction as the daily
@@ -17,7 +19,6 @@ import type { DcAdsAdTableRow } from '@/lib/db/dc-ads'
 // tables must be free to drift apart.
 
 const SCROLL_MAX_HEIGHT = 480
-const MIN_TABLE_WIDTH = 3150
 const ACCENT = '#b48ead'
 
 function roas(cashUsd: number, spendUsd: number | null): string {
@@ -57,32 +58,36 @@ function fmtDur(sec: number | null): string {
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) {
     const m = Math.floor(sec / 60)
-    return `${m}m ${Math.round(sec - m * 60)
+    return `${m}m ${Math.floor(sec - m * 60)
       .toString()
       .padStart(2, '0')}s`
   }
   const h = Math.floor(sec / 3600)
-  return `${h}h ${Math.round((sec - h * 3600) / 60)}m`
+  return `${h}h ${Math.floor((sec - h * 3600) / 60)}m`
 }
 
-const HEADERS: { label: string; align?: 'left' }[] = [
-  { label: 'Ad', align: 'left' },
-  { label: 'Spend' },
+// `m` = shown on MOBILE too (the decision set: name, spend, opt-ins, units,
+// closed, ROAS). Everything else is desktop-only — on a phone the sticky name
+// column was eating the viewport and the other 30 columns lived in a
+// two-inch scroll strip (boss 2026-08-15).
+const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
+  { label: 'Ad', align: 'left', m: true },
+  { label: 'Spend', m: true },
   { label: 'Impr' },
   { label: 'Clicks' },
   { label: 'CTR' },
   { label: 'CPM' },
   { label: '$/Click' },
-  { label: 'Opt-ins' },
+  { label: 'Opt-ins', m: true },
   { label: 'Qualified' },
   { label: 'SMS' },
   { label: 'SMS+MQL' },
   { label: 'Connects' },
   { label: 'HVC' },
-  { label: 'Units' },
-  { label: 'Closed' },
+  { label: 'Units', m: true },
+  { label: 'Closed', m: true },
   { label: 'Cash' },
-  { label: 'ROAS' },
+  { label: 'ROAS', m: true },
   { label: 'D0 U' },
   { label: 'D3 U' },
   { label: 'D7 U' },
@@ -215,10 +220,7 @@ export function DcAdsAdTable({
       >
         Ads · {visible.length === rows.length ? rows.length : `${visible.length} of ${rows.length}`} with activity · selected dates
       </div>
-      <div
-        className="geg-mono"
-        style={{ fontSize: 9, letterSpacing: '0.04em', color: 'var(--color-geg-text-faint)', marginBottom: 10 }}
-      >
+      <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 10 }} summary="How to read this table">
         One row per ad with activity in the selected dates (spend, opt-ins, or clicks — an ad
         spending without opt-ins is exactly the row to notice). Ad-side numbers from Meta; every
         stage from Opt-ins on is the ad&apos;s own leads through the same definitions as the rest of
@@ -229,7 +231,7 @@ export function DcAdsAdTable({
         combine, and higher levels narrow what the lower ones offer. Each row&apos;s sub-line says
         which campaign · ad set the ad lives in (hover for the full path). Follows the date picker
         + campaign chooser + landing-page dropdown.
-      </div>
+      </FineNote>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         <MultiSelect
@@ -256,13 +258,18 @@ export function DcAdsAdTable({
       </div>
 
       <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflow: 'auto', border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
-        <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: MIN_TABLE_WIDTH, width: '100%' }}>
+        {/* min-width only from md up — on a phone the visible column set is
+            small enough to fit, and forcing 3150px would stretch it absurdly. */}
+        <table
+          className="md:min-w-[3150px]"
+          style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}
+        >
           <thead>
             <tr>
               {HEADERS.map((h, i) => (
                 <th
                   key={h.label}
-                  className="geg-mono"
+                  className={h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}
                   style={{
                     position: 'sticky',
                     top: 0,
@@ -314,6 +321,7 @@ export function DcAdsAdTable({
                   <tr key={r.adId ?? '(untagged)'} style={{ opacity: paused ? 0.75 : 1 }}>
                     <td
                       title={lineage}
+                      className="max-w-[150px] md:max-w-[260px]"
                       style={{
                         position: 'sticky',
                         left: 0,
@@ -323,7 +331,6 @@ export function DcAdsAdTable({
                         whiteSpace: 'nowrap',
                         borderBottom: '1px dashed var(--color-geg-border)',
                         borderRight: '1px solid var(--color-geg-border)',
-                        maxWidth: 260,
                       }}
                     >
                       <span
@@ -339,22 +346,22 @@ export function DcAdsAdTable({
                         {subBits.join(' · ') || '—'}
                       </span>
                     </td>
-                    <Td top={fmtUsd(r.spendUsd)} accent />
+                    <Td top={fmtUsd(r.spendUsd)} accent m />
                     <Td top={fmtCount(r.impressions)} />
                     <Td top={fmtCount(r.uniqueClicks)} />
                     <Td top={r.ctr != null ? `${r.ctr.toFixed(1)}%` : '—'} />
                     <Td top={fmtUsd(r.cpm, 2)} />
                     <Td top={fmtUsd(r.cpcUnique, 2)} />
-                    <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent />
+                    <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m />
                     <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} />
                     <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} />
                     <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
                     <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
                     <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
-                    <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} />
-                    <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} />
+                    <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
+                    <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
                     <Td top={fmtUsd(r.cashUsd)} />
-                    <Td top={roas(r.cashUsd, r.spendUsd)} accent />
+                    <Td top={roas(r.cashUsd, r.spendUsd)} accent m />
                     <Td top={fmtCount(r.unitsD0)} />
                     <Td top={fmtCount(r.unitsD3)} />
                     <Td top={fmtCount(r.unitsD7)} />
@@ -551,9 +558,10 @@ function MultiSelect({
   )
 }
 
-function Td({ top, sub, accent }: { top: string; sub?: string; accent?: boolean }) {
+function Td({ top, sub, accent, m }: { top: string; sub?: string; accent?: boolean; m?: boolean }) {
   return (
     <td
+      className={m ? undefined : 'hidden md:table-cell'}
       style={{
         padding: sub ? '8px 12px 7px' : '10px 12px',
         textAlign: 'right',

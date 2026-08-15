@@ -1,4 +1,5 @@
 import { HeaderBand } from '@/components/gregory/header-band'
+import { FineNote } from '@/components/sales/fine-note'
 import { AdCascadeFilter } from '@/components/sales/ad-cascade-filter'
 import { DcAdsCalledSection } from '@/components/sales/dc-ads-called'
 import { DcAdsDailyTable } from '@/components/sales/dc-ads-daily-table'
@@ -264,31 +265,22 @@ export default async function DcAdsPage({
 
       <DcAdsCalledSection called={called} />
 
-      <div
-        className="geg-mono"
-        style={{ marginTop: 14, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.8 }}
-      >
+      <FineNote style={{ marginTop: 14, letterSpacing: '0.06em', lineHeight: 1.8 }} summary="How to read this chart">
         Of the opt-ins we dialed, how fast we got to them and whether the dial connected. <b>Speed to
         dial</b> = form submit → first outbound call (the opt-in is the hand-raise — no reply needed
         first); bars stack connected (purple) over not-connected, with the connect % inside. Small n per
         bucket — read the trend, not single bars.
-      </div>
+      </FineNote>
 
       <DcAdsTimeOfDaySection buckets={timeOfDay.buckets} />
 
-      <div
-        className="geg-mono"
-        style={{ marginTop: 14, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.8 }}
-      >
+      <FineNote style={{ marginTop: 14, letterSpacing: '0.06em', lineHeight: 1.8 }} summary="How to read this chart">
         When leads <b>opt in</b> vs when we <b>dial</b> vs when we <b>connect</b>, by 2-hour ET window —
         wall-clock, no business-hours adjustment. Opt-in volume that lands outside the dialing window is
         the coverage gap to staff for. Connects are timed by the call (never the form).
-      </div>
+      </FineNote>
 
-      <div
-        className="geg-mono"
-        style={{ marginTop: 16, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.8 }}
-      >
+      <FineNote style={{ marginTop: 16, letterSpacing: '0.06em', lineHeight: 1.8 }} summary="Every definition on this page">
         Opt-ins = Digital College ad leads mirrored into Close — Meta instant form <i>and</i> landing
         page → Typeform (anchored at the form submit; a returning phone number re-anchors at its
         newest opt-in) · Qualified = the lead&apos;s own <b>Typeform</b> answered the qualifying
@@ -307,7 +299,7 @@ export default async function DcAdsPage({
         registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,
         that path&apos;s campaigns) · ROAS = cash ÷ adspend. The stage row is <b>not</b> a funnel —
         stages overlap rather than nest, so no stage need be smaller than the one before it.
-      </div>
+      </FineNote>
     </div>
   )
 }

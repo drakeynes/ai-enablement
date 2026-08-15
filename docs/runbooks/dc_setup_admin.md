@@ -142,7 +142,8 @@ The dashboard installs as a home-screen app — the page is a PWA
   install banner) → Add.
 
 Mobile layout: the sidebar collapses to a slim DC Ads / DC Setup strip, the
-stat boxes wrap, and every wide table (stage row, 30-day, ads, lead list)
-swipes sideways with its first column frozen. The wide tables are still
-best read on a laptop; the phone view is built for checking numbers on the
-go.
+stat boxes wrap, the stage row becomes a tile grid, long definition text
+collapses behind "Definitions & notes" toggles, and the big tables show a
+trimmed essential column set (e.g. the ads table: Ad / Spend / Opt-ins /
+Units / Closed / ROAS). The FULL column sets are desktop-only — the phone
+view is built for checking numbers on the go, the laptop for analysis.

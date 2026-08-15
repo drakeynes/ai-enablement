@@ -15,11 +15,17 @@ Every sales page, what it shows, and what was removed. All routes live under
 >
 > **Mobile / PWA (2026-08-15):** the dashboard installs from the browser as a home-screen app
 > (`app/manifest.ts`, standalone, opens on DC Ads; icons in `public/icons/`; install steps in
-> `docs/runbooks/dc_setup_admin.md` § On mobile). Phone layout: the sidebar collapses to a DC
-> Ads / DC Setup strip (`sales-dashboard/layout.tsx`), stat grids wrap (`speed-to-lead-boxes`
-> auto-fit, `dc-ads-speed-extras` 2/3/6 columns by breakpoint), and the wide surfaces (stage
-> row, 30-day + ads tables, lead list) scroll horizontally with their first column/header
-> sticky.
+> `docs/runbooks/dc_setup_admin.md` § On mobile). Phone layout (second pass, same day): the
+> sidebar collapses to a DC Ads / DC Setup strip (`sales-dashboard/layout.tsx`), stat grids wrap
+> (`speed-to-lead-boxes` auto-fit, `dc-ads-speed-extras` 2/3/6 columns by breakpoint), the stage
+> row renders as a 3-across TILE GRID on phones (chevron row is `hidden md:flex`), the big
+> tables show a TRIMMED column set below `md` (the `m` flag on headers/cells — daily: Day /
+> Spend / Opt-ins / Units / Closed / ROAS; ads: Ad / Spend / Opt-ins / Units / Closed / ROAS;
+> by-rep: Rep / Dials / Connections / Closes / Cash; lead list: Lead / Qualified / Disposition —
+> full sets from `md` up), and the long definition paragraphs collapse behind
+> `components/sales/fine-note.tsx` toggles on phones. Verified with Playwright iPhone-13
+> screenshots (zero body overflow). The cascade filter row wraps (it was the page-wide
+> overflow culprit) and the content column carries `overflow-x-clip` as a safety net.
 
 Pre-DC nav was **flat: Advertising Hub · Outbound · DC Ads · Leads · Talent**, with
 Roster nested under Talent. Outbound is its own top-level page (no longer nested

@@ -1,5 +1,7 @@
 import type { DcAdsDailyRow } from '@/lib/db/dc-ads'
 
+import { FineNote } from './fine-note'
+
 // DC ads page — the rolling last-30-days daily cohort table (was 5 days;
 // boss 2026-08-13; rebuilt 2026-08-15). Each row is that ET day's opt-in
 // cohort: spend + opt-ins freeze when the day ends, every stage column is the
@@ -19,7 +21,6 @@ import type { DcAdsDailyRow } from '@/lib/db/dc-ads'
 // scrollport, and the old two-tier grid scroller couldn't freeze a column.
 
 const SCROLL_MAX_HEIGHT = 480
-const MIN_TABLE_WIDTH = 2680
 
 // dN ROAS = dN units × $300 ÷ the day's spend.
 function roas(units: number, spendUsd: number | null): string {
@@ -57,12 +58,12 @@ function fmtDur(sec: number | null): string {
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) {
     const m = Math.floor(sec / 60)
-    return `${m}m ${Math.round(sec - m * 60)
+    return `${m}m ${Math.floor(sec - m * 60)
       .toString()
       .padStart(2, '0')}s`
   }
   const h = Math.floor(sec / 3600)
-  return `${h}h ${Math.round((sec - h * 3600) / 60)}m`
+  return `${h}h ${Math.floor((sec - h * 3600) / 60)}m`
 }
 
 // ET date string → "Wed, Jul 9".
@@ -86,24 +87,27 @@ function ageDays(etDate: string, todayEt: string): number {
   return Math.round((toUtc(todayEt) - toUtc(etDate)) / 86_400_000)
 }
 
-const HEADERS: { label: string; align?: 'left' }[] = [
-  { label: 'Day', align: 'left' },
-  { label: 'Spend' },
-  { label: 'Opt-ins' },
+// `m` = shown on MOBILE too (Day, Spend, Opt-ins, Units, Closed, ROAS); the
+// other ~26 columns are desktop-only — the sticky Day column plus a sliver
+// of scrolling was unusable on a phone (boss 2026-08-15).
+const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
+  { label: 'Day', align: 'left', m: true },
+  { label: 'Spend', m: true },
+  { label: 'Opt-ins', m: true },
   { label: 'Qualified' },
   { label: 'SMS' },
   { label: 'SMS+MQL' },
   { label: 'Connects' },
   { label: 'HVC' },
-  { label: 'Units' },
-  { label: 'Closed' },
+  { label: 'Units', m: true },
+  { label: 'Closed', m: true },
   { label: 'D0 U' },
   { label: 'D3 U' },
   { label: 'D7 U' },
   { label: 'D0 ROAS' },
   { label: 'D3 ROAS' },
   { label: 'D7 ROAS' },
-  { label: 'ROAS' },
+  { label: 'ROAS', m: true },
   { label: 'Avg speed' },
   { label: 'Median dial' },
   { label: 'Intensity' },
@@ -130,10 +134,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
       >
         Last 30 days · by opt-in day
       </div>
-      <div
-        className="geg-mono"
-        style={{ fontSize: 9, letterSpacing: '0.04em', color: 'var(--color-geg-text-faint)', marginBottom: 12 }}
-      >
+      <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 12 }} summary="How to read this table">
         Each row is the cohort that opted in that ET day; the Day column stays frozen while the rest
         scrolls. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
@@ -144,18 +145,22 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         matching ROAS columns = those units × $300 ÷ the day&apos;s spend. The right block is the
         speed-to-lead set per day (12p–12a ET clock, same math as the boxes below): dialed-within
         shares are % of that day&apos;s opt-ins. Follows the ad chooser and landing-page dropdown.
-      </div>
+      </FineNote>
 
       {/* ONE scroll container both ways — sticky header (top) + sticky Day
           column (left) need a single scrollport to pin against. */}
       <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflow: 'auto', border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
-        <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: MIN_TABLE_WIDTH, width: '100%' }}>
+        {/* min-width from md up only — the phone's six-column set fits as-is. */}
+        <table
+          className="md:min-w-[2680px]"
+          style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}
+        >
           <thead>
             <tr>
               {HEADERS.map((h, i) => (
                 <th
                   key={h.label}
-                  className="geg-mono"
+                  className={h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}
                   style={{
                     position: 'sticky',
                     top: 0,
@@ -200,15 +205,15 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   >
                     {fmtDay(r.etDate)}
                   </td>
-                  <Td top={fmtUsd(r.spendUsd)} />
-                  <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent />
+                  <Td top={fmtUsd(r.spendUsd)} m />
+                  <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m />
                   <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} />
                   <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} />
                   <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
                   <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
                   <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
-                  <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} />
-                  <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} />
+                  <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
+                  <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
                   {/* STRICT maturity dashes (boss 2026-08-15): a DN cell is a
                       dash until the window has fully elapsed — even if units
                       already landed (the stage columns tell that story). A DN
@@ -219,7 +224,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   <Td top={age >= 1 ? roas(r.unitsD0, r.spendUsd) : '—'} />
                   <Td top={age >= 3 ? roas(r.unitsD3, r.spendUsd) : '—'} />
                   <Td top={age >= 7 ? roas(r.unitsD7, r.spendUsd) : '—'} />
-                  <Td top={r.spendUsd && r.spendUsd > 0 ? (r.cashUsd / r.spendUsd).toFixed(2) : '—'} accent />
+                  <Td top={r.spendUsd && r.spendUsd > 0 ? (r.cashUsd / r.spendUsd).toFixed(2) : '—'} accent m />
                   <Td top={fmtDur(r.avgSpeedSec)} />
                   <Td top={fmtDur(r.medianDialSec)} />
                   <Td top={r.avgIntensity !== null ? `${r.avgIntensity.toFixed(1)}×` : '—'} />
@@ -248,9 +253,10 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
   )
 }
 
-function Td({ top, sub, accent }: { top: string; sub?: string; accent?: boolean }) {
+function Td({ top, sub, accent, m }: { top: string; sub?: string; accent?: boolean; m?: boolean }) {
   return (
     <td
+      className={m ? undefined : 'hidden md:table-cell'}
       style={{
         padding: sub ? '8px 12px 7px' : '10px 12px',
         textAlign: 'right',

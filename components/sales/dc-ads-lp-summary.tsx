@@ -24,7 +24,7 @@ function fmtDuration(sec: number | null): string {
   if (sec == null || sec <= 0) return '—'
   if (sec < 60) return `${Math.round(sec)}s`
   const m = Math.floor(sec / 60)
-  const s = Math.round(sec - m * 60)
+  const s = Math.floor(sec - m * 60)
   return `${m}m ${s.toString().padStart(2, '0')}s`
 }
 
@@ -33,7 +33,7 @@ function fmtWatch(sec: number): string {
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) return `${Math.round(sec / 60)}m`
   const h = Math.floor(sec / 3600)
-  const m = Math.round((sec - h * 3600) / 60)
+  const m = Math.floor((sec - h * 3600) / 60)
   return `${h}h ${m.toString().padStart(2, '0')}m`
 }
 

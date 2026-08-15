@@ -9,6 +9,7 @@ import { Fragment, useState } from 'react'
 import type { DcAdsRepRow, DcAdsRepTotals } from '@/lib/db/dc-ads'
 import type { RepEod } from '@/lib/db/funnel-eods'
 import { EodCard } from './eod-card'
+import { FineNote } from './fine-note'
 
 const PLAN_COLS: { key: keyof Omit<DcAdsRepTotals, 'closes'>; label: string }[] = [
   { key: 'base44Monthly', label: 'Base44·Mo' },
@@ -34,15 +35,17 @@ function fmtCash(n: number): string {
 // the phone, not a raw number.
 function fmtTalk(sec: number): string {
   if (!sec) return '—'
-  if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`
+  if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
   if (sec >= 60) return `${Math.round(sec / 60)}m`
   return `${sec}s`
 }
 
-function Cell({ value, strong = false, muted = false }: { value: string; strong?: boolean; muted?: boolean }) {
+// `m` = shown on mobile too (Rep, Dials, Connections, Closes, Cash); the
+// talk-time/units/plan-split columns are desktop-only (mobile 2026-08-15).
+function Cell({ value, strong = false, muted = false, m = false }: { value: string; strong?: boolean; muted?: boolean; m?: boolean }) {
   return (
     <td
-      className="geg-numeric-serif"
+      className={m ? 'geg-numeric-serif' : 'geg-numeric-serif hidden md:table-cell'}
       style={{
         padding: '9px 14px',
         textAlign: 'right',
@@ -121,16 +124,16 @@ function RepTr({
           r.rep
         )}
       </td>
-      <Cell value={r.dials.toLocaleString('en-US')} />
-      <Cell value={r.connections.toLocaleString('en-US')} />
+      <Cell value={r.dials.toLocaleString('en-US')} m />
+      <Cell value={r.connections.toLocaleString('en-US')} m />
       <Cell value={fmtTalk(r.talkSeconds ?? 0)} muted={!r.talkSeconds} />
-      <Cell value={r.closes.toLocaleString('en-US')} strong />
+      <Cell value={r.closes.toLocaleString('en-US')} strong m />
       <Cell value={r.units.toLocaleString('en-US')} />
       <Cell value={r.base44Monthly.toLocaleString('en-US')} muted={r.base44Monthly === 0} />
       <Cell value={r.base44Yearly.toLocaleString('en-US')} muted={r.base44Yearly === 0} />
       <Cell value={r.wixMonthly.toLocaleString('en-US')} muted={r.wixMonthly === 0} />
       <Cell value={r.wixYearly.toLocaleString('en-US')} muted={r.wixYearly === 0} />
-      <Cell value={fmtCash(r.cash)} strong />
+      <Cell value={fmtCash(r.cash)} strong m />
     </tr>
   )
 }
@@ -159,10 +162,10 @@ function EodExpandRow({ eods }: { eods: RepEod[] }) {
   )
 }
 
-function HeadCell({ label, first = false }: { label: string; first?: boolean }) {
+function HeadCell({ label, first = false, m = false }: { label: string; first?: boolean; m?: boolean }) {
   return (
     <th
-      className="geg-mono"
+      className={m || first ? 'geg-mono' : 'geg-mono hidden md:table-cell'}
       style={{
         padding: '8px 14px',
         textAlign: first ? 'left' : 'right',
@@ -255,16 +258,16 @@ export function DcAdsByRepSection({
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-geg-border)' }}>
                 <HeadCell label="Rep" first />
-                <HeadCell label="Dials" />
-                <HeadCell label="Connections" />
+                <HeadCell label="Dials" m />
+                <HeadCell label="Connections" m />
                 <HeadCell label="Talk time" />
-                <HeadCell label="Closes" />
+                <HeadCell label="Closes" m />
                 <HeadCell label="Units" />
                 <HeadCell label="B44·Mo" />
                 <HeadCell label="B44·Yr" />
                 <HeadCell label="Wix·Mo" />
                 <HeadCell label="Wix·Yr" />
-                <HeadCell label="Cash" />
+                <HeadCell label="Cash" m />
               </tr>
             </thead>
             <tbody>
@@ -289,16 +292,16 @@ export function DcAdsByRepSection({
                 <td className="geg-mono" style={{ padding: '9px 14px', fontSize: 9.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)', whiteSpace: 'nowrap' }}>
                   Total{former.length > 0 ? ' (incl. former)' : ''}
                 </td>
-                <Cell value={colTotals.dials.toLocaleString('en-US')} muted />
-                <Cell value={colTotals.connections.toLocaleString('en-US')} muted />
+                <Cell value={colTotals.dials.toLocaleString('en-US')} muted m />
+                <Cell value={colTotals.connections.toLocaleString('en-US')} muted m />
                 <Cell value={fmtTalk(colTotals.talkSeconds)} muted />
-                <Cell value={colTotals.closes.toLocaleString('en-US')} strong />
+                <Cell value={colTotals.closes.toLocaleString('en-US')} strong m />
                 <Cell value={colTotals.units.toLocaleString('en-US')} strong />
                 <Cell value={totals.base44Monthly.toLocaleString('en-US')} muted />
                 <Cell value={totals.base44Yearly.toLocaleString('en-US')} muted />
                 <Cell value={totals.wixMonthly.toLocaleString('en-US')} muted />
                 <Cell value={totals.wixYearly.toLocaleString('en-US')} muted />
-                <Cell value={fmtCash(colTotals.cash)} strong />
+                <Cell value={fmtCash(colTotals.cash)} strong m />
               </tr>
             </tbody>
           </table>
@@ -349,7 +352,7 @@ export function DcAdsByRepSection({
       )}
 
       {/* footnote */}
-      <div className="geg-mono" style={{ padding: '9px 14px', background: 'var(--color-geg-bg-elev)', borderTop: '1px solid var(--color-geg-border)', fontSize: 9, letterSpacing: '0.05em', color: 'var(--color-geg-text-faint)', lineHeight: 1.7 }}>
+      <FineNote style={{ padding: '9px 14px', background: 'var(--color-geg-bg-elev)', borderTop: '1px solid var(--color-geg-border)' }}>
         Activity-scoped, not cohort-scoped: what each rep did in the selected dates, regardless of when the
         lead opted in. <b>Dials</b> = outbound calls · <b>Connections</b> = calls ≥90s, counted per CALL
         (a lead reached twice counts twice; inbound pickups count) — so the column sum runs higher than the
@@ -361,7 +364,7 @@ export function DcAdsByRepSection({
         the column totals. Activity from anyone not confirmed on the team is not shown. All rows cover
         DC-ads pool leads only. Click a rep name to see their <b>EOD reports</b> for the selected dates
         (everyone files the setter EOD form since the DC pivot).
-      </div>
+      </FineNote>
     </div>
   )
 }

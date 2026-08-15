@@ -112,10 +112,10 @@ function fmtDuration(sec: number | null): string {
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) {
     const m = Math.floor(sec / 60)
-    return `${m}m ${Math.round(sec - m * 60)
+    return `${m}m ${Math.floor(sec - m * 60)
       .toString()
       .padStart(2, '0')}s`
   }
   const h = Math.floor(sec / 3600)
-  return `${h}h ${Math.round((sec - h * 3600) / 60)}m`
+  return `${h}h ${Math.floor((sec - h * 3600) / 60)}m`
 }

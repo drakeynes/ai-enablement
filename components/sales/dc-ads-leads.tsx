@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 
 import type { DcAdsLeadRow } from '@/lib/db/dc-ads'
 
+import { FineNote } from './fine-note'
+
 // DC ads — the embedded lead roster (boss 2026-08-14): the Leads page's list
 // scoped to DC ad leads, living INSIDE the DC Ads page. Search and the
 // toggles narrow the list in place — no navigation, ever. All rows render
@@ -92,7 +94,7 @@ function fmtDialTime(sec: number | null): string {
   if (sec == null) return '—'
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) return `${Math.round(sec / 60)}m`
-  return `${Math.floor(sec / 3600)}h ${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}m`
+  return `${Math.floor(sec / 3600)}h ${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}m`
 }
 
 // The boss's 3-state vocabulary (0144): Yes = qualified, No = answered the
@@ -210,16 +212,16 @@ export function DcAdsLeadsSection({
         })}
       </div>
 
-      {/* Horizontal scroller (mobile 2026-08-15): the 8 columns swipe
-          sideways on a phone instead of crushing; desktop is wider than the
-          min so nothing changes there. */}
+      {/* Mobile (2026-08-15): the phone shows Lead / Qualified / Disposition
+          only (the other five columns are desktop-only, `hidden md:block`) so
+          the list fits the screen with no sideways scroll; ≥md keeps the full
+          eight columns inside the horizontal scroller. */}
       <div style={{ overflowX: 'auto' }}>
-      <div style={{ minWidth: 860 }}>
+      <div className="md:min-w-[860px]">
       {/* Header — outside the vertical scroll box so it stays pinned. */}
       <div
+        className={GRID_COLS}
         style={{
-          display: 'grid',
-          gridTemplateColumns: COLS,
           gap: 10,
           padding: '6px 10px 10px',
           borderBottom: '1px solid var(--color-geg-border)',
@@ -228,11 +230,11 @@ export function DcAdsLeadsSection({
         }}
       >
         <ColH label="Lead" align="left" />
-        <ColH label="Opt-in" />
-        <ColH label="Landing page" align="left" />
-        <ColH label="Dials" />
-        <ColH label="Time to dial" />
-        <ColH label="Connected" />
+        <ColH label="Opt-in" hideM />
+        <ColH label="Landing page" align="left" hideM />
+        <ColH label="Dials" hideM />
+        <ColH label="Time to dial" hideM />
+        <ColH label="Connected" hideM />
         <ColH label="Qualified" />
         <ColH label="Disposition" />
       </div>
@@ -249,9 +251,8 @@ export function DcAdsLeadsSection({
           visible.map((r) => (
             <div
               key={r.closeId}
+              className={GRID_COLS}
               style={{
-                display: 'grid',
-                gridTemplateColumns: COLS,
                 gap: 10,
                 padding: '9px 10px',
                 borderBottom: '1px dashed var(--color-geg-border)',
@@ -272,13 +273,13 @@ export function DcAdsLeadsSection({
                   {[r.phone, r.email].filter(Boolean).join(' · ') || '—'}
                 </span>
               </span>
-              <Num value={fmtAnchor(r.anchor)} />
-              <span className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Num value={fmtAnchor(r.anchor)} hideM />
+              <span className="geg-mono hidden md:block" style={{ fontSize: 10.5, color: 'var(--color-geg-text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {r.lpSlug ? (lpLabels[r.lpSlug] ?? r.lpSlug) : '—'}
               </span>
-              <Num value={r.dials.toLocaleString('en-US')} />
-              <Num value={fmtDialTime(r.timeToDialSec)} />
-              <Num value={r.connected ? 'Yes' : '—'} />
+              <Num value={r.dials.toLocaleString('en-US')} hideM />
+              <Num value={fmtDialTime(r.timeToDialSec)} hideM />
+              <Num value={r.connected ? 'Yes' : '—'} hideM />
               <span
                 className="geg-numeric-serif"
                 style={{
@@ -306,10 +307,7 @@ export function DcAdsLeadsSection({
       </div>
       </div>
 
-      <div
-        className="geg-mono"
-        style={{ marginTop: 10, fontSize: 9, letterSpacing: '0.05em', color: 'var(--color-geg-text-faint)', lineHeight: 1.7 }}
-      >
+      <FineNote style={{ marginTop: 10 }}>
         Every DC ad lead in the selected dates (follows the campaign chooser + landing-page dropdown).
         Search and the toggles narrow this list in place — they never leave the page. Toggles are{' '}
         <b>cumulative</b> (each shows every lead that reached that stage, so the counts match the
@@ -323,12 +321,17 @@ export function DcAdsLeadsSection({
         No = they answered the question but not with that; <i>Partial</i> = they never answered it
         (no completed survey) · <b>HVC</b> = connected <i>and</i> (qualified or
         texted us) · <b>Closed</b> = DC close with a plan · Opt-in = none of those yet.
-      </div>
+      </FineNote>
     </div>
   )
 }
 
-const COLS = 'minmax(180px, 1.6fr) 0.6fr minmax(110px, 1fr) 0.5fr 0.65fr 0.6fr 0.6fr 0.8fr'
+// Responsive grid template (mobile 2026-08-15): three columns on a phone
+// (Lead / Qualified / Disposition — the hidden cells don't occupy tracks),
+// the full eight from md up. Template lives in classes because inline styles
+// can't carry media queries.
+const GRID_COLS =
+  'grid grid-cols-[minmax(0,1.7fr)_0.6fr_0.9fr] md:grid-cols-[minmax(180px,1.6fr)_0.6fr_minmax(110px,1fr)_0.5fr_0.65fr_0.6fr_0.6fr_0.8fr]'
 
 function ToggleButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -374,10 +377,10 @@ function DispositionBadge({ d }: { d: Disposition }) {
   )
 }
 
-function ColH({ label, align }: { label: string; align?: 'left' | 'right' }) {
+function ColH({ label, align, hideM }: { label: string; align?: 'left' | 'right'; hideM?: boolean }) {
   return (
     <span
-      className="geg-mono"
+      className={hideM ? 'geg-mono hidden md:block' : 'geg-mono'}
       style={{
         fontSize: 10,
         letterSpacing: '0.12em',
@@ -391,10 +394,10 @@ function ColH({ label, align }: { label: string; align?: 'left' | 'right' }) {
   )
 }
 
-function Num({ value }: { value: string }) {
+function Num({ value, hideM }: { value: string; hideM?: boolean }) {
   return (
     <span
-      className="geg-numeric-serif"
+      className={hideM ? 'geg-numeric-serif hidden md:block' : 'geg-numeric-serif'}
       style={{ fontSize: 13, color: 'var(--color-geg-text-2)', textAlign: 'right', whiteSpace: 'nowrap' }}
     >
       {value}

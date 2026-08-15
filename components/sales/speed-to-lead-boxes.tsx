@@ -181,10 +181,10 @@ function formatDuration(sec: number): string {
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) {
     const m = Math.floor(sec / 60)
-    const s = Math.round(sec - m * 60)
+    const s = Math.floor(sec - m * 60)
     return `${m}m ${s.toString().padStart(2, '0')}s`
   }
   const h = Math.floor(sec / 3600)
-  const m = Math.round((sec - h * 3600) / 60)
+  const m = Math.floor((sec - h * 3600) / 60)
   return `${h}h ${m}m`
 }
