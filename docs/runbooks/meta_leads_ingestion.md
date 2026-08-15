@@ -48,6 +48,15 @@ One pass (`ingestion/meta_ads/leads_pipeline.py :: sync_meta_leads`):
    `lp_campaigns_linked` / `lp_typeforms_resolved` in the cron audit row.
    Curated registry fields are never overwritten — the resolver only fills
    nulls (lp_slug excepted: it follows the destination URL).
+1d. **Per-ad registry** (0146, boss batch 2026-08-15) — the SAME `/ads` rows
+   step 1b fetched (one fetch, shared) → `fetch_dc_meta_ad_rows()` → upsert
+   **`dc_meta_ads`** (ad → name / campaign / adset / effective_status /
+   normalized destination / `lp_slug`). Runs AFTER 1c so a brand-new LP's
+   slug resolves the same tick. Keeps ads whose campaign is a registered DC
+   campaign OR whose creative points at `digitalcollege.ai` — Closer Funnel
+   ads never enter. Fail-soft; outcome field `meta_ads_upserted`. Feeds the
+   LP-visit split within split-test campaigns and the per-ad table
+   (`docs/schema/dc_meta_ads.md`).
 2. **Page token** — `GET /{page_id}?fields=access_token` with the user token.
    Lead reads are page-scoped; the page token is derived per run, never stored.
 3. **Forms** — `GET /{page_id}/leadgen_forms` → upsert **`meta_lead_forms`**.

@@ -16,11 +16,11 @@ known identity keys are flattened to columns, the raw list is preserved.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from shared.lp_urls import DC_LANDING_HOSTS
+from shared.lp_urls import DC_LANDING_HOSTS, normalize_lp_url
 
 
 def _first_value(field_data: list[dict[str, Any]], name: str) -> str | None:
@@ -147,7 +147,40 @@ def parse_landing_page_ad(
         "campaign_name": campaign.get("name"),
         "source_kind": "landing_page",
         "destination_url": hit,
-        "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        "last_seen_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def parse_meta_ad(
+    row: dict[str, Any],
+    known_campaign_ids: set[str],
+    hosts: tuple[str, ...] = DC_LANDING_HOSTS,
+) -> dict[str, Any] | None:
+    """Project an /ads row into a `dc_meta_ads` registry row (0146).
+
+    Keeps an ad when its campaign is a KNOWN DC campaign (either path) OR its
+    creative points at a DC landing-page host — the same host discriminator as
+    parse_landing_page_ad, so the unrelated Closer Funnel ads on the shared
+    account never enter the registry. destination_url is the normalized DC
+    destination (None for instant-form ads); lp_slug is stamped by the
+    pipeline from the dc_landing_pages registry.
+    """
+    ad_id = row.get("id")
+    campaign_id = row.get("campaign_id")
+    if not ad_id or not campaign_id:
+        return None
+    urls = creative_destination_urls(row.get("creative"))
+    hit = next((u for u in sorted(urls) if _host_matches(u, hosts)), None)
+    if str(campaign_id) not in known_campaign_ids and not hit:
+        return None
+    return {
+        "ad_id": str(ad_id),
+        "ad_name": row.get("name"),
+        "campaign_id": str(campaign_id),
+        "adset_id": str(row["adset_id"]) if row.get("adset_id") else None,
+        "effective_status": row.get("effective_status"),
+        "destination_url": normalize_lp_url(hit) if hit else None,
+        "last_seen_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -171,5 +204,5 @@ def parse_leadgen_adset(row: dict[str, Any], account_id: str) -> dict[str, Any] 
         "campaign_name": campaign.get("name"),
         "account_id": account_id,
         "page_id": str(promoted["page_id"]) if promoted.get("page_id") else None,
-        "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        "last_seen_at": datetime.now(UTC).isoformat(),
     }

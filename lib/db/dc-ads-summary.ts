@@ -52,8 +52,13 @@ export type DcAdsLpSummary = {
   // True when a cascade entity (campaign/adset/ad) narrowed the LP block —
   // the page footnotes the attributed-submissions caveat.
   cascadeScoped: boolean
-  // True when cascade + a specific LP are BOTH selected: Meta can't split a
-  // campaign's clicks by LP variant, so visits are the selection's total.
+  // Cascade + a specific LP both selected, and the dc_meta_ads registry
+  // (0146) had the selection's ads: visits were SPLIT to only the ads whose
+  // creative points at this LP (the boss's "count the ads within the
+  // campaign" rule, 2026-08-15).
+  lpVariantSplit: boolean
+  // Cascade + LP both selected but the registry couldn't split (no rows yet —
+  // e.g. first tick after deploy): visits are the selection's total clicks.
   lpVariantNote: boolean
 }
 
@@ -142,7 +147,30 @@ export async function getDcAdsLpSummary(
   // visits are the same scope the ads block reads, one read for both.
   const adsScope = await spendScope(filter)
   const ads = await adsAggregate(adsScope, range)
-  const lpVisits = ads.uniqueClicks
+  let lpVisits = ads.uniqueClicks
+
+  // Cascade + a specific LP: split visits to only the selection's ads whose
+  // creative points at THIS page (dc_meta_ads, 0146) — a split-test campaign
+  // stops showing both variants' clicks under one LP. Falls back to the
+  // selection's total (footnoted) until the registry has the ads.
+  let lpVariantSplit = false
+  if (cascadeScoped && selected) {
+    let regQuery = sb
+      .from('dc_meta_ads' as never)
+      .select('ad_id')
+      .eq('lp_slug', selected.slug)
+    if (filter.adId) regQuery = regQuery.eq('ad_id', filter.adId)
+    else if (filter.adsetId) regQuery = regQuery.eq('adset_id', filter.adsetId)
+    else if (filter.campaignId) regQuery = regQuery.eq('campaign_id', filter.campaignId)
+    const { data: regAds, error: regErr } = await regQuery
+    if (regErr) throw new Error(`dc_meta_ads read failed: ${regErr.message}`)
+    const adIds = ((regAds ?? []) as Array<{ ad_id: string }>).map((r) => r.ad_id)
+    if (adIds.length > 0) {
+      const lpAds = await adsAggregate({ table: 'cortana_ad_daily', ids: adIds }, range)
+      lpVisits = lpAds.uniqueClicks
+      lpVariantSplit = true
+    }
+  }
 
   // Typeform submissions — the selected LP's form, or every registered DC
   // form. The instant-form path has no Typeform (its opt-in IS the Meta form).
@@ -213,6 +241,7 @@ export async function getDcAdsLpSummary(
     vsl,
     confirm,
     cascadeScoped,
-    lpVariantNote: cascadeScoped && !!selected,
+    lpVariantSplit,
+    lpVariantNote: cascadeScoped && !!selected && !lpVariantSplit,
   }
 }

@@ -190,7 +190,10 @@ CLOSER_FUNNEL_AD_ROW = {
     "id": "120248128714100748",
     "name": "6/13/26 - Broad - Ad Tracking Image (4)",
     "campaign_id": "120248128714030748",
-    "campaign": {"id": "120248128714030748", "name": "6/13/26 | ANDROMEDA | ... | Closer Funnel - Copy"},
+    "campaign": {
+        "id": "120248128714030748",
+        "name": "6/13/26 | ANDROMEDA | ... | Closer Funnel - Copy",
+    },
     "effective_status": "PAUSED",
     "creative": {
         "id": "1006972555216258",
@@ -226,7 +229,11 @@ def test_landing_page_ad_matches_host_not_path():
     """/training exists on BOTH domains — a path-based rule would be wrong."""
     imposter = {
         "campaign_id": "999",
-        "creative": {"object_story_spec": {"link_data": {"link": "https://join.theaipartner.io/training"}}},
+        "creative": {
+            "object_story_spec": {
+                "link_data": {"link": "https://join.theaipartner.io/training"}
+            }
+        },
     }
     assert parse_landing_page_ad(imposter) is None
 
@@ -250,11 +257,51 @@ def test_landing_page_ad_without_destination_is_ignored():
     assert parse_landing_page_ad({"creative": DC_LANDING_AD_ROW["creative"]}) is None
 
 
+# -- per-ad registry (0146) --------------------------------------------------
+
+
+def test_parse_meta_ad_claims_dc_landing_ad_with_normalized_destination():
+    from ingestion.meta_ads.leads_parser import parse_meta_ad
+
+    row = parse_meta_ad(DC_LANDING_AD_ROW, known_campaign_ids=set())
+    assert row is not None
+    assert row["ad_id"] == "120250218014210748"
+    assert row["ad_name"] == "07/25 | Creative 7"
+    assert row["campaign_id"] == "120250217875250748"
+    assert row["effective_status"] == "PAUSED"
+    # Destination is NORMALIZED (registry join key), unlike the campaign row's.
+    assert row["destination_url"] == "join.digitalcollege.ai/training"
+
+
+def test_parse_meta_ad_keeps_known_campaign_ads_without_dc_destination():
+    """Instant-form ads have no LP destination but their campaign is registered."""
+    from ingestion.meta_ads.leads_parser import parse_meta_ad
+
+    row = parse_meta_ad(
+        {"id": "a1", "campaign_id": "c1", "adset_id": "s1", "creative": {}},
+        known_campaign_ids={"c1"},
+    )
+    assert row is not None
+    assert row["destination_url"] is None
+    assert row["adset_id"] == "s1"
+
+
+def test_parse_meta_ad_rejects_closer_funnel_and_unknown_campaigns():
+    from ingestion.meta_ads.leads_parser import parse_meta_ad
+
+    assert parse_meta_ad(CLOSER_FUNNEL_AD_ROW, known_campaign_ids=set()) is None
+    assert (
+        parse_meta_ad({"id": "a1", "creative": {}}, known_campaign_ids={"c1"}) is None
+    )
+
+
 def test_creative_destination_urls_finds_every_location():
     creative = {
         "link_url": "https://digitalcollege.ai/a",
         "object_story_spec": {"link_data": {"link": "https://digitalcollege.ai/b"}},
-        "asset_feed_spec": {"link_urls": [{"website_url": "https://digitalcollege.ai/c"}]},
+        "asset_feed_spec": {
+            "link_urls": [{"website_url": "https://digitalcollege.ai/c"}]
+        },
     }
     assert creative_destination_urls(creative) == {
         "https://digitalcollege.ai/a",

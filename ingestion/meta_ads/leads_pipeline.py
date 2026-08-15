@@ -28,6 +28,7 @@ from ingestion.meta_ads.leads_parser import (
     parse_landing_page_ad,
     parse_lead,
     parse_leadgen_adset,
+    parse_meta_ad,
 )
 from shared.lp_urls import lp_short_label, lp_slugify, normalize_lp_url
 
@@ -43,6 +44,7 @@ class LeadsSyncOutcome:
     lp_pages_created: int = 0
     lp_campaigns_linked: int = 0
     lp_typeforms_resolved: int = 0
+    meta_ads_upserted: int = 0
     forms_upserted: int = 0
     leads_upserted: int = 0
     facts_rows: int | None = None
@@ -67,16 +69,35 @@ def fetch_leadgen_campaign_rows(client: MetaAdsClient, account_id: str) -> list[
     return _dedup_by([r for r in rows if r], "campaign_id")
 
 
-def fetch_landing_page_campaign_rows(client: MetaAdsClient) -> list[dict]:
+def fetch_landing_page_campaign_rows(ads: list[dict]) -> list[dict]:
     """Creative scan → deduped `dc_ads_campaigns` landing-page rows.
 
     The instant-form discriminator can't see these: a landing-page campaign is
     an ordinary OFFSITE_CONVERSIONS campaign, distinguishable only by where its
-    creatives point (docs/schema/dc_ads_campaigns.md).
+    creatives point (docs/schema/dc_ads_campaigns.md). Takes the prefetched
+    /ads rows — the caller fetches once and shares them with the per-ad
+    registry (0146).
     """
-    ads = client.account_ads_with_creatives()
     rows = [parse_landing_page_ad(a) for a in ads]
     return _dedup_by([r for r in rows if r], "campaign_id")
+
+
+def fetch_dc_meta_ad_rows(
+    ads: list[dict],
+    known_campaign_ids: set[str],
+    url_to_slug: dict[str, str],
+) -> list[dict]:
+    """Prefetched /ads rows → deduped `dc_meta_ads` registry rows (0146),
+    lp_slug stamped from the landing-page registry by normalized URL."""
+    rows = []
+    for a in ads:
+        row = parse_meta_ad(a, known_campaign_ids)
+        if not row:
+            continue
+        dest = row.get("destination_url")
+        row["lp_slug"] = url_to_slug.get(dest) if dest else None
+        rows.append(row)
+    return _dedup_by(rows, "ad_id")
 
 
 def _majority(values: list[str]) -> str | None:
@@ -121,10 +142,7 @@ def resolve_dc_landing_pages(db) -> tuple[int, int, int]:
     )
     camps = [c for c in camps if c.get("destination_url")]
     lps = (
-        db.table("dc_landing_pages")
-        .select("slug, lp_url, typeform_id")
-        .execute()
-        .data
+        db.table("dc_landing_pages").select("slug, lp_url, typeform_id").execute().data
         or []
     )
     by_url = {lp["lp_url"]: lp for lp in lps}
@@ -162,7 +180,10 @@ def resolve_dc_landing_pages(db) -> tuple[int, int, int]:
         current_slugs: list[str] = c.get("lp_slugs") or []
         if c.get("lp_slug") != lp["slug"] or lp["slug"] not in current_slugs:
             patch["lp_slug"] = lp["slug"]
-            patch["lp_slugs"] = [lp["slug"], *[s for s in current_slugs if s != lp["slug"]]]
+            patch["lp_slugs"] = [
+                lp["slug"],
+                *[s for s in current_slugs if s != lp["slug"]],
+            ]
         if not c.get("typeform_id") and lp.get("typeform_id"):
             patch["typeform_id"] = lp["typeform_id"]
         if patch:
@@ -246,7 +267,9 @@ def sync_meta_leads(
             for r in campaign_rows
         ]
         for chunk in _chunked(dc_rows):
-            db.table("dc_ads_campaigns").upsert(chunk, on_conflict="campaign_id").execute()
+            db.table("dc_ads_campaigns").upsert(
+                chunk, on_conflict="campaign_id"
+            ).execute()
         outcome.campaigns_upserted = len(campaign_rows)
     except MetaAdsAPIError as exc:
         outcome.errors.append(f"adset_scan: {exc}")
@@ -255,11 +278,15 @@ def sync_meta_leads(
     # 1b. creative scan → landing-page campaigns. Kept separate from the adset
     # scan so a failure here can't cost us the instant-form scope (or the leads
     # below); a stale landing-page row just means a new LP campaign shows up a
-    # tick late.
+    # tick late. The fetched /ads rows are reused by the per-ad registry (1d).
+    account_ads: list[dict] = []
     try:
-        lp_rows = fetch_landing_page_campaign_rows(client)
+        account_ads = client.account_ads_with_creatives()
+        lp_rows = fetch_landing_page_campaign_rows(account_ads)
         for chunk in _chunked(lp_rows):
-            db.table("dc_ads_campaigns").upsert(chunk, on_conflict="campaign_id").execute()
+            db.table("dc_ads_campaigns").upsert(
+                chunk, on_conflict="campaign_id"
+            ).execute()
         outcome.lp_campaigns_upserted = len(lp_rows)
     except MetaAdsAPIError as exc:
         outcome.errors.append(f"creative_scan: {exc}")
@@ -276,6 +303,29 @@ def sync_meta_leads(
     except Exception as exc:  # noqa: BLE001 — third-party client raises broadly
         outcome.errors.append(f"lp_resolver: {exc}")
         logger.warning("meta leads sync: landing-page resolver failed: %s", exc)
+
+    # 1d. per-ad registry (0146) — AFTER the resolver so a brand-new LP's slug
+    # resolves the same tick. Fail-soft like its siblings: registry staleness
+    # never costs the lead sync.
+    if account_ads:
+        try:
+            camp_rows = (
+                db.table("dc_ads_campaigns").select("campaign_id").execute().data or []
+            )
+            lp_rows_reg = (
+                db.table("dc_landing_pages").select("slug, lp_url").execute().data or []
+            )
+            ad_rows = fetch_dc_meta_ad_rows(
+                account_ads,
+                {str(c["campaign_id"]) for c in camp_rows if c.get("campaign_id")},
+                {lp["lp_url"]: lp["slug"] for lp in lp_rows_reg if lp.get("lp_url")},
+            )
+            for chunk in _chunked(ad_rows):
+                db.table("dc_meta_ads").upsert(chunk, on_conflict="ad_id").execute()
+            outcome.meta_ads_upserted = len(ad_rows)
+        except Exception as exc:  # noqa: BLE001 — third-party client raises broadly
+            outcome.errors.append(f"ad_registry: {exc}")
+            logger.warning("meta leads sync: ad registry upsert failed: %s", exc)
 
     # 2. page token — everything below needs it
     try:

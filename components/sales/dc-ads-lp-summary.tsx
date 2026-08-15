@@ -122,12 +122,19 @@ export function DcAdsLpSummarySection({ summary }: { summary: DcAdsLpSummary }) 
           unique link clicks, and submissions count only those carrying the selection&apos;s ad tags —
           roughly 1 in 6 arrives without tags (return visits, rep-sent links) and is excluded here,
           so this reads slightly lower than the whole-page count.
+          {summary.lpVariantSplit ? (
+            <>
+              {' '}
+              Visits count only the selection&apos;s ads whose creative points at this page (per-ad
+              destinations), so a split test&apos;s variants split correctly.
+            </>
+          ) : null}
           {summary.lpVariantNote ? (
             <>
               {' '}
-              With a landing page also selected, visits stay the selection&apos;s TOTAL clicks — Meta
-              can&apos;t split a campaign&apos;s clicks between LP variants (only matters on split
-              tests).
+              With a landing page also selected, visits show the selection&apos;s TOTAL clicks for
+              now — the per-ad registry hasn&apos;t resolved this selection&apos;s ads yet (next
+              sync tick).
             </>
           ) : null}
         </div>

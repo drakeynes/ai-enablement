@@ -304,7 +304,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   submissions arrives untagged (return visits, rep-sent links, unfilled Meta macros; blank in
   Close too, unrecoverable from the response — a lead-matched hybrid could recover most if ever
   needed) and is excluded under a selection, footnoted on the page; with cascade + LP both
-  selected, visits stay the selection's total clicks — Meta can't split clicks by LP variant;
+  selected, visits SPLIT to only the selection's ads whose creative points at that page — the
+  `dc_meta_ads` per-ad registry (0146, boss: "count the ads within the campaign"), falling back
+  to the selection's total clicks (footnoted) until the registry has the ads;
   starts/completion need Typeform's Insights API, not
   mirrored), **Videos** (the LP's registered videos via the hub's `getVslMetrics` math over
   `wistia_media_daily`; videos auto-attach to LPs by Wistia embed location —
