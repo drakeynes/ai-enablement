@@ -750,11 +750,19 @@ export type DcAdsLeadRow = {
   anchor: string
   lpSlug: string | null
   dials: number
+  firstDial: string | null
   sms: boolean
   qualified: boolean
+  // 3-state qualification (0144, boss 2026-08-15): 'qualified' = hit the LP's
+  // qualify answer; 'unqualified' = answered the question, missed; 'partial'
+  // = never answered it (no completed survey, or skipped the question).
+  qualState: 'qualified' | 'unqualified' | 'partial'
   connected: boolean
   hvc: boolean
   closed: boolean
+  // Opt-in → first dial on the DC 12p–12a ET business clock (same clock as
+  // the speed boxes), computed server-side below. Null = never dialed.
+  timeToDialSec: number | null
 }
 
 export async function getDcAdsLeadRoster(
@@ -768,7 +776,18 @@ export async function getDcAdsLeadRoster(
     ...entityArgs(filter),
   } as never)
   if (error) throw new Error(`dc_ads_lead_roster RPC failed: ${error.message}`)
-  return (data ?? []) as unknown as DcAdsLeadRow[]
+  const rows = (data ?? []) as unknown as Array<Omit<DcAdsLeadRow, 'timeToDialSec'>>
+  return rows.map((r) => ({
+    ...r,
+    timeToDialSec: r.firstDial
+      ? businessHoursElapsedSec(
+          new Date(r.anchor),
+          new Date(r.firstDial),
+          DC_CLOCK_OPEN_HOUR,
+          DC_CLOCK_CLOSE_HOUR,
+        )
+      : null,
+  }))
 }
 
 // Close-side opt-ins on the INSTANT-FORM path only, for the bridge-drift check.

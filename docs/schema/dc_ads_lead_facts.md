@@ -95,6 +95,19 @@ of Connected by construction — and adds `dc_ads_lead_roster()`: per-lead rows
 (display name + first contact phone/email, `lp_slug`, dials, disposition
 flags) for the page's embedded, client-filtered lead list.
 
+**0144** adds `tf_answered` — the lead's matched Typeform response answered
+the qualify question AT ALL (any label); null = no matched completed response,
+same convention as `tf_qualified`. Together they yield the roster's 3-state
+`qualState` (boss vocabulary, 2026-08-15): **qualified** = `tf_qualified`;
+**unqualified** = answered but not with a qualifying label; **partial** =
+never answered it (no completed survey matched, or skipped the question —
+instant-form leads always read partial). True Typeform partial responses are
+NOT ingestible (they carry no answers/hidden fields — verified against the
+live API 2026-08-15), so "partial" here means "no completed survey", which
+covers both never-started and abandoned. `dc_ads_lead_roster()` also returns
+`firstDial` since 0144 (the roster's Time-to-dial column, business-clock math
+in `lib/db/dc-ads.ts`).
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

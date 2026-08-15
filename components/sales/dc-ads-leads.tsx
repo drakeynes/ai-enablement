@@ -53,6 +53,23 @@ function fmtAnchor(iso: string): string {
   }).format(new Date(iso))
 }
 
+// Business-clock seconds (12p–12a ET, same clock as the speed boxes) →
+// "45s" / "12m" / "3h 05m" / "—" (never dialed).
+function fmtDialTime(sec: number | null): string {
+  if (sec == null) return '—'
+  if (sec < 60) return `${Math.round(sec)}s`
+  if (sec < 3600) return `${Math.round(sec / 60)}m`
+  return `${Math.floor(sec / 3600)}h ${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}m`
+}
+
+// The boss's 3-state vocabulary (0144): Yes = qualified, No = answered the
+// question but missed, Partial = never answered it (no completed survey).
+const QUAL_LABEL: Record<DcAdsLeadRow['qualState'], string> = {
+  qualified: 'Yes',
+  unqualified: 'No',
+  partial: 'Partial',
+}
+
 const SCROLL_MAX_HEIGHT = 480
 
 export function DcAdsLeadsSection({
@@ -171,6 +188,8 @@ export function DcAdsLeadsSection({
         <ColH label="Opt-in" />
         <ColH label="Landing page" align="left" />
         <ColH label="Dials" />
+        <ColH label="Time to dial" />
+        <ColH label="Connected" />
         <ColH label="Qualified" />
         <ColH label="Disposition" />
       </div>
@@ -215,7 +234,25 @@ export function DcAdsLeadsSection({
                 {r.lpSlug ? (lpLabels[r.lpSlug] ?? r.lpSlug) : '—'}
               </span>
               <Num value={r.dials.toLocaleString('en-US')} />
-              <Num value={r.qualified ? 'Yes' : '—'} />
+              <Num value={fmtDialTime(r.timeToDialSec)} />
+              <Num value={r.connected ? 'Yes' : '—'} />
+              <span
+                className="geg-numeric-serif"
+                style={{
+                  fontSize: 13,
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                  color:
+                    r.qualState === 'qualified'
+                      ? 'var(--color-geg-text)'
+                      : r.qualState === 'unqualified'
+                        ? 'var(--color-geg-text-2)'
+                        : 'var(--color-geg-text-faint)',
+                  fontStyle: r.qualState === 'partial' ? 'italic' : 'normal',
+                }}
+              >
+                {QUAL_LABEL[r.qualState]}
+              </span>
               <span style={{ textAlign: 'right' }}>
                 <DispositionBadge d={r.disposition} />
               </span>
@@ -232,15 +269,19 @@ export function DcAdsLeadsSection({
         Search and the toggles narrow this list in place — they never leave the page. Toggles are{' '}
         <b>cumulative</b>: each shows every lead that reached that stage (a closed lead appears under
         all of its stages), so the counts match the stage row above. The badge on each row is the
-        lead&apos;s furthest stage. <b>SMS</b> = texted us back · <b>Connected</b> = a <b>call ≥90s
-        only</b> — no form or text evidence counts · <b>HVC</b> = connected <i>and</i> (qualified or
+        lead&apos;s furthest stage. <b>Time to dial</b> = opt-in → first outbound call on the same
+        12p–12a ET clock as the speed boxes (— = never dialed) · <b>SMS</b> = texted us back ·{' '}
+        <b>Connected</b> = a <b>call ≥90s only</b> — no form or text evidence counts ·{' '}
+        <b>Qualified</b>: Yes = their Typeform answered &ldquo;Yes I can pay for the AI tools&rdquo;;
+        No = they answered the question but not with that; <i>Partial</i> = they never answered it
+        (no completed survey) · <b>HVC</b> = connected <i>and</i> (qualified or
         texted us) · <b>Closed</b> = DC close with a plan · Opt-in = none of those yet.
       </div>
     </div>
   )
 }
 
-const COLS = 'minmax(180px, 1.6fr) 0.6fr minmax(110px, 1fr) 0.5fr 0.6fr 0.8fr'
+const COLS = 'minmax(180px, 1.6fr) 0.6fr minmax(110px, 1fr) 0.5fr 0.65fr 0.6fr 0.6fr 0.8fr'
 
 function DispositionBadge({ d }: { d: Disposition }) {
   const strong = d === 'closed' || d === 'hvc'

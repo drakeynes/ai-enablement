@@ -225,8 +225,14 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   rendered.
 - **Leads roster** (added 2026-08-14, migration 0137) — the Leads page's list scoped to DC ad
   leads, embedded right under the speed-to-lead boxes: one row per cohort lead (name / phone /
-  email / opt-in day / landing page / dials / qualified / disposition), all inside a fixed-height
-  scrollable box. **Search + stage toggles (SMS · Connected · HVC · Closed) filter fully
+  email / opt-in day / landing page / dials / time to dial / connected / qualified /
+  disposition), all inside a fixed-height scrollable box. Since 0144 (boss batch 2026-08-15):
+  **Time to dial** = opt-in → first outbound call on the DC 12p–12a ET clock (— = never dialed),
+  **Connected** = Yes/— (call ≥90s), and **Qualified is 3-state** — Yes ("Yes I can pay for the
+  AI tools") / No (answered the question, missed) / Partial (never answered it — no completed
+  survey; true Typeform partials are anonymous and unlinkable, verified live 2026-08-15, so
+  Partial = "didn't finish the survey" incl. never-started). "Marketing qualified" = Qualified
+  (boss: same thing — Close's `marketing_qualified` overlaps `tf_qualified` 460/462). **Search + stage toggles (SMS · Connected · HVC · Closed) filter fully
   client-side — they never navigate.** Toggles are CUMULATIVE (Nabeel 2026-08-14): each shows
   every lead that reached that stage, so toggle counts equal the stage row's numbers; the badge
   on each row is still the lead's furthest stage (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
