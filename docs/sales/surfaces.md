@@ -232,10 +232,15 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   AI tools") / No (answered the question, missed) / Partial (never answered it — no completed
   survey; true Typeform partials are anonymous and unlinkable, verified live 2026-08-15, so
   Partial = "didn't finish the survey" incl. never-started). "Marketing qualified" = Qualified
-  (boss: same thing — Close's `marketing_qualified` overlaps `tf_qualified` 460/462). **Search + stage toggles (SMS · Connected · HVC · Closed) filter fully
-  client-side — they never navigate.** Toggles are CUMULATIVE (Nabeel 2026-08-14): each shows
-  every lead that reached that stage, so toggle counts equal the stage row's numbers; the badge
-  on each row is still the lead's furthest stage (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
+  (boss: same thing — Close's `marketing_qualified` overlaps `tf_qualified` 460/462). **Search +
+  toggles filter fully client-side — they never navigate.** Toggles are CUMULATIVE (Nabeel
+  2026-08-14): each shows every lead that reached that stage, so toggle counts equal the stage
+  row's numbers; and STACKABLE in two groups since 2026-08-15 — stage (SMS · Connected · HVC ·
+  Closed) and qualification (Qualified · Non-qualified · Partial): union within a group
+  (Connected + HVC = Connected, fine), AND across groups (Qualified + Connected = qualified
+  leads who connected). Toggle state lives in the `dc-ads-speed-leads.tsx` wrapper so the speed
+  boxes above follow the same subset (search stays list-only); the badge on each row is still
+  the lead's furthest stage (Closed > HVC > Connected > SMS > Opt-in). Backed by `dc_ads_lead_roster()` (identity from
   `close_leads.display_name` + first contact phone/email — the search keys); follows the cascade +
   LP dropdown + window like every other section.
 - **Speed to lead boxes** (added 2026-07-15; reclocked + SMS box 2026-08-13, migration 0135) —
@@ -243,10 +248,17 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   12p–12a ET clock** (boss 2026-08-13 — deliberately NOT comparable with the Leads page's
   10a–10p numbers; the clock is labeled on the box; verified against an independent
   implementation to the second across the full cohort incl. DST days), plus an **SMS engagement
-  rate** and (boss item #20, 2026-08-14) a second stat strip — dial-speed spread (% dialed
-  <5m/<10m/<30m cumulative · >30m · never dialed — <30m + >30m + never = 100% — and the median
-  time to dial, all on the DC clock) plus MQL→Close / HVC→Close / Connect→Close rates and CPU
-  (adspend ÷ Valid-adjusted units). The SMS engagement rate: of the leads we texted (any outbound SMS after the opt-in), how many texted back —
+  rate** and (boss item #20, 2026-08-14; reshaped 2026-08-15) a second stat strip, two rows of
+  six — dial-speed spread (% dialed <1m/<5m/<10m/<30m cumulative · >30m · never dialed — <30m +
+  >30m + never = 100%, all on the DC clock) and median time to dial · MQL→Close · **Non-qual→Close**
+  (closed non-qualified ÷ non-qualified — the intersection, unlike MQL→Close's all-closes ÷
+  qualified) · HVC→Close / Connect→Close · CPU (adspend ÷ Valid-adjusted units). **Since
+  2026-08-15 (migration 0145) every speed number recomputes over the lead-list's stacked-toggle
+  subset**: all boxes read the same `dc_ads_lead_roster()` per-lead rows (`dc_ads_speed_cohort()`
+  is no longer called by the page — retire with `p_funnel_label` someday), the math lives in the
+  pure `lib/db/cohort-stats.ts` (client-shareable; `funnel-appointment-setting.ts` re-exports it),
+  and the wrapper is `components/sales/dc-ads-speed-leads.tsx`. CPU under a filter keeps the
+  whole-window adspend numerator (spend has no per-lead attribution) — footnoted on the page. The SMS engagement rate: of the leads we texted (any outbound SMS after the opt-in), how many texted back —
   texted, not cohort, as the denominator (never-touched-leads-don't-dilute, Drake 2026-06-18;
   a text-first lead sits in both sides so the rate caps at 100%). Backed by the
   `dc_ads_speed_cohort()` RPC (0129→0135: + `smsIn`/`smsOut`) + the SAME

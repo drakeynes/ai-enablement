@@ -6,10 +6,8 @@ import { DcAdsLpSummarySection } from '@/components/sales/dc-ads-lp-summary'
 import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
-import { DcAdsLeadsSection } from '@/components/sales/dc-ads-leads'
-import { DcAdsSpeedExtras } from '@/components/sales/dc-ads-speed-extras'
+import { DcAdsSpeedLeadsSection } from '@/components/sales/dc-ads-speed-leads'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
-import { SpeedToLeadBoxes } from '@/components/sales/speed-to-lead-boxes'
 import {
   getDcAdsFunnel,
   getDcAdsByRep,
@@ -18,7 +16,6 @@ import {
   getDcAdsInstantFormOptIns,
   getDcAdsDaily,
   getDcAdsHierarchy,
-  getDcAdsSpeedCohort,
   getDcAdsLeadRoster,
   DC_CLOCK_LABEL,
   type DcAdsEntityFilter,
@@ -99,7 +96,6 @@ export default async function DcAdsPage({
     instantFormOptIns,
     dailyRows,
     hierarchy,
-    speedCohort,
     adsLp,
     team,
     leadRoster,
@@ -111,7 +107,6 @@ export default async function DcAdsPage({
     getDcAdsInstantFormOptIns(rangeBounds),
     getDcAdsDaily(todayEt, filter, 30),
     getDcAdsHierarchy(rangeBounds),
-    getDcAdsSpeedCohort(rangeBounds, filter),
     getDcAdsLpSummary(range, filter),
     getDcTeam(),
     getDcAdsLeadRoster(rangeBounds, filter),
@@ -244,39 +239,16 @@ export default async function DcAdsPage({
           DC-cohort activity only. Below the by-rep table per boss item 8. */}
       <DcAdsRosterSection team={team} reps={byRep.reps} />
 
-      {/* Speed-to-lead boxes — the Leads page's top-line stats computed over
-          the DC ads opt-in cohort, on the DC dial team's OWN clock (12p–12a
-          ET, boss 2026-08-13 — deliberately not comparable with the Leads
-          page's 10a–10p numbers; the clock is labeled on the box), plus the
-          SMS engagement rate (texted-back ÷ texted). Same 24h cap. */}
-      <div style={{ marginTop: 26 }}>
-        <div
-          className="geg-mono"
-          style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)', marginBottom: 10 }}
-        >
-          Speed to lead · DC ad opt-ins · selected dates
-        </div>
-        <SpeedToLeadBoxes
-          cohort={speedCohort}
-          connectedLeads={speedCohort.connectedBroad}
-          connectedDenominator={speedCohort.dialedOrConnected}
-          clockLabel={DC_CLOCK_LABEL}
-          sms={{ engaged: speedCohort.smsEngaged, texted: speedCohort.smsTexted }}
-          connectedHint="of leads dialed · calls ≥90s only"
-        />
-        {/* Boss item #20: dial-speed spread (<5m/<10m/<30m/>30m/never sums to
-            100% via the cumulative <30m) + median, and the close-rate/CPU
-            strip. Same clock, same filters. */}
-        <DcAdsSpeedExtras speed={speedCohort} funnel={funnel} spendUsd={spend.spendUsd} />
-      </div>
-
-      {/* The embedded lead roster (boss 2026-08-14) — the Leads page scoped to
-          DC ad leads, right under the speed-to-lead boxes. Search + the
-          disposition toggles filter in place; the box scrolls, the page
-          doesn't grow. */}
-      <DcAdsLeadsSection
+      {/* Speed-to-lead boxes + the embedded lead roster, one client wrapper
+          (boss 2026-08-15): the stacked toggles filter the roster AND
+          recompute every speed box over the same subset. All numbers come
+          from the per-lead roster rows (12p–12a ET clock, same 24h cap —
+          math server-side in lib/db/dc-ads.ts, aggregation client-side). */}
+      <DcAdsSpeedLeadsSection
         rows={leadRoster}
         lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
+        spendUsd={spend.spendUsd}
+        clockLabel={DC_CLOCK_LABEL}
       />
 
       <DcAdsCalledSection called={called} />

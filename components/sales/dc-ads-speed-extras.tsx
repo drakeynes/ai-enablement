@@ -1,41 +1,75 @@
-import type { DcAdsFunnel } from '@/lib/db/dc-ads'
-import type { DcAdsSpeedStats } from '@/lib/db/dc-ads'
-
-// DC ads — the second row(s) of speed-to-lead stats (boss item #20,
-// 2026-08-14), under the four/five headline boxes:
-//   dial-speed spread  % dialed <5m / <10m / <30m (cumulative) · % >30m ·
-//                      % never dialed — <30m + >30m + never = 100% — and the
-//                      median time to dial. Same 12p–12a ET clock as the avg.
-//   conversion + cost  MQL→Close (closed ÷ qualified) · HVC→Close · Connect→
-//                      Close · CPU (adspend ÷ units, Valid-adjusted).
-// Same window + filters as everything on the page.
+// DC ads — the second rows of speed-to-lead stats (boss item #20, 2026-08-14;
+// reshaped 2026-08-15), under the five headline boxes. Two rows of six:
+//   dial-speed spread  % dialed <1m / <5m / <10m / <30m (cumulative) · % >30m ·
+//                      % never dialed — <30m + >30m + never = 100%. Same
+//                      12p–12a ET clock as the avg.
+//   conversion + cost  median time to dial · MQL→Close (closed ÷ qualified) ·
+//                      Non-qual→Close (closed non-qualified ÷ non-qualified) ·
+//                      HVC→Close · Connect→Close · CPU (adspend ÷ units,
+//                      Valid-adjusted).
+// Since 2026-08-15 every number here is computed from the lead-roster rows by
+// the dc-ads-speed-leads wrapper, so the stacked toggles narrow them all —
+// EXCEPT the CPU numerator: spend has no per-lead attribution, so adspend
+// stays the whole window while units shrink with the filter (footnoted on
+// the page).
 
 export function DcAdsSpeedExtras({
-  speed,
-  funnel,
+  cohort,
+  under1,
+  under5,
+  under10,
+  under30,
+  over30,
+  never,
+  medianSec,
+  closed,
+  qualified,
+  unqualified,
+  unqualifiedClosed,
+  hvc,
+  connected,
+  units,
   spendUsd,
 }: {
-  speed: DcAdsSpeedStats
-  funnel: DcAdsFunnel
+  cohort: number
+  under1: number
+  under5: number
+  under10: number
+  under30: number
+  over30: number
+  never: number
+  medianSec: number | null
+  closed: number
+  qualified: number
+  unqualified: number
+  // Non-qualified leads that closed anyway — the Non-qual→Close numerator is
+  // the INTERSECTION (unlike MQL→Close's step-ratio closed ÷ qualified, whose
+  // numerator is all closes): "of the people who said they can't pay, how
+  // many bought" is the question being asked.
+  unqualifiedClosed: number
+  hvc: number
+  connected: number
+  units: number
   spendUsd: number
 }) {
-  const cohort = speed.cohortSize
   const pct = (n: number, d: number): string => (d > 0 ? `${((n / d) * 100).toFixed(0)}%` : '—')
   const rate = (n: number, d: number): string => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : '—')
   const cells: { label: string; value: string; sub: string }[] = [
-    { label: 'Dialed <5m', value: pct(speed.dialedUnder5m, cohort), sub: `${speed.dialedUnder5m} leads` },
-    { label: 'Dialed <10m', value: pct(speed.dialedUnder10m, cohort), sub: `${speed.dialedUnder10m} leads` },
-    { label: 'Dialed <30m', value: pct(speed.dialedUnder30m, cohort), sub: `${speed.dialedUnder30m} leads` },
-    { label: 'Dialed >30m', value: pct(speed.dialedOver30m, cohort), sub: `${speed.dialedOver30m} leads` },
-    { label: 'Never dialed', value: pct(speed.neverDialed, cohort), sub: `${speed.neverDialed} leads` },
-    { label: 'Median time to dial', value: fmtDuration(speed.medianDialSec), sub: 'dialed leads · 12p–12a clock' },
-    { label: 'MQL → Close rate', value: rate(funnel.closed, funnel.qualified), sub: `${funnel.closed} / ${funnel.qualified} qualified` },
-    { label: 'HVC → Close rate', value: rate(funnel.closed, funnel.hvc), sub: `${funnel.closed} / ${funnel.hvc} HVC` },
-    { label: 'Connect → Close rate', value: rate(funnel.closed, funnel.connected), sub: `${funnel.closed} / ${funnel.connected} connects` },
+    { label: 'Dialed <1m', value: pct(under1, cohort), sub: `${under1} leads` },
+    { label: 'Dialed <5m', value: pct(under5, cohort), sub: `${under5} leads` },
+    { label: 'Dialed <10m', value: pct(under10, cohort), sub: `${under10} leads` },
+    { label: 'Dialed <30m', value: pct(under30, cohort), sub: `${under30} leads` },
+    { label: 'Dialed >30m', value: pct(over30, cohort), sub: `${over30} leads` },
+    { label: 'Never dialed', value: pct(never, cohort), sub: `${never} leads` },
+    { label: 'Median time to dial', value: fmtDuration(medianSec), sub: 'dialed leads · 12p–12a clock' },
+    { label: 'MQL → Close rate', value: rate(closed, qualified), sub: `${closed} / ${qualified} qualified` },
+    { label: 'Non-qual → Close rate', value: rate(unqualifiedClosed, unqualified), sub: `${unqualifiedClosed} / ${unqualified} non-qualified` },
+    { label: 'HVC → Close rate', value: rate(closed, hvc), sub: `${closed} / ${hvc} HVC` },
+    { label: 'Connect → Close rate', value: rate(closed, connected), sub: `${closed} / ${connected} connects` },
     {
       label: 'CPU · cost per unit',
-      value: funnel.units > 0 ? `$${(spendUsd / funnel.units).toFixed(0)}` : '—',
-      sub: `$${Math.round(spendUsd).toLocaleString('en-US')} ÷ ${funnel.units} units`,
+      value: units > 0 ? `$${(spendUsd / units).toFixed(0)}` : '—',
+      sub: `$${Math.round(spendUsd).toLocaleString('en-US')} ÷ ${units} units`,
     },
   ]
   return (
@@ -43,7 +77,7 @@ export function DcAdsSpeedExtras({
       style={{
         marginTop: 10,
         display: 'grid',
-        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+        gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
         gap: 1,
         background: 'var(--color-geg-border)',
         border: '1px solid var(--color-geg-border)',

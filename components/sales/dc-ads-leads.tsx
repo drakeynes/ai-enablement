@@ -5,21 +5,29 @@ import { useMemo, useState } from 'react'
 import type { DcAdsLeadRow } from '@/lib/db/dc-ads'
 
 // DC ads — the embedded lead roster (boss 2026-08-14): the Leads page's list
-// scoped to DC ad leads, living INSIDE the DC Ads page. Search and the stage
+// scoped to DC ad leads, living INSIDE the DC Ads page. Search and the
 // toggles narrow the list in place — no navigation, ever. All rows render
 // inside one fixed-height scrollable box (header pinned) so the page never
 // grows with the cohort.
 //
 // Toggles are CUMULATIVE (Nabeel 2026-08-14): "Connected" shows every lead
 // that connected — including those who went on to close — so the toggle
-// counts equal the stage row's numbers. Each ROW still shows one disposition
-// badge, the lead's furthest stage: Closed > HVC > Connected > SMS > Opt-in.
-// Connected = a call ≥90s ONLY (0140 — no form fallback, no SMS);
-// HVC = connected AND (qualified OR texted us) ⊆ Connected.
+// counts equal the stage row's numbers. Since the 2026-08-15 boss batch they
+// are also STACKABLE, in two groups: stage (SMS/Connected/HVC/Closed) and
+// qualification (Qualified/Non-qualified/Partial). Within a group selections
+// ADD together (union — Connected + HVC changes nothing, HVC ⊆ Connected);
+// across the groups they COMBINE (Qualified + Connected = qualified leads who
+// connected). Toggle state lives in the parent wrapper so the speed boxes
+// above recompute over the same subset; search stays list-only. Each ROW
+// still shows one disposition badge, the lead's furthest stage:
+// Closed > HVC > Connected > SMS > Opt-in. Connected = a call ≥90s ONLY
+// (0140 — no form fallback, no SMS); HVC = connected AND (qualified OR
+// texted us) ⊆ Connected.
 
 const ACCENT = '#b48ead'
 
-type Disposition = 'closed' | 'hvc' | 'connected' | 'sms' | 'optin'
+export type Disposition = 'closed' | 'hvc' | 'connected' | 'sms' | 'optin'
+export type QualKey = DcAdsLeadRow['qualState']
 
 const DISPOSITIONS: { key: Disposition; label: string }[] = [
   { key: 'sms', label: 'SMS' },
@@ -27,6 +35,31 @@ const DISPOSITIONS: { key: Disposition; label: string }[] = [
   { key: 'hvc', label: 'HVC' },
   { key: 'closed', label: 'Closed' },
 ]
+
+const QUAL_TOGGLES: { key: QualKey; label: string }[] = [
+  { key: 'qualified', label: 'Qualified' },
+  { key: 'unqualified', label: 'Non-qualified' },
+  { key: 'partial', label: 'Partial' },
+]
+
+// A toggle matches every lead that REACHED that stage (cumulative), so the
+// counts line up with the stage row above.
+function hasStage(r: DcAdsLeadRow, d: Disposition): boolean {
+  return d === 'closed' ? r.closed : d === 'hvc' ? r.hvc : d === 'connected' ? r.connected : d === 'sms' ? r.sms : true
+}
+
+// The stacked-toggle predicate — union within a group, AND across the two
+// groups; an empty group is no constraint. Shared with the speed-box wrapper
+// so the boxes and the list can never disagree on the subset.
+export function matchesToggles(
+  r: DcAdsLeadRow,
+  dispSel: ReadonlySet<Disposition>,
+  qualSel: ReadonlySet<QualKey>,
+): boolean {
+  if (dispSel.size > 0 && !Array.from(dispSel).some((d) => hasStage(r, d))) return false
+  if (qualSel.size > 0 && !qualSel.has(r.qualState)) return false
+  return true
+}
 
 const DISP_LABEL: Record<Disposition, string> = {
   closed: 'Closed',
@@ -75,29 +108,33 @@ const SCROLL_MAX_HEIGHT = 480
 export function DcAdsLeadsSection({
   rows,
   lpLabels,
+  dispSel,
+  qualSel,
+  onToggleDisp,
+  onToggleQual,
 }: {
   rows: DcAdsLeadRow[]
   // slug → short display label ('join/training'), from the page's registry read.
   lpLabels: Record<string, string>
+  // Stacked toggle state — owned by the parent wrapper (dc-ads-speed-leads)
+  // so the speed boxes above recompute over the same subset.
+  dispSel: ReadonlySet<Disposition>
+  qualSel: ReadonlySet<QualKey>
+  onToggleDisp: (d: Disposition) => void
+  onToggleQual: (q: QualKey) => void
 }) {
   const [query, setQuery] = useState('')
-  const [disp, setDisp] = useState<Disposition | null>(null)
 
   const withDisposition = useMemo(
     () => rows.map((r) => ({ ...r, disposition: dispositionOf(r) })),
     [rows],
   )
 
-  // A toggle matches every lead that REACHED that stage (cumulative), so the
-  // counts line up with the stage row above.
-  const hasStage = (r: DcAdsLeadRow, d: Disposition): boolean =>
-    d === 'closed' ? r.closed : d === 'hvc' ? r.hvc : d === 'connected' ? r.connected : d === 'sms' ? r.sms : true
-
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     const qDigits = q.replace(/[^0-9]/g, '')
     return withDisposition.filter((r) => {
-      if (disp && !hasStage(r, disp)) return false
+      if (!matchesToggles(r, dispSel, qualSel)) return false
       if (!q) return true
       if (r.name.toLowerCase().includes(q)) return true
       if (r.email && r.email.toLowerCase().includes(q)) return true
@@ -105,17 +142,19 @@ export function DcAdsLeadsSection({
         return true
       return false
     })
-  }, [withDisposition, query, disp])
+  }, [withDisposition, query, dispSel, qualSel])
 
   const counts = useMemo(() => {
     const c: Record<Disposition, number> = { closed: 0, hvc: 0, connected: 0, sms: 0, optin: 0 }
+    const q: Record<QualKey, number> = { qualified: 0, unqualified: 0, partial: 0 }
     for (const r of withDisposition) {
       if (r.sms) c.sms += 1
       if (r.connected) c.connected += 1
       if (r.hvc) c.hvc += 1
       if (r.closed) c.closed += 1
+      q[r.qualState] += 1
     }
-    return c
+    return { disp: c, qual: q }
   }, [withDisposition])
 
   return (
@@ -147,27 +186,26 @@ export function DcAdsLeadsSection({
           }}
         />
         {DISPOSITIONS.map((d) => {
-          const active = disp === d.key
+          const active = dispSel.has(d.key)
           return (
-            <button
+            <ToggleButton
               key={d.key}
-              type="button"
-              onClick={() => setDisp(active ? null : d.key)}
-              className="geg-mono"
-              style={{
-                fontSize: 10.5,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                padding: '6px 12px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                border: `1px solid ${active ? ACCENT : 'var(--color-geg-border)'}`,
-                background: active ? ACCENT : 'var(--color-geg-bg-elev)',
-                color: active ? '#fff' : 'var(--color-geg-text-2)',
-              }}
-            >
-              {d.label} {counts[d.key]}
-            </button>
+              label={`${d.label} ${counts.disp[d.key]}`}
+              active={active}
+              onClick={() => onToggleDisp(d.key)}
+            />
+          )
+        })}
+        <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--color-geg-border)' }} />
+        {QUAL_TOGGLES.map((t) => {
+          const active = qualSel.has(t.key)
+          return (
+            <ToggleButton
+              key={t.key}
+              label={`${t.label} ${counts.qual[t.key]}`}
+              active={active}
+              onClick={() => onToggleQual(t.key)}
+            />
           )
         })}
       </div>
@@ -267,8 +305,10 @@ export function DcAdsLeadsSection({
       >
         Every DC ad lead in the selected dates (follows the campaign chooser + landing-page dropdown).
         Search and the toggles narrow this list in place — they never leave the page. Toggles are{' '}
-        <b>cumulative</b>: each shows every lead that reached that stage (a closed lead appears under
-        all of its stages), so the counts match the stage row above. The badge on each row is the
+        <b>cumulative</b> (each shows every lead that reached that stage, so the counts match the
+        stage row above) and <b>stackable</b>: within a group (stage · qualification) selections add
+        together; across the groups they combine — e.g. Qualified + Connected = qualified leads who
+        connected. The speed boxes above follow the toggles too (search stays list-only). The badge on each row is the
         lead&apos;s furthest stage. <b>Time to dial</b> = opt-in → first outbound call on the same
         12p–12a ET clock as the speed boxes (— = never dialed) · <b>SMS</b> = texted us back ·{' '}
         <b>Connected</b> = a <b>call ≥90s only</b> — no form or text evidence counts ·{' '}
@@ -282,6 +322,30 @@ export function DcAdsLeadsSection({
 }
 
 const COLS = 'minmax(180px, 1.6fr) 0.6fr minmax(110px, 1fr) 0.5fr 0.65fr 0.6fr 0.6fr 0.8fr'
+
+function ToggleButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="geg-mono"
+      style={{
+        fontSize: 10.5,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        padding: '6px 12px',
+        borderRadius: 6,
+        cursor: 'pointer',
+        border: `1px solid ${active ? ACCENT : 'var(--color-geg-border)'}`,
+        background: active ? ACCENT : 'var(--color-geg-bg-elev)',
+        color: active ? '#fff' : 'var(--color-geg-text-2)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
 
 function DispositionBadge({ d }: { d: Disposition }) {
   const strong = d === 'closed' || d === 'hvc'

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { Window } from './sales-dashboard-shared'
 import { getDateRangeFromWindow, type DateRange } from './funnel-window'
 import { fetchChunked, fetchChunkedPaged } from './query-parallel'
+import { SPEED_CAP_SEC, summarizeCohortRows } from './cohort-stats'
 import { businessHoursElapsedSec } from '@/lib/time/est-periods'
 
 // Funnel · Appointment Setting stage — Tier 1 (timing/effort) live
@@ -691,10 +692,8 @@ export type SpeedToLeadLeadRow = {
   deltaSec: number               // actual gap (uncapped — show real time for audit)
 }
 
-// Outlier cap. Speed-to-lead samples > 24h after lead creation are
-// usually stale callbacks or re-engagements, not "speed" — clip them
-// so the arithmetic mean isn't dragged by a long tail.
-const SPEED_CAP_SEC = 24 * 60 * 60
+// Outlier cap (SPEED_CAP_SEC): imported from the pure cohort-stats module
+// (2026-08-15) so client components share it — see the top import block.
 
 // PostgREST caps a single response at db-max-rows (1000); a bare
 // `.range(0, 9999)` SILENTLY truncates to 1000 rather than erroring. For a
@@ -1151,55 +1150,13 @@ export type SpeedToLeadCohortResult = {
 }
 
 // Scalar stats of a set of cohort rows. Pure over the row fields, so it can be
-// re-run over a FILTERED subset (the /leads type/stage filter) to keep the
-// speed-to-lead boxes in sync with the roster.
-export type CohortStats = Pick<
-  SpeedToLeadCohortResult,
-  | 'cohortSize'
-  | 'leadsCalled'
-  | 'leadsConnected'
-  | 'avgSpeedToLeadSec'
-  | 'connectedRate'
-  | 'avgIntensity'
->
-
-// The stat inputs are a structural subset of the full row so sibling cohorts
-// (the DC ads pool — lib/db/dc-ads.ts) reuse the same math without building
-// full roster rows.
-export type CohortStatRow = Pick<
-  SpeedToLeadCohortRow,
-  'speedSec' | 'firstCallAt' | 'anyCallConnected' | 'intensity'
->
-
-export function summarizeCohortRows(rows: CohortStatRow[]): CohortStats {
-  let cappedSum = 0
-  let speedN = 0
-  let connectedCount = 0
-  let calledCount = 0
-  let intensitySum = 0
-  for (const r of rows) {
-    if (r.speedSec !== null) {
-      // speedSec is business-hours-elapsed (10a–10p ET), so overnight waits
-      // are already excluded. The 24h cap still guards against a multi-day
-      // straggler (24 business-hours ≈ 2 working days un-dialled) dominating.
-      cappedSum += Math.min(r.speedSec, SPEED_CAP_SEC)
-      speedN++
-    }
-    if (r.firstCallAt) {
-      calledCount++
-      intensitySum += r.intensity // CALLED leads only (uncalled = 0, would drag the mean)
-    }
-    if (r.anyCallConnected) connectedCount++
-  }
-  return {
-    cohortSize: rows.length,
-    leadsCalled: calledCount,
-    leadsConnected: connectedCount,
-    avgSpeedToLeadSec: speedN > 0 ? cappedSum / speedN : null,
-    connectedRate: calledCount > 0 ? connectedCount / calledCount : null,
-    avgIntensity: calledCount > 0 ? intensitySum / calledCount : null,
-  }
-}
+// re-run over a FILTERED subset (the /leads type/stage filter, the DC Ads
+// stacked toggles) to keep the speed-to-lead boxes in sync with the roster.
+// The math lives in the pure cohort-stats module (2026-08-15) — re-exported
+// here so existing consumers keep their import path; client components import
+// from './cohort-stats' directly (this module is server-only).
+export { summarizeCohortRows } from './cohort-stats'
+export type { CohortStats, CohortStatRow } from './cohort-stats'
 
 export async function getSpeedToLeadCohort(
   arg: Window | DateRange,

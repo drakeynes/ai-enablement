@@ -752,6 +752,9 @@ export type DcAdsLeadRow = {
   dials: number
   firstDial: string | null
   sms: boolean
+  // Any outbound SMS after the opt-in (0145) — the SMS-engagement denominator
+  // when the speed boxes recompute over a toggle-filtered subset.
+  smsOut: boolean
   qualified: boolean
   // 3-state qualification (0144, boss 2026-08-15): 'qualified' = hit the LP's
   // qualify answer; 'unqualified' = answered the question, missed; 'partial'
@@ -760,6 +763,8 @@ export type DcAdsLeadRow = {
   connected: boolean
   hvc: boolean
   closed: boolean
+  // Valid-adjusted plan units (0145) — the CPU denominator under toggles.
+  units: number
   // Opt-in → first dial on the DC 12p–12a ET business clock (same clock as
   // the speed boxes), computed server-side below. Null = never dialed.
   timeToDialSec: number | null
