@@ -20,6 +20,15 @@ function fmtCash(n: number): string {
   return `$${n.toLocaleString('en-US')}`
 }
 
+// Seconds → "5h 40m" / "12m" / "45s" / "—" (zero). Talk time reads as time on
+// the phone, not a raw number.
+function fmtTalk(sec: number): string {
+  if (!sec) return '—'
+  if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`
+  if (sec >= 60) return `${Math.round(sec / 60)}m`
+  return `${sec}s`
+}
+
 function Cell({ value, strong = false, muted = false }: { value: string; strong?: boolean; muted?: boolean }) {
   return (
     <td
@@ -60,6 +69,7 @@ function RepTr({ r, faded = false }: { r: DcAdsRepRow; faded?: boolean }) {
       </td>
       <Cell value={r.dials.toLocaleString('en-US')} />
       <Cell value={r.connections.toLocaleString('en-US')} />
+      <Cell value={fmtTalk(r.talkSeconds ?? 0)} muted={!r.talkSeconds} />
       <Cell value={r.shows.toLocaleString('en-US')} />
       <Cell value={r.closes.toLocaleString('en-US')} strong />
       <Cell value={r.units.toLocaleString('en-US')} />
@@ -114,12 +124,13 @@ export function DcAdsByRepSection({
     (a, r) => ({
       dials: a.dials + r.dials,
       connections: a.connections + r.connections,
+      talkSeconds: a.talkSeconds + (r.talkSeconds ?? 0),
       shows: a.shows + r.shows,
       closes: a.closes + r.closes,
       units: a.units + r.units,
       cash: a.cash + r.cash,
     }),
-    { dials: 0, connections: 0, shows: 0, closes: 0, units: 0, cash: 0 },
+    { dials: 0, connections: 0, talkSeconds: 0, shows: 0, closes: 0, units: 0, cash: 0 },
   )
 
   return (
@@ -163,6 +174,7 @@ export function DcAdsByRepSection({
                 <HeadCell label="Rep" first />
                 <HeadCell label="Dials" />
                 <HeadCell label="Connections" />
+                <HeadCell label="Talk time" />
                 <HeadCell label="Shows" />
                 <HeadCell label="Closes" />
                 <HeadCell label="Units" />
@@ -184,6 +196,7 @@ export function DcAdsByRepSection({
                 </td>
                 <Cell value={colTotals.dials.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.connections.toLocaleString('en-US')} muted />
+                <Cell value={fmtTalk(colTotals.talkSeconds)} muted />
                 <Cell value={colTotals.shows.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.closes.toLocaleString('en-US')} strong />
                 <Cell value={colTotals.units.toLocaleString('en-US')} strong />
@@ -232,7 +245,8 @@ export function DcAdsByRepSection({
         Activity-scoped, not cohort-scoped: what each rep did in the selected dates, regardless of when the
         lead opted in. <b>Dials</b> = outbound calls · <b>Connections</b> = calls ≥90s, counted per CALL
         (a lead reached twice counts twice; inbound pickups count) — so the column sum runs higher than the
-        funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Shows</b> = leads pitched (a filed
+        funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Talk time</b> = total time on the
+        phone (sum of call durations, all calls both directions) · <b>Shows</b> = leads pitched (a filed
         DC sale form or closer report) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
         (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);

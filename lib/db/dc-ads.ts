@@ -74,6 +74,9 @@ export type DcAdsRepRow = {
   teamMemberId: string | null
   dials: number
   connections: number
+  // Sum of close_calls.duration (seconds) over the rep's window calls — all
+  // calls, both directions, connected or not (0143).
+  talkSeconds: number
   shows: number
   closes: number
   units: number
