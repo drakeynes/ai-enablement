@@ -16,15 +16,16 @@ export default async function LoginPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>
 }) {
-  // Bounce already-authenticated users to /clients before rendering
+  // Bounce already-authenticated users to the dashboard before rendering
   // the form, mirroring the middleware behavior the M2.3a spec asked
   // for. Server Component variant of the auth gate (the middleware
   // version was dropped due to Vercel Edge runtime incompatibility).
+  // DC-era (2026-08-15): lands on DC Ads (was '/clients').
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    redirect('/clients')
+    redirect('/sales-dashboard/dc-ads')
   }
 
   const errorRaw = Array.isArray(searchParams.error)

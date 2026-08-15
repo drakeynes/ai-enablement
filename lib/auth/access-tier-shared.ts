@@ -34,9 +34,12 @@ export function hasArea(areas: readonly string[] | null | undefined, area: Area)
 }
 
 // Where to send a user who lacks access to the page they hit — their own home.
-// Sales-only people land on the sales dashboard; everyone else on fulfillment.
+// DC-era (2026-08-15): the dashboard is DC-only (middleware.ts), so sales-area
+// users land on DC Ads and everyone else gets the terminal /no-access page —
+// NOT a fulfillment page, which the guard would bounce straight back into the
+// sales segment and loop. (Pre-DC behavior: fulfillment → '/clients', sales →
+// '/sales-dashboard', neither → '/login?error=no_area_access'.)
 export function homePathForAreas(areas: readonly string[] | null | undefined): string {
-  if (hasArea(areas, 'fulfillment')) return '/clients'
-  if (hasArea(areas, 'sales')) return '/sales-dashboard'
-  return '/login?error=no_area_access'
+  if (hasArea(areas, 'sales')) return '/sales-dashboard/dc-ads'
+  return '/no-access'
 }

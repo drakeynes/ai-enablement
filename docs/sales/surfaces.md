@@ -1,9 +1,21 @@
 # Sales — Surfaces (page map)
 
 Every sales page, what it shows, and what was removed. All routes live under
-`app/(authenticated)/sales-dashboard/` (server components, `force-dynamic`). Nav is
-**flat: Advertising Hub · Outbound · DC Ads · Leads · Talent**, with Roster nested under Talent.
-Outbound is its own top-level page (no longer nested under the Advertising Hub).
+`app/(authenticated)/sales-dashboard/` (server components, `force-dynamic`).
+
+> **DC-era (2026-08-15): the dashboard is DC-only.** Every page except **DC Ads**
+> and **DC Setup** is HIDDEN, not deleted (boss directive): nav entries carry
+> `hidden: true` (`components/top-nav.tsx`, `sales-dashboard/sidebar.tsx`) and a
+> root `middleware.ts` redirects every other path to `/sales-dashboard/dc-ads`
+> (authenticated users without the sales area land on the terminal `/no-access`
+> page). All root/login/home redirects point at DC Ads. To restore a page: unhide
+> its nav entry + allow its path in `middleware.ts` (or delete that file to
+> restore everything). The sections below describe every page as built — hidden
+> pages' code and loaders are untouched.
+
+Pre-DC nav was **flat: Advertising Hub · Outbound · DC Ads · Leads · Talent**, with
+Roster nested under Talent. Outbound is its own top-level page (no longer nested
+under the Advertising Hub).
 
 ---
 

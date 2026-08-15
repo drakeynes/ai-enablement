@@ -14,6 +14,10 @@ type NavItem = {
   // the user has that area. Fulfillment + Sales are area-gated; CEO/Content/Tasks
   // stay purely tier-gated (leadership surfaces).
   requiredArea?: Area
+  // DC-era (2026-08-15): hidden, not deleted. Flip to bring a tab back —
+  // middleware.ts is the enforcement twin (hidden pages redirect to DC Ads);
+  // keep the two in sync.
+  hidden?: boolean
 }
 
 // Nav vocabulary + per-item gate. The layout passes the resolved tier + areas
@@ -22,11 +26,11 @@ type NavItem = {
 // rep no longer needs admin tier to see Sales, and a sales-only rep doesn't see
 // Fulfillment). CEO/Content/Tasks remain tier-only.
 const NAV_ITEMS: ReadonlyArray<NavItem> = [
-  { href: '/clients', label: 'Fulfillment', requiredTier: 'csm', requiredArea: 'fulfillment' },
-  { href: '/control-center', label: 'CEO', requiredTier: 'admin' },
+  { href: '/clients', label: 'Fulfillment', requiredTier: 'csm', requiredArea: 'fulfillment', hidden: true },
+  { href: '/control-center', label: 'CEO', requiredTier: 'admin', hidden: true },
   { href: '/sales-dashboard', label: 'Sales', requiredTier: 'csm', requiredArea: 'sales' },
-  { href: '/content', label: 'Content', requiredTier: 'admin' },
-  { href: '/tasks', label: 'Tasks', requiredTier: 'creator' },
+  { href: '/content', label: 'Content', requiredTier: 'admin', hidden: true },
+  { href: '/tasks', label: 'Tasks', requiredTier: 'creator', hidden: true },
 ] as const
 
 export function TopNav({
@@ -101,7 +105,7 @@ export function TopNav({
             }}
           />
           <Link
-            href="/clients"
+            href="/sales-dashboard/dc-ads"
             className="geg-serif"
             style={{
               fontSize: 22,
@@ -116,6 +120,7 @@ export function TopNav({
         <div className="flex items-center gap-1">
           {NAV_ITEMS.filter(
             (item) =>
+              !item.hidden &&
               tierAtLeast(accessTier, item.requiredTier) &&
               (!item.requiredArea || hasArea(areas, item.requiredArea)),
           ).map((item) => {

@@ -20,6 +20,10 @@ type NavItem = {
   children?: { href: string; label: string }[]
   // Admin-only items (Verify Reps, Landing Pages) hidden for sales reps (csm).
   adminOnly?: boolean
+  // DC-era (2026-08-15): hidden, not deleted — the dashboard is DC-only. Flip
+  // to bring a page back; middleware.ts is the enforcement twin (direct URLs
+  // to hidden pages redirect to DC Ads). Keep the two in sync.
+  hidden?: boolean
 }
 
 const NAV: NavItem[] = [
@@ -29,18 +33,19 @@ const NAV: NavItem[] = [
   {
     href: '/sales-dashboard/funnel',
     label: 'Advertising Hub',
+    hidden: true,
   },
   // Outbound = the DC re-engagement (outbound SMS) campaign's own funnel. Its
   // leads are excluded from every other funnel, so it gets its own top-level
   // page (route /outbound; internally "revival").
-  { href: '/sales-dashboard/outbound', label: 'Outbound' },
+  { href: '/sales-dashboard/outbound', label: 'Outbound', hidden: true },
   // DC Ads = the Digital College paid-ads funnel (Meta instant-form opt-ins,
   // ad spend in front). Outbound's shape, scoped only to lead-form campaigns —
   // no outbound leads here, no ad leads there.
   { href: '/sales-dashboard/dc-ads', label: 'DC Ads' },
   // Leads = the roster of every lead opted-in in the window (new + re-opt-in),
   // with type/stage filters set by the funnel drill or the filter bar.
-  { href: '/sales-dashboard/leads', label: 'Leads' },
+  { href: '/sales-dashboard/leads', label: 'Leads', hidden: true },
   // Talent = per-rep views (Call Activity, per-closer scheduled, bookings, cash).
   // Route stays /people; only the display name is "Talent". Roster is the
   // by-person re-presentation (one block per rep) — a candidate replacement,
@@ -49,6 +54,7 @@ const NAV: NavItem[] = [
     href: '/sales-dashboard/people',
     label: 'Talent',
     children: [{ href: '/sales-dashboard/people/by-rep', label: 'Roster' }],
+    hidden: true,
   },
   // The Calls list page is gone — per-call review pages are reached from the
   // per-lead Lifecycle (each call links there, and returns "Back to lead").
@@ -60,14 +66,14 @@ const NAV: NavItem[] = [
   // Verify Reps = admin surface to add new sales reps (from Airtable) to
   // team_members so their stats flow to every per-rep surface. The DC Setup
   // Team section wraps the same actions; this page stays as the direct route.
-  { href: '/sales-dashboard/reps', label: 'Verify Reps', adminOnly: true },
+  { href: '/sales-dashboard/reps', label: 'Verify Reps', adminOnly: true, hidden: true },
   // Landing Pages = admin registry manager — add/edit landing pages (DB-backed),
   // which then appear in the funnel's landing-page dropdown.
-  { href: '/sales-dashboard/landing-pages', label: 'Landing Pages', adminOnly: true },
+  { href: '/sales-dashboard/landing-pages', label: 'Landing Pages', adminOnly: true, hidden: true },
   // Outbound Campaigns = admin registry manager — add outbound campaigns (a
   // custom-field name+value matched across Close + GHL), which then appear in the
   // Outbound page's campaign dropdown.
-  { href: '/sales-dashboard/outbound-campaigns', label: 'Outbound Campaigns', adminOnly: true },
+  { href: '/sales-dashboard/outbound-campaigns', label: 'Outbound Campaigns', adminOnly: true, hidden: true },
 ]
 
 export function SalesSidebar({
@@ -83,7 +89,7 @@ export function SalesSidebar({
 
   const pathname = usePathname() ?? ''
   // Sales reps (csm) see the data pages; admin tools are hidden for them.
-  const navItems = NAV.filter((item) => isAdmin || !item.adminOnly)
+  const navItems = NAV.filter((item) => !item.hidden && (isAdmin || !item.adminOnly))
 
   function isActive(href: string): boolean {
     if (href === '/sales-dashboard') return pathname === '/sales-dashboard'
