@@ -188,6 +188,11 @@ def _count_attribution_signal(
 # small-table-only: the DC sale form is ~1.1k records ≈ 11 API pages / 15 min.
 FULL_RESCAN_TABLES: frozenset[str] = frozenset({
     "tbljmzRoMoE5B26lt",  # Digital College sale form (Valid QA edits)
+    # The EOD forms (2026-08-15): reps edit their report after submitting, and
+    # with the base's edit webhook dead (~Jul 25) only a full re-pull catches
+    # that. Both tables together are ~150 records ≈ 2 API pages / 15 min.
+    "tblnGf0NoNCWVwOsz",  # Setter EOD's (the form everyone files post-DC-pivot)
+    "tbly2S13lmo82xy5e",  # Closer EOD's (near-dormant, kept for completeness)
 })
 
 
