@@ -24,12 +24,12 @@ function PlanChip({ label, count }: { label: string; count: number }) {
 
 // DC ads stage row — the boss's nine numbers (2026-08-13):
 //   Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed
-// Deliberately NOT a funnel: the stages overlap rather than nest (SMS ⊄
-// Qualified, Units ≥ Closed when multi-unit deals land), so the arrows carry
-// no conversion percentages — the row just puts the numbers side by side.
-// One exception is guaranteed (0137): HVC = connected AND (qualified OR
-// texted-us), so HVC ≤ Connects always. Cash + ROAS keep their own line
-// below. Definitions in the page footer; per-lead facts in lib/db/dc-ads.ts.
+// Deliberately NOT a strict funnel: the stages overlap rather than nest (SMS
+// ⊄ Qualified, Units ≥ Closed when multi-unit deals land). The arrows carry
+// STEP RATIOS (next ÷ prev; $/opt-in on the adspend junction — boss
+// 2026-08-14) — read them as ratios between adjacent stages, not drop-off.
+// One subset IS guaranteed (0137): HVC ≤ Connects always. Cash + ROAS keep
+// their own line below. Definitions in the page footer.
 
 const ACCENT = '#b48ead' // purple — distinct from Direct green / setter yellow / reactivation blue / outbound coral
 
@@ -53,11 +53,21 @@ function Stage({ label, value, display, accent }: { label: string; value: number
   )
 }
 
-// Plain separator — no conversion %: the stages aren't subsets of each other.
-function Arrow() {
+// Separator with the step ratio underneath (boss 2026-08-14: conversion-rate
+// data on the stage row). `label` overrides the % (the adspend junction shows
+// $/opt-in). Ratios are next ÷ prev between ADJACENT stages — the stages
+// don't strictly nest, so read them as ratios, not funnel drop-off.
+function Arrow({ from, to, label }: { from?: number; to?: number; label?: string }) {
+  const ratio =
+    label ?? (from !== undefined && to !== undefined && from > 0 ? `${Math.round((to / from) * 100)}%` : null)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 30 }}>
       <div className="geg-mono" style={{ color: 'var(--color-geg-text-faint)', fontSize: 13 }}>→</div>
+      {ratio ? (
+        <div className="geg-mono" style={{ fontSize: 8.5, color: 'var(--color-geg-text-2)', marginTop: 2, whiteSpace: 'nowrap' }}>
+          {ratio}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -83,21 +93,21 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
           (the stages overlap rather than nest). */}
       <div style={{ display: 'flex', alignItems: 'stretch', padding: '4px 10px' }}>
         <Stage label="Adspend" value={spendUsd} display={usd(spendUsd)} accent />
-        <Arrow />
+        <Arrow label={f.optIns > 0 ? `${usd(spendUsd / f.optIns)}/opt-in` : undefined} />
         <Stage label="Opt-ins" value={f.optIns} accent />
-        <Arrow />
+        <Arrow from={f.optIns} to={f.qualified} />
         <Stage label="Qualified" value={f.qualified} />
-        <Arrow />
+        <Arrow from={f.qualified} to={f.sms} />
         <Stage label="SMS" value={f.sms} />
-        <Arrow />
+        <Arrow from={f.sms} to={f.smsMql} />
         <Stage label="SMS+MQL" value={f.smsMql} />
-        <Arrow />
+        <Arrow from={f.smsMql} to={f.connected} />
         <Stage label="Connects" value={f.connected} />
-        <Arrow />
+        <Arrow from={f.connected} to={f.hvc} />
         <Stage label="HVC" value={f.hvc} />
-        <Arrow />
+        <Arrow from={f.hvc} to={f.units} />
         <Stage label="Units" value={f.units} />
-        <Arrow />
+        <Arrow from={f.units} to={f.closed} />
         <Stage label="Closed" value={f.closed} accent />
       </div>
 

@@ -163,8 +163,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
 - **Stage row** (reshaped 2026-08-13, migration 0133 — was the Adspend→Called→Connected→Closed
   funnel) — the boss's nine numbers:
   `Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed`, plus the
-  cash & **ROAS** row. Deliberately **not a funnel** — stages overlap rather than nest, so the
-  arrows carry no conversion percentages. Definitions: Qualified = the lead's own Typeform hit
+  cash & **ROAS** row. Deliberately **not a strict funnel** — stages overlap rather than nest; the arrows carry
+  STEP RATIOS (next ÷ prev, $/opt-in on the adspend junction — boss 2026-08-14), to be read as
+  ratios between adjacent stages, not drop-off. Definitions: Qualified = the lead's own Typeform hit
   the LP's qualify answer (`dc_landing_pages.qualify_field_ref`/`qualify_answers` — ⚠ the DC
   forms have NO "$2,000+" budget question; the shared discriminator is the affordability
   question "Yes I can pay for the AI tools"; matched to the lead by phone/email, newest response

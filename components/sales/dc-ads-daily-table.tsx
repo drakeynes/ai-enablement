@@ -26,8 +26,9 @@ function roas(units: number, spendUsd: number | null): string {
 }
 
 function fmtUsd(value: number | null): string {
-  if (value == null) return '—'
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  // Null = no spend rows that day (e.g. days before a filtered campaign
+  // launched). Render $0, not "—" — the boss reads "—" as missing data.
+  return (value ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
 function fmtCount(value: number): string {
