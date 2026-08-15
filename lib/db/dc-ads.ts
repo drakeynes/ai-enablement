@@ -3,6 +3,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessHoursElapsedSec } from '@/lib/time/est-periods'
 import { summarizeCohortRows, type CohortStats } from './funnel-appointment-setting'
+import { SPEED_CAP_SEC } from './cohort-stats'
+import { dateRangeFromExplicit } from './funnel-window'
 import type { DcPlanCounts } from './funnel-dc'
 
 // DC ads funnel — the Digital College paid-ads funnel, on its own
@@ -312,7 +314,97 @@ export type DcAdsDailyRow = {
   closed: number
   cashUsd: number
   dials: number
+  // Per-day speed-to-lead metrics (boss batch 2026-08-15, item 8) — computed
+  // in TS from the SAME per-lead roster rows the speed boxes read
+  // (dc_ads_lead_roster + the 12p–12a ET clock math), bucketed by the
+  // opt-in's ET day, so a day's row and the boxes can never disagree.
+  avgSpeedSec: number | null
+  medianDialSec: number | null
+  avgIntensity: number | null
+  // connected ÷ (dialed or connected) — the headline box's rate.
+  connectedRate: number | null
+  under1: number
+  under5: number
+  under10: number
+  under30: number
+  over30: number
+  neverDialed: number
+  smsEngaged: number
+  smsTexted: number
+  // Non-qual→Close inputs (the daily NonQ→C column).
+  unqualified: number
+  unqualifiedClosed: number
 }
+
+// YYYY-MM-DD shifted by n days (UTC-noon arithmetic — DST-safe for date-only).
+function shiftYmd(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split('-').map((v) => parseInt(v, 10))
+  const dt = new Date(Date.UTC(y, m - 1, d + n, 12))
+  return dt.toISOString().slice(0, 10)
+}
+
+const ET_DAY_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+// The per-day speed block, from one day's roster rows — the same numbers the
+// speed boxes show, scoped to that ET day's opt-in cohort.
+function summarizeDaySpeed(dayRows: DcAdsLeadRow[]): Pick<
+  DcAdsDailyRow,
+  | 'avgSpeedSec'
+  | 'medianDialSec'
+  | 'avgIntensity'
+  | 'connectedRate'
+  | 'under1'
+  | 'under5'
+  | 'under10'
+  | 'under30'
+  | 'over30'
+  | 'neverDialed'
+  | 'smsEngaged'
+  | 'smsTexted'
+  | 'unqualified'
+  | 'unqualifiedClosed'
+> {
+  const speeds = dayRows
+    .map((r) => r.timeToDialSec)
+    .filter((s): s is number => s !== null)
+    .sort((a, b) => a - b)
+  const under = (min: number) => speeds.filter((s) => s < min * 60).length
+  const called = dayRows.filter((r) => r.firstDial != null)
+  const connected = dayRows.filter((r) => r.connected).length
+  const dialedOrConnected = dayRows.filter((r) => r.firstDial != null || r.connected).length
+  return {
+    avgSpeedSec:
+      speeds.length > 0
+        ? speeds.reduce((a, s) => a + Math.min(s, SPEED_CAP_SEC), 0) / speeds.length
+        : null,
+    medianDialSec:
+      speeds.length === 0
+        ? null
+        : speeds.length % 2
+          ? speeds[(speeds.length - 1) / 2]
+          : (speeds[speeds.length / 2 - 1] + speeds[speeds.length / 2]) / 2,
+    avgIntensity:
+      called.length > 0 ? called.reduce((a, r) => a + r.dials, 0) / called.length : null,
+    connectedRate: dialedOrConnected > 0 ? connected / dialedOrConnected : null,
+    under1: under(1),
+    under5: under(5),
+    under10: under(10),
+    under30: under(30),
+    over30: speeds.length - under(30),
+    neverDialed: dayRows.length - speeds.length,
+    smsEngaged: dayRows.filter((r) => r.sms).length,
+    smsTexted: dayRows.filter((r) => r.smsOut || r.sms).length,
+    unqualified: dayRows.filter((r) => r.qualState === 'unqualified').length,
+    unqualifiedClosed: dayRows.filter((r) => r.qualState === 'unqualified' && r.closed).length,
+  }
+}
+
+const EMPTY_DAY_SPEED = summarizeDaySpeed([])
 
 export async function getDcAdsDaily(
   endEtDate: string,
@@ -320,16 +412,25 @@ export async function getDcAdsDaily(
   days = 5,
 ): Promise<DcAdsDailyRow[]> {
   const sb = createAdminClient()
-  const [{ data, error }, scope] = await Promise.all([
+  // The roster fetch covers the table's full rolling window — the speed block
+  // per day comes from the same per-lead rows as the page's speed boxes.
+  const windowRange = dateRangeFromExplicit(shiftYmd(endEtDate, -(days - 1)), endEtDate)
+  const [{ data, error }, scope, rosterRows] = await Promise.all([
     sb.rpc('dc_ads_daily' as never, {
       p_end_et: endEtDate,
       p_days: days,
       ...entityArgs(filter),
     } as never),
     spendScope(filter),
+    getDcAdsLeadRoster(
+      { startUtcIso: windowRange.startUtcIso, endUtcIso: windowRange.endUtcIso },
+      filter,
+    ),
   ])
   if (error) throw new Error(`dc_ads_daily RPC failed: ${error.message}`)
-  const rows = (data ?? []) as unknown as Array<Omit<DcAdsDailyRow, 'spendUsd'>>
+  const rows = (data ?? []) as unknown as Array<
+    Omit<DcAdsDailyRow, 'spendUsd' | keyof typeof EMPTY_DAY_SPEED>
+  >
   if (rows.length === 0) return []
 
   const daySpend = new Map<string, number>()
@@ -346,7 +447,20 @@ export async function getDcAdsDaily(
       daySpend.set(r.day, (daySpend.get(r.day) ?? 0) + (r.spent ?? 0))
     }
   }
-  return rows.map((r) => ({ ...r, spendUsd: daySpend.get(r.etDate) ?? null }))
+
+  const byDay = new Map<string, DcAdsLeadRow[]>()
+  for (const r of rosterRows) {
+    const day = ET_DAY_FMT.format(new Date(r.anchor))
+    const list = byDay.get(day)
+    if (list) list.push(r)
+    else byDay.set(day, [r])
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    spendUsd: daySpend.get(r.etDate) ?? null,
+    ...(byDay.has(r.etDate) ? summarizeDaySpeed(byDay.get(r.etDate)!) : EMPTY_DAY_SPEED),
+  }))
 }
 
 // Campaign → Ad Set → Ad hierarchy for the cascade chooser, built from the

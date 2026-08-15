@@ -314,9 +314,18 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   rolling window regardless of the date picker; follows the ad chooser + landing-page dropdown.
   **D0/D3/D7 Units + ROAS** (boss item #19, migration 0142): valid-adjusted units closed within
   0/<3/<7 ET calendar days of the opt-in (cumulative) and each × $300 ÷ the day's spend, beside
-  overall ROAS — the speed-to-payback read; the 17 columns scroll horizontally inside the box.
-  Backed by the `dc_ads_daily()` RPC (0126→0142; still returns called/cash/dials for other
-  consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
+  overall ROAS — the speed-to-payback read. **Rebuilt 2026-08-15 (boss items 7+8)** as a real
+  `<table>` in ONE scroll container: sticky header + **sticky Day column** (scroll the ~32
+  columns, always see the day); every stage count carries its per-that-day **cost-per** as a
+  sub-line (spend ÷ count — "$0" when spend is 0/null per the boss's no-dash rule, "—" only when
+  the count is 0); **D0/D3/D7 cells (units + their ROAS) show a dash while the window hasn't
+  matured** (age < 0/3/7 days) instead of a misleading 0 — early units still show; and the
+  **full per-day speed-to-lead block** on the right (avg speed · median dial · intensity · conn
+  rate · dialed <1m/<5m/<10m/<30m/>30m/never as % of that day's opt-ins · SMS engagement ·
+  MQL→C / NonQ→C / HVC→C / Conn→C), computed in `getDcAdsDaily()` from the same
+  `dc_ads_lead_roster()` per-lead rows + 12p–12a clock math as the speed boxes (cohort size
+  excluded per the boss). Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
+  called/cash/dials for other consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close
   bridge is dropping leads). Unfiltered view only (the Meta count isn't cascade-scoped).

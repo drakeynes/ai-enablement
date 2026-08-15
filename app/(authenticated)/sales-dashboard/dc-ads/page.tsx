@@ -222,7 +222,7 @@ export default async function DcAdsPage({
 
       <DcAdsFunnelSection funnel={funnel} spendUsd={spend.spendUsd} />
 
-      <DcAdsDailyTable rows={dailyRows} />
+      <DcAdsDailyTable rows={dailyRows} todayEt={todayEt} />
 
       {/* Ads + Landing page + Videos — the Hub's summary section shaped to
           the DC funnel; follows the cascade + landing-page dropdown. */}
