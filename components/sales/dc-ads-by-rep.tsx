@@ -70,7 +70,6 @@ function RepTr({ r, faded = false }: { r: DcAdsRepRow; faded?: boolean }) {
       <Cell value={r.dials.toLocaleString('en-US')} />
       <Cell value={r.connections.toLocaleString('en-US')} />
       <Cell value={fmtTalk(r.talkSeconds ?? 0)} muted={!r.talkSeconds} />
-      <Cell value={r.shows.toLocaleString('en-US')} />
       <Cell value={r.closes.toLocaleString('en-US')} strong />
       <Cell value={r.units.toLocaleString('en-US')} />
       <Cell value={r.base44Monthly.toLocaleString('en-US')} muted={r.base44Monthly === 0} />
@@ -125,12 +124,11 @@ export function DcAdsByRepSection({
       dials: a.dials + r.dials,
       connections: a.connections + r.connections,
       talkSeconds: a.talkSeconds + (r.talkSeconds ?? 0),
-      shows: a.shows + r.shows,
       closes: a.closes + r.closes,
       units: a.units + r.units,
       cash: a.cash + r.cash,
     }),
-    { dials: 0, connections: 0, talkSeconds: 0, shows: 0, closes: 0, units: 0, cash: 0 },
+    { dials: 0, connections: 0, talkSeconds: 0, closes: 0, units: 0, cash: 0 },
   )
 
   return (
@@ -175,7 +173,6 @@ export function DcAdsByRepSection({
                 <HeadCell label="Dials" />
                 <HeadCell label="Connections" />
                 <HeadCell label="Talk time" />
-                <HeadCell label="Shows" />
                 <HeadCell label="Closes" />
                 <HeadCell label="Units" />
                 <HeadCell label="B44·Mo" />
@@ -197,7 +194,6 @@ export function DcAdsByRepSection({
                 <Cell value={colTotals.dials.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.connections.toLocaleString('en-US')} muted />
                 <Cell value={fmtTalk(colTotals.talkSeconds)} muted />
-                <Cell value={colTotals.shows.toLocaleString('en-US')} muted />
                 <Cell value={colTotals.closes.toLocaleString('en-US')} strong />
                 <Cell value={colTotals.units.toLocaleString('en-US')} strong />
                 <Cell value={totals.base44Monthly.toLocaleString('en-US')} muted />
@@ -246,8 +242,7 @@ export function DcAdsByRepSection({
         lead opted in. <b>Dials</b> = outbound calls · <b>Connections</b> = calls ≥90s, counted per CALL
         (a lead reached twice counts twice; inbound pickups count) — so the column sum runs higher than the
         funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Talk time</b> = total time on the
-        phone (sum of call durations, all calls both directions) · <b>Shows</b> = leads pitched (a filed
-        DC sale form or closer report) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
+        phone (sum of call durations, all calls both directions) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
         (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);
         people deactivated there collapse into the &ldquo;Former reps&rdquo; group, still counted in

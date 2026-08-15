@@ -198,12 +198,13 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   actually file these dial-up pitches; the Full Closer Report went quiet with the program
   suspension) unioned with the closer report (0127): a filed form = showed, `Closed?=Yes` with ≥1
   plan = a close, `Closed?=Yes` with no plan = show + the marked-no-plan counter.
-- **By rep** (talent detail 2026-08-13, migration 0136) — Dials / Connections / Talk time / **Shows /
-  Closes / Units / B44·Mo / B44·Yr / Wix·Mo / Wix·Yr** / Cash, same Close-calls + Airtable-forms bridge as
+- **By rep** (talent detail 2026-08-13, migration 0136) — Dials / Connections / Talk time / **Closes /
+  Units / B44·Mo / B44·Yr / Wix·Mo / Wix·Yr** / Cash, same Close-calls + Airtable-forms bridge as
   Outbound's table (closes also from the DC sale form since 0127), but **every rep with activity is
   listed** (not closers-only — this pool is dial-heavy). Talk time = the sum of the rep's
   `close_calls.duration` over their window calls, all calls both directions (0143, boss batch
-  2026-08-15). Shows = filed pitches (the facts refresh's is_showed semantics); a two-closer deal
+  2026-08-15). The Shows COLUMN was dropped the same day (boss) — the RPC still returns `shows`
+  (the roster cards read it, and the reps-with-activity filter uses it); a two-closer deal
   credits both while the header totals count deals once.
   Connections are counted **per call** (a lead reached twice counts twice; inbound ≥90s pickups
   count), so the column sum runs higher than the funnel's lead-level Connected — footnoted on the
