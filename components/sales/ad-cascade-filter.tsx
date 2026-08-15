@@ -95,7 +95,10 @@ export function AdCascadeFilter({
     go({ campaign: campaign || undefined, adset: adset || undefined, ad: ad || undefined, lp: e.target.value || undefined })
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    // flexWrap (mobile 2026-08-15): four fixed-width selects are ~600px of
+    // min-content — without wrapping they stretched the whole page canvas on
+    // a phone (THE page-wide horizontal-scroll bug). Desktop fits one row.
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       <select value={campaign ?? ''} onChange={onCampaign} className="geg-mono" aria-label="Filter by campaign" style={selectStyle}>
         <option value="">All campaigns</option>
         {hierarchy.campaigns.map((c) => (

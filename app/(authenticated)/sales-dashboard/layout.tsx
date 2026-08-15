@@ -68,7 +68,10 @@ export default async function SalesDashboardLayout({
           one-main-per-document landmark rule and trip Playwright's
           strict-mode role queries. */}
       <div
-        className="px-4 pt-5 pb-16 md:px-14 md:pt-9 md:pb-24"
+        // overflow-x-clip: the safety net — a stray unwrapped element can no
+        // longer stretch the page canvas past the viewport (the wide tables
+        // all have their own scrollers, so nothing legitimate is clipped).
+        className="px-4 pt-5 pb-16 md:px-14 md:pt-9 md:pb-24 overflow-x-clip"
         style={{
           maxWidth: 1480,
           width: '100%',
