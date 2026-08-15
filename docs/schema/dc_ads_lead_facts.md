@@ -108,6 +108,21 @@ covers both never-started and abandoned. `dc_ads_lead_roster()` also returns
 `firstDial` since 0144 (the roster's Time-to-dial column, business-clock math
 in `lib/db/dc-ads.ts`).
 
+**0145** (no facts columns) extends `dc_ads_lead_roster()` with `smsOut` +
+`units` — since then the roster is the ONE per-lead read behind the page's
+speed boxes, lead list, and (0147) per-ad speed block; `dc_ads_speed_cohort()`
+is no longer called by the page (retire someday with `p_funnel_label`).
+
+**0147** adds the `(ad_id)` index, `adId` on the roster payload, and
+`dc_ads_ad_table()` — the daily RPC's stage + D0/D3/D7 semantics grouped by
+ad for the per-ad table (`docs/schema/dc_meta_ads.md` holds the ad identity
+side). ⚠ Cohort membership note (verified 2026-08-15): membership requires
+`close_leads.campaign_id` on an ACTIVE registered campaign. Typeform
+submitters who arrive UNTAGGED (no hidden ad ids — organic/shared links) get
+Close leads with NULL campaign_id and are deliberately excluded from this
+table (~130 leads/30d incl. some closes) — boss decision: an ads page counts
+ad-attributable traffic only; raw Airtable totals will read slightly higher.
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by
