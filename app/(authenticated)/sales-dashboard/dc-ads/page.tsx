@@ -5,6 +5,7 @@ import { DcAdsDailyTable } from '@/components/sales/dc-ads-daily-table'
 import { DcAdsLpSummarySection } from '@/components/sales/dc-ads-lp-summary'
 import { DcAdsFunnelSection } from '@/components/sales/dc-ads-funnel'
 import { DcAdsTimeOfDaySection } from '@/components/sales/dc-ads-time-of-day'
+import { DcAdsAdTable } from '@/components/sales/dc-ads-ad-table'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
 import { DcAdsSpeedLeadsSection } from '@/components/sales/dc-ads-speed-leads'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
@@ -15,6 +16,7 @@ import {
   getDcAdsMetaOptIns,
   getDcAdsInstantFormOptIns,
   getDcAdsDaily,
+  getDcAdsAdTable,
   getDcAdsHierarchy,
   getDcAdsLeadRoster,
   DC_CLOCK_LABEL,
@@ -112,14 +114,16 @@ export default async function DcAdsPage({
     getDcAdsLeadRoster(rangeBounds, filter),
   ])
 
-  // EOD dropdown data (boss batch 2026-08-15): every team member's in-window
-  // EOD reports, re-keyed from airtable_user_id to team_members.id — the
-  // identity the by-rep rows carry. Second round-trip (needs the team list)
-  // against a ~150-row mirror; cost is negligible.
-  const eodsByAirtableId = await getRepEodsByAirtableIds(
-    range,
-    team.map((t) => t.airtableUserId).filter((v): v is string => !!v),
-  )
+  // Second round: fetches that need the first round's results. The ad table
+  // reuses the roster rows so its speed block, the boxes, and the lead list
+  // all read the same per-lead set; the EOD map needs the team list.
+  const [adTableRows, eodsByAirtableId] = await Promise.all([
+    getDcAdsAdTable(range, filter, leadRoster),
+    getRepEodsByAirtableIds(
+      range,
+      team.map((t) => t.airtableUserId).filter((v): v is string => !!v),
+    ),
+  ])
   const eodsByTeamMemberId: Record<string, RepEod[]> = {}
   for (const t of team) {
     if (t.airtableUserId && eodsByAirtableId[t.airtableUserId]) {
@@ -223,6 +227,13 @@ export default async function DcAdsPage({
       <DcAdsFunnelSection funnel={funnel} spendUsd={spend.spendUsd} />
 
       <DcAdsDailyTable rows={dailyRows} todayEt={todayEt} />
+
+      {/* The per-ad table (boss item 10) — every ad with window activity,
+          full stage + speed metrics; its dropdowns narrow the list only. */}
+      <DcAdsAdTable
+        rows={adTableRows}
+        lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
+      />
 
       {/* Ads + Landing page + Videos — the Hub's summary section shaped to
           the DC funnel; follows the cascade + landing-page dropdown. */}

@@ -274,7 +274,8 @@ class MetaAdsClient:
         """
         return self.get_edge(
             f"{self._account}/ads",
-            "id,name,campaign_id,adset_id,campaign{id,name},effective_status,"
+            "id,name,campaign_id,adset_id,campaign{id,name},adset{id,name},"
+            "effective_status,"
             "creative{id,link_url,object_story_spec,asset_feed_spec}",
         )
 

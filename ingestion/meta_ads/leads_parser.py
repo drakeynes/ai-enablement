@@ -173,11 +173,15 @@ def parse_meta_ad(
     hit = next((u for u in sorted(urls) if _host_matches(u, hosts)), None)
     if str(campaign_id) not in known_campaign_ids and not hit:
         return None
+    campaign = row.get("campaign") or {}
+    adset = row.get("adset") or {}
     return {
         "ad_id": str(ad_id),
         "ad_name": row.get("name"),
         "campaign_id": str(campaign_id),
+        "campaign_name": campaign.get("name"),
         "adset_id": str(row["adset_id"]) if row.get("adset_id") else None,
+        "adset_name": adset.get("name"),
         "effective_status": row.get("effective_status"),
         "destination_url": normalize_lp_url(hit) if hit else None,
         "last_seen_at": datetime.now(UTC).isoformat(),

@@ -19,7 +19,9 @@ a `digitalcollege.ai` host).
 | `ad_id` | text PK | Meta ad id — joins `cortana_ad_daily.platform_entity_id` and `dc_ads_lead_facts.ad_id`. |
 | `ad_name` | text | Meta ad name ("08/12 \| Creative 18 \| Adj3"). |
 | `campaign_id` | text not null | Parent campaign — joins `dc_ads_campaigns.campaign_id`. Indexed. |
+| `campaign_name` | text | (0147) Meta campaign name at last scan — the ad table's campaign dropdown label. |
 | `adset_id` | text | Parent ad set. Indexed. |
+| `adset_name` | text | (0147) Meta ad-set name at last scan — the ad table's ad-set dropdown label. |
 | `effective_status` | text | Meta's effective status at last scan (ACTIVE / PAUSED / …). |
 | `destination_url` | text | The creative's DC destination, **normalized** (`shared/lp_urls.normalize_lp_url` — `join.digitalcollege.ai/training`). Null for ads without one (instant-form ads). |
 | `lp_slug` | text | Resolved against `dc_landing_pages.lp_url` at scan time. Null until the page registers (a brand-new LP resolves one tick later — the registry step runs AFTER the LP resolver). |

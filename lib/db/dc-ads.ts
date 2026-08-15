@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { businessHoursElapsedSec } from '@/lib/time/est-periods'
 import { summarizeCohortRows, type CohortStats } from './funnel-appointment-setting'
 import { SPEED_CAP_SEC } from './cohort-stats'
-import { dateRangeFromExplicit } from './funnel-window'
+import { dateRangeFromExplicit, type DateRange } from './funnel-window'
 import type { DcPlanCounts } from './funnel-dc'
 
 // DC ads funnel — the Digital College paid-ads funnel, on its own
@@ -350,8 +350,8 @@ const ET_DAY_FMT = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 })
 
-// The per-day speed block, from one day's roster rows — the same numbers the
-// speed boxes show, scoped to that ET day's opt-in cohort.
+// The speed block for ANY roster-row subset (one ET day's cohort, one ad's
+// cohort) — the same numbers the speed boxes show.
 function summarizeDaySpeed(dayRows: DcAdsLeadRow[]): Pick<
   DcAdsDailyRow,
   | 'avgSpeedSec'
@@ -863,6 +863,8 @@ export type DcAdsLeadRow = {
   email: string | null
   anchor: string
   lpSlug: string | null
+  // The lead's ad (0147) — the per-ad speed block groups roster rows by this.
+  adId: string | null
   dials: number
   firstDial: string | null
   sms: boolean
@@ -907,6 +909,226 @@ export async function getDcAdsLeadRoster(
         )
       : null,
   }))
+}
+
+// ------------------------------------------------------------- per-ad table --
+
+// One row per ad over the window+facets (0147, boss item 10): registry
+// identity + spend metrics + the daily table's stage/DN aggregates + the
+// speed-to-lead block. Assembled from four sources:
+//   dc_ads_ad_table() RPC   stage counts + unitsD0/D3/D7 + cash + dials
+//   dc_meta_ads             name / campaign / adset / LP / status (+ the
+//                           campaign & ad-set dropdown labels)
+//   cortana_ad_daily        spend / impressions / unique clicks over the ET
+//                           window (rates derived from summed bases)
+//   roster rows             per-ad speed block (grouped by adId — the same
+//                           rows the page already fetched for the boxes)
+export type DcAdsAdTableRow = {
+  adId: string | null
+  adName: string
+  campaignId: string | null
+  campaignName: string | null
+  adsetId: string | null
+  adsetName: string | null
+  lpSlug: string | null
+  status: string | null
+  spendUsd: number | null
+  impressions: number | null
+  uniqueClicks: number | null
+  ctr: number | null
+  cpm: number | null
+  cpcUnique: number | null
+  optIns: number
+  qualified: number
+  sms: number
+  smsMql: number
+  connected: number
+  hvc: number
+  units: number
+  unitsD0: number
+  unitsD3: number
+  unitsD7: number
+  closed: number
+  cashUsd: number
+  dials: number
+  avgSpeedSec: number | null
+  medianDialSec: number | null
+  avgIntensity: number | null
+  connectedRate: number | null
+  under1: number
+  under5: number
+  under10: number
+  under30: number
+  over30: number
+  neverDialed: number
+  smsEngaged: number
+  smsTexted: number
+  unqualified: number
+  unqualifiedClosed: number
+}
+
+type AdAggRow = {
+  adId: string | null
+  optIns: number
+  qualified: number
+  sms: number
+  smsMql: number
+  connected: number
+  hvc: number
+  units: number
+  unitsD0: number
+  unitsD3: number
+  unitsD7: number
+  closed: number
+  cashUsd: number
+  dials: number
+}
+
+export async function getDcAdsAdTable(
+  range: DateRange,
+  filter: DcAdsEntityFilter | undefined,
+  // The page's roster fetch (same window+facets) — passed in so the speed
+  // block, the boxes, and the lead list all read the SAME per-lead rows.
+  rosterRows: DcAdsLeadRow[],
+): Promise<DcAdsAdTableRow[]> {
+  const sb = createAdminClient()
+
+  let regQuery = sb
+    .from('dc_meta_ads' as never)
+    .select('ad_id, ad_name, campaign_id, campaign_name, adset_id, adset_name, lp_slug, effective_status')
+  if (filter?.adId) regQuery = regQuery.eq('ad_id', filter.adId)
+  else if (filter?.adsetId) regQuery = regQuery.eq('adset_id', filter.adsetId)
+  else if (filter?.campaignId) regQuery = regQuery.eq('campaign_id', filter.campaignId)
+  if (filter?.lpSlug) {
+    // Instant-form ads carry no LP destination — the pseudo-slug maps to null.
+    regQuery =
+      filter.lpSlug === INSTANT_FORM_SLUG
+        ? regQuery.is('lp_slug', null)
+        : regQuery.eq('lp_slug', filter.lpSlug)
+  }
+
+  const [{ data: aggData, error: aggErr }, { data: regData, error: regErr }] = await Promise.all([
+    sb.rpc('dc_ads_ad_table' as never, {
+      p_start: range.startUtcIso,
+      p_end: range.endUtcIso,
+      ...entityArgs(filter),
+    } as never),
+    regQuery,
+  ])
+  if (aggErr) throw new Error(`dc_ads_ad_table RPC failed: ${aggErr.message}`)
+  if (regErr) throw new Error(`dc_meta_ads read failed: ${regErr.message}`)
+  const aggRows = (aggData ?? []) as unknown as AdAggRow[]
+  const regRows = (regData ?? []) as Array<{
+    ad_id: string
+    ad_name: string | null
+    campaign_id: string | null
+    campaign_name: string | null
+    adset_id: string | null
+    adset_name: string | null
+    lp_slug: string | null
+    effective_status: string | null
+  }>
+
+  // Spend per ad over the ET window, plus the mirror's ad name as a fallback
+  // for ads that predate the registry.
+  const adIds = Array.from(
+    new Set([
+      ...aggRows.map((r) => r.adId).filter((v): v is string => !!v),
+      ...regRows.map((r) => r.ad_id),
+    ]),
+  )
+  const spendByAd = new Map<
+    string,
+    { spent: number; impressions: number; uniqueClicks: number; name: string | null }
+  >()
+  if (adIds.length > 0) {
+    const { data: spendRows, error: sErr } = await sb
+      .from('cortana_ad_daily' as never)
+      .select('platform_entity_id, entity_name, spent, impressions, unique_clicks')
+      .in('platform_entity_id', adIds)
+      .gte('day', range.startEtDate)
+      .lte('day', range.endEtDate)
+    if (sErr) throw new Error(`per-ad spend read failed: ${sErr.message}`)
+    for (const r of (spendRows ?? []) as Array<{
+      platform_entity_id: string
+      entity_name: string | null
+      spent: number | null
+      impressions: number | null
+      unique_clicks: number | null
+    }>) {
+      const cur =
+        spendByAd.get(r.platform_entity_id) ??
+        { spent: 0, impressions: 0, uniqueClicks: 0, name: null }
+      cur.spent += r.spent ?? 0
+      cur.impressions += r.impressions ?? 0
+      cur.uniqueClicks += r.unique_clicks ?? 0
+      cur.name = cur.name ?? r.entity_name
+      spendByAd.set(r.platform_entity_id, cur)
+    }
+  }
+
+  const rosterByAd = new Map<string, DcAdsLeadRow[]>()
+  for (const r of rosterRows) {
+    const key = r.adId ?? '(untagged)'
+    const list = rosterByAd.get(key)
+    if (list) list.push(r)
+    else rosterByAd.set(key, [r])
+  }
+
+  const regByAd = new Map(regRows.map((r) => [r.ad_id, r]))
+  const aggByAd = new Map(aggRows.map((r) => [r.adId ?? '(untagged)', r]))
+  const keys = Array.from(
+    new Set([...Array.from(aggByAd.keys()), ...regRows.map((r) => r.ad_id)]),
+  )
+
+  const rows = keys.map((key): DcAdsAdTableRow => {
+    const agg = aggByAd.get(key)
+    const reg = key === '(untagged)' ? undefined : regByAd.get(key)
+    const spend = key === '(untagged)' ? undefined : spendByAd.get(key)
+    const speed = summarizeDaySpeed(rosterByAd.get(key) ?? [])
+    const spent = spend?.spent ?? null
+    const imps = spend?.impressions ?? null
+    const clicks = spend?.uniqueClicks ?? null
+    return {
+      adId: key === '(untagged)' ? null : key,
+      adName:
+        key === '(untagged)'
+          ? '(untagged leads)'
+          : (reg?.ad_name ?? spend?.name ?? key),
+      campaignId: reg?.campaign_id ?? null,
+      campaignName: reg?.campaign_name ?? null,
+      adsetId: reg?.adset_id ?? null,
+      adsetName: reg?.adset_name ?? null,
+      lpSlug: reg?.lp_slug ?? null,
+      status: reg?.effective_status ?? null,
+      spendUsd: spent,
+      impressions: imps,
+      uniqueClicks: clicks,
+      ctr: imps && imps > 0 && clicks != null ? (clicks / imps) * 100 : null,
+      cpm: imps && imps > 0 && spent != null ? (spent / imps) * 1000 : null,
+      cpcUnique: clicks && clicks > 0 && spent != null ? spent / clicks : null,
+      optIns: agg?.optIns ?? 0,
+      qualified: agg?.qualified ?? 0,
+      sms: agg?.sms ?? 0,
+      smsMql: agg?.smsMql ?? 0,
+      connected: agg?.connected ?? 0,
+      hvc: agg?.hvc ?? 0,
+      units: agg?.units ?? 0,
+      unitsD0: agg?.unitsD0 ?? 0,
+      unitsD3: agg?.unitsD3 ?? 0,
+      unitsD7: agg?.unitsD7 ?? 0,
+      closed: agg?.closed ?? 0,
+      cashUsd: agg?.cashUsd ?? 0,
+      dials: agg?.dials ?? 0,
+      ...speed,
+    }
+  })
+
+  // Keep only ads with window activity — spend, opt-ins, or clicks. Registry
+  // rows for long-paused ads that didn't serve in the window stay out.
+  return rows
+    .filter((r) => (r.spendUsd ?? 0) > 0 || r.optIns > 0 || (r.uniqueClicks ?? 0) > 0)
+    .sort((a, b) => (b.spendUsd ?? -1) - (a.spendUsd ?? -1) || b.optIns - a.optIns)
 }
 
 // Close-side opt-ins on the INSTANT-FORM path only, for the bridge-drift check.

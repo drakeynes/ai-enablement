@@ -335,6 +335,21 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `dc_ads_lead_roster()` per-lead rows + 12p–12a clock math as the speed boxes (cohort size
   excluded per the boss). Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
   called/cash/dials for other consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
+- **Per-ad table** (boss item 10, 2026-08-15, migration 0147) — directly under the 30-day table:
+  one row per AD with window activity (spend, opt-ins, or clicks — zero-opt-in spend is visible
+  by design), ~35 columns with the daily table's construction (one scroll container, sticky
+  header + sticky ad-name column, cost-per sub-lines under every stage count): Meta ad metrics
+  (Spend / Impr / unique Clicks / CTR / CPM / $-per-click) → the stage set (Opt-ins → Closed,
+  each with that ad's cost-per) → Cash / ROAS / D0-D3-D7 units (each lead's window relative to
+  its own opt-in; no maturity dash here — a per-ad DN mixes lead ages) → the full per-ad
+  speed-to-lead block (same roster rows + 12p–12a clock as the boxes). Assembled by
+  `getDcAdsAdTable()` from `dc_ads_ad_table()` (facts grouped by ad) + `dc_meta_ads` (identity,
+  status, LP; also the table's own **campaign + ad-set dropdowns**, which narrow the LIST
+  client-side without touching the page filter) + `cortana_ad_daily` (spend side) + the page's
+  roster rows. Follows the date picker + cascade + LP dropdown. Untagged historical leads
+  collapse into one "(untagged leads)" row. Per-ad UNIQUE clicks sum ~0.5–1% above
+  campaign-level uniques (cross-ad de-dup) — footnoted 2026-08-15 audit finding; spend and
+  impressions sum exactly.
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close
   bridge is dropping leads). Unfiltered view only (the Meta count isn't cascade-scoped).

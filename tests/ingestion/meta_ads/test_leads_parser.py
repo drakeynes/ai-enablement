@@ -268,6 +268,8 @@ def test_parse_meta_ad_claims_dc_landing_ad_with_normalized_destination():
     assert row["ad_id"] == "120250218014210748"
     assert row["ad_name"] == "07/25 | Creative 7"
     assert row["campaign_id"] == "120250217875250748"
+    assert row["campaign_name"] == "07/25 | Aman TY Vsl | DC funnel"
+    assert row["adset_name"] is None  # fixture predates the adset{name} field
     assert row["effective_status"] == "PAUSED"
     # Destination is NORMALIZED (registry join key), unlike the campaign row's.
     assert row["destination_url"] == "join.digitalcollege.ai/training"
