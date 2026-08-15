@@ -297,9 +297,15 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
 - **Ads & landing page section** (2026-08-13) — the hub's inline summary shaped to DC, under the
   daily strip (`components/sales/dc-ads-lp-summary.tsx` + `lib/db/dc-ads-summary.ts`). Three
   blocks: **Meta ads** (adspend/impressions/unique clicks/CTR/CPM/$-per-click/frequency from the
-  `cortana_*` mirrors over the active selection), **Landing page** (LP visits = Meta unique link
-  clicks of the LP scope — follows the LP dropdown, never the cascade, hub semantics — + Typeform
-  submissions from `typeform_responses`; starts/completion need Typeform's Insights API, not
+  `cortana_*` mirrors over the active selection), **Landing page** (**follows the cascade since
+  2026-08-15, boss item 9** — was hub semantics/LP-dropdown-only: visits = the selection's unique
+  link clicks, same scope as the ads block; Typeform submissions filter by the response's hidden
+  `campaign_id`/`adset_id`/`ad_id` when a cascade entity is selected, deepest wins — ~1 in 6
+  submissions arrives untagged (return visits, rep-sent links, unfilled Meta macros; blank in
+  Close too, unrecoverable from the response — a lead-matched hybrid could recover most if ever
+  needed) and is excluded under a selection, footnoted on the page; with cascade + LP both
+  selected, visits stay the selection's total clicks — Meta can't split clicks by LP variant;
+  starts/completion need Typeform's Insights API, not
   mirrored), **Videos** (the LP's registered videos via the hub's `getVslMetrics` math over
   `wistia_media_daily`; videos auto-attach to LPs by Wistia embed location —
   `attach_dc_lp_videos()`). ⚠ Wistia stats are per-video across all its embeds: the same VSL runs

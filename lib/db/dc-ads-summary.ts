@@ -11,12 +11,17 @@ import { INSTANT_FORM_SLUG, spendScope, type DcAdsEntityFilter } from './dc-ads'
 //   Meta ads       cortana_* mirrors over the ACTIVE SELECTION (cascade
 //                  deepest entity wins, else the landing page, else every
 //                  registered DC campaign) — same scoping the spend node uses.
-//   Landing page   visits = Meta unique link clicks of the LP SCOPE ONLY
-//                  (the LP block follows the LP dropdown + window, never the
-//                  ad cascade — Hub semantics), + Typeform submissions from
-//                  the typeform_responses mirror. Starts/completion need
-//                  Typeform's Insights API, which we don't mirror — same gap
-//                  as the Hub.
+//   Landing page   FOLLOWS THE CASCADE since 2026-08-15 (boss item 9 — was
+//                  Hub semantics, LP dropdown + window only): visits = the
+//                  selection's Meta unique link clicks (same scope as the ads
+//                  block), and Typeform submissions filter by the response's
+//                  hidden campaign/adset/ad ids when a cascade entity is
+//                  selected (deepest wins). ~1 in 6 submissions arrives
+//                  without the hidden ids (untagged path to the form —
+//                  return visits, rep-sent links, unfilled Meta macros) and
+//                  is EXCLUDED under a selection — footnoted on the page.
+//                  Starts/completion need Typeform's Insights API, which we
+//                  don't mirror — same gap as the Hub.
 //   Videos         wistia_media_daily via the SAME getVslMetrics math the Hub
 //                  uses (no drift), over the LP's registered videos
 //                  (dc_landing_pages.vsl — auto-attached by the Wistia
@@ -44,6 +49,12 @@ export type DcAdsLpSummary = {
   typeformLabel: string | null
   vsl: VideoMetrics | null
   confirm: VideoMetrics | null
+  // True when a cascade entity (campaign/adset/ad) narrowed the LP block —
+  // the page footnotes the attributed-submissions caveat.
+  cascadeScoped: boolean
+  // True when cascade + a specific LP are BOTH selected: Meta can't split a
+  // campaign's clicks by LP variant, so visits are the selection's total.
+  lpVariantNote: boolean
 }
 
 type LpRow = {
@@ -121,20 +132,17 @@ export async function getDcAdsLpSummary(
 
   const isInstant = filter.lpSlug === INSTANT_FORM_SLUG
   const selected = !isInstant && filter.lpSlug ? (allLps.find((l) => l.slug === filter.lpSlug) ?? null) : null
-  const cascadeActive = !!(filter.adId || filter.adsetId || filter.campaignId || filter.formId)
+  // Cascade entities with a Typeform-side counterpart (hidden campaign/adset/
+  // ad ids). p_form_id (Meta instant form) has none — its visits still follow
+  // spendScope, but submissions can't narrow by it (facet unreachable from
+  // the UI today).
+  const cascadeScoped = !!(filter.adId || filter.adsetId || filter.campaignId)
 
-  // Ads block follows the full selection; the LP block ignores the cascade.
-  // When no cascade entity is active the two scopes are identical — one read.
-  const lpOnly: DcAdsEntityFilter = { lpSlug: filter.lpSlug }
-  const [adsScope, lpScope] = await Promise.all([
-    spendScope(filter),
-    cascadeActive ? spendScope(lpOnly) : Promise.resolve(null),
-  ])
-  const [ads, lpAds] = await Promise.all([
-    adsAggregate(adsScope, range),
-    lpScope ? adsAggregate(lpScope, range) : Promise.resolve(null),
-  ])
-  const lpVisits = (lpAds ?? ads).uniqueClicks
+  // Since 2026-08-15 (boss item 9) the LP block follows the FULL selection —
+  // visits are the same scope the ads block reads, one read for both.
+  const adsScope = await spendScope(filter)
+  const ads = await adsAggregate(adsScope, range)
+  const lpVisits = ads.uniqueClicks
 
   // Typeform submissions — the selected LP's form, or every registered DC
   // form. The instant-form path has no Typeform (its opt-in IS the Meta form).
@@ -146,13 +154,21 @@ export async function getDcAdsLpSummary(
   let typeformSubmits: number | null = null
   let typeformLabel: string | null = null
   if (formIds.length > 0) {
+    let submitsQuery = sb
+      .from('typeform_responses' as never)
+      .select('response_id', { count: 'exact', head: true })
+      .in('form_id', formIds)
+      .gte('submitted_at', range.startUtcIso)
+      .lt('submitted_at', range.endUtcIso)
+    // Cascade attribution via the response's hidden fields (deepest wins) —
+    // the LPs pass Meta's URL macros into the Typeform embed, so ~5 in 6
+    // submissions carry these ids; untagged arrivals are excluded here and
+    // footnoted on the page.
+    if (filter.adId) submitsQuery = submitsQuery.eq('hidden->>ad_id', filter.adId)
+    else if (filter.adsetId) submitsQuery = submitsQuery.eq('hidden->>adset_id', filter.adsetId)
+    else if (filter.campaignId) submitsQuery = submitsQuery.eq('hidden->>campaign_id', filter.campaignId)
     const [{ count, error: sErr }, { data: titles, error: tErr }] = await Promise.all([
-      sb
-        .from('typeform_responses' as never)
-        .select('response_id', { count: 'exact', head: true })
-        .in('form_id', formIds)
-        .gte('submitted_at', range.startUtcIso)
-        .lt('submitted_at', range.endUtcIso),
+      submitsQuery,
       sb.from('typeform_forms' as never).select('form_id, title').in('form_id', formIds),
     ])
     if (sErr) throw new Error(`typeform_responses count failed: ${sErr.message}`)
@@ -196,5 +212,7 @@ export async function getDcAdsLpSummary(
     typeformLabel,
     vsl,
     confirm,
+    cascadeScoped,
+    lpVariantNote: cascadeScoped && !!selected,
   }
 }

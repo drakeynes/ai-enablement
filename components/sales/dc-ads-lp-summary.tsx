@@ -62,12 +62,22 @@ export function DcAdsLpSummarySection({ summary }: { summary: DcAdsLpSummary }) 
         </Block>
 
         <Block title={`Landing page · ${summary.lpLabel}`}>
-          <Row label="LP visits" value={fmtCount(summary.lpVisits)} hint="Meta unique link clicks" cost={costPer(summary.lpVisits)} />
+          <Row
+            label="LP visits"
+            value={fmtCount(summary.lpVisits)}
+            hint={summary.cascadeScoped ? 'unique link clicks · selected ads' : 'Meta unique link clicks'}
+            cost={costPer(summary.lpVisits)}
+          />
           <Row label="LP conversion" value={fmtPct(summary.lpConversionPct)} hint="submits ÷ visits" />
           {summary.typeformSubmits != null ? (
             <>
               <Divider label="Typeform" name={summary.typeformLabel ?? undefined} />
-              <Row label="Submissions" value={fmtCount(summary.typeformSubmits)} cost={costPer(summary.typeformSubmits)} />
+              <Row
+                label="Submissions"
+                value={fmtCount(summary.typeformSubmits)}
+                hint={summary.cascadeScoped ? 'attributed to selection' : undefined}
+                cost={costPer(summary.typeformSubmits)}
+              />
             </>
           ) : (
             <div
@@ -102,6 +112,26 @@ export function DcAdsLpSummarySection({ summary }: { summary: DcAdsLpSummary }) 
           ) : null}
         </Block>
       </div>
+
+      {summary.cascadeScoped ? (
+        <div
+          className="geg-mono"
+          style={{ marginTop: 8, fontSize: 9, letterSpacing: '0.06em', color: 'var(--color-geg-text-faint)', lineHeight: 1.7 }}
+        >
+          Landing-page numbers follow your campaign/ad selection: visits are the selected ads&apos;
+          unique link clicks, and submissions count only those carrying the selection&apos;s ad tags —
+          roughly 1 in 6 arrives without tags (return visits, rep-sent links) and is excluded here,
+          so this reads slightly lower than the whole-page count.
+          {summary.lpVariantNote ? (
+            <>
+              {' '}
+              With a landing page also selected, visits stay the selection&apos;s TOTAL clicks — Meta
+              can&apos;t split a campaign&apos;s clicks between LP variants (only matters on split
+              tests).
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {vsl ? (
         <div
