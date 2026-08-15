@@ -115,6 +115,14 @@ def run_meta_leads_sync_cron() -> dict[str, Any]:
     payload: dict[str, Any] = {
         "since_unix": since_unix,
         "campaigns_upserted": outcome.campaigns_upserted,
+        # LP-path + per-ad registry counters (0132/0146) — surfaced so the
+        # audit row can verify a deploy actually runs the new steps (the
+        # stale-bundle check from docs/runbooks/meta_leads_ingestion.md).
+        "lp_campaigns_upserted": outcome.lp_campaigns_upserted,
+        "lp_pages_created": outcome.lp_pages_created,
+        "lp_campaigns_linked": outcome.lp_campaigns_linked,
+        "lp_typeforms_resolved": outcome.lp_typeforms_resolved,
+        "meta_ads_upserted": outcome.meta_ads_upserted,
         "forms_upserted": outcome.forms_upserted,
         "leads_upserted": outcome.leads_upserted,
         "facts_rows": outcome.facts_rows,
