@@ -42,22 +42,34 @@ export default async function SalesDashboardLayout({
   }
 
   return (
+    // Mobile (boss batch 2026-08-15): single column, the 240px sidebar
+    // collapses to a slim horizontal strip — the phone keeps the full width
+    // for the data. Desktop unchanged.
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '240px 1fr',
-        minHeight: 'calc(100vh - 64px)',
-      }}
+      className="grid grid-cols-1 md:grid-cols-[240px_1fr]"
+      style={{ minHeight: 'calc(100vh - 64px)' }}
     >
-      <SalesSidebar includeStatesLink={INCLUDE_STATES_LINK} isAdmin={isAdmin} />
+      <div className="hidden md:block">
+        <SalesSidebar includeStatesLink={INCLUDE_STATES_LINK} isAdmin={isAdmin} />
+      </div>
+      <div
+        className="md:hidden flex items-center gap-1 px-3"
+        style={{
+          background: 'var(--color-geg-bg-elev)',
+          borderBottom: '1px solid var(--color-geg-border)',
+        }}
+      >
+        <MobileNavLink href="/sales-dashboard/dc-ads" label="DC Ads" />
+        {isAdmin ? <MobileNavLink href="/sales-dashboard/dc-setup" label="DC Setup" /> : null}
+      </div>
       {/* `<div>` not `<main>` — the parent (authenticated)/layout.tsx
           already wraps every authenticated route in a `<main>` for
           a11y. Nesting another `<main>` here would violate the
           one-main-per-document landmark rule and trip Playwright's
           strict-mode role queries. */}
       <div
+        className="px-4 pt-5 pb-16 md:px-14 md:pt-9 md:pb-24"
         style={{
-          padding: '36px 56px 96px',
           maxWidth: 1480,
           width: '100%',
           // CSS grid + 1fr: without min-width:0 the child column won't
@@ -71,5 +83,24 @@ export default async function SalesDashboardLayout({
         {children}
       </div>
     </div>
+  )
+}
+
+// The phone-width nav: just the DC-era pages, as quiet text links.
+function MobileNavLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      className="geg-mono"
+      style={{
+        padding: '10px 12px',
+        fontSize: 10.5,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        color: 'var(--color-geg-text-2)',
+      }}
+    >
+      {label}
+    </a>
   )
 }

@@ -90,8 +90,9 @@ export function DcAdsFunnelSection({ funnel, spendUsd }: { funnel: DcAdsFunnel; 
       </div>
 
       {/* The stage row — ad spend leads it; numbers only, no conversion %
-          (the stages overlap rather than nest). */}
-      <div style={{ display: 'flex', alignItems: 'stretch', padding: '4px 10px' }}>
+          (the stages overlap rather than nest). overflowX: the nine stages
+          swipe sideways on a phone instead of crushing (mobile 2026-08-15). */}
+      <div style={{ display: 'flex', alignItems: 'stretch', padding: '4px 10px', overflowX: 'auto' }}>
         <Stage label="Adspend" value={spendUsd} display={usd(spendUsd)} accent />
         <Arrow label={f.optIns > 0 ? `${usd(spendUsd / f.optIns)}/opt-in` : undefined} />
         <Stage label="Opt-ins" value={f.optIns} accent />

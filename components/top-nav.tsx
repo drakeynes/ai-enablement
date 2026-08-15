@@ -85,14 +85,14 @@ export function TopNav({
 
   return (
     <nav
-      className="flex items-center justify-between px-8"
+      className="flex items-center justify-between px-4 sm:px-8"
       style={{
         height: 64,
         background: 'var(--color-geg-bg)',
         borderBottom: '1px solid var(--color-geg-border-strong)',
       }}
     >
-      <div className="flex items-center gap-10">
+      <div className="flex items-center gap-4 sm:gap-10">
         {/* Wordmark — serif, with LIVE indicator */}
         <div className="flex items-center gap-2.5">
           <span
@@ -156,8 +156,9 @@ export function TopNav({
       </div>
 
       <div className="flex items-center gap-4">
+        {/* The email is desktop chrome — phone width goes to the logout. */}
         <span
-          className="text-xs"
+          className="text-xs hidden sm:inline"
           style={{ color: 'var(--color-geg-text-3)' }}
         >
           {userEmail}

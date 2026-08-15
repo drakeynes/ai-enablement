@@ -63,9 +63,14 @@ export function SpeedToLeadBoxes({
     <div
       style={{
         display: 'grid',
+        // No-filter variant: auto-fit so the boxes wrap on narrow screens
+        // (mobile pass 2026-08-15) — with 4–5 cells and a desktop-width
+        // container, auto-fit still lays them out in one row, so wide
+        // screens are unchanged. The filter variant keeps its fixed tracks
+        // (that page pins the caller cell to the row's end).
         gridTemplateColumns: filter
           ? `repeat(${statCols}, minmax(0, 1fr)) auto`
-          : `repeat(${statCols}, minmax(0, 1fr))`,
+          : `repeat(auto-fit, minmax(150px, 1fr))`,
         gap: 1,
         background: 'var(--color-geg-border)',
         border: '1px solid var(--color-geg-border)',

@@ -210,7 +210,12 @@ export function DcAdsLeadsSection({
         })}
       </div>
 
-      {/* Header — outside the scroll box so it stays pinned. */}
+      {/* Horizontal scroller (mobile 2026-08-15): the 8 columns swipe
+          sideways on a phone instead of crushing; desktop is wider than the
+          min so nothing changes there. */}
+      <div style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: 860 }}>
+      {/* Header — outside the vertical scroll box so it stays pinned. */}
       <div
         style={{
           display: 'grid',
@@ -297,6 +302,8 @@ export function DcAdsLeadsSection({
             </div>
           ))
         )}
+      </div>
+      </div>
       </div>
 
       <div

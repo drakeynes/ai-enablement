@@ -73,11 +73,13 @@ export function DcAdsSpeedExtras({
     },
   ]
   return (
+    // Six columns on wide screens (the boss's two rows of six); 3 / 2 on
+    // tablet / phone (mobile pass 2026-08-15) — column count via classes so
+    // the breakpoints work (inline styles can't carry media queries).
     <div
+      className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
       style={{
         marginTop: 10,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
         gap: 1,
         background: 'var(--color-geg-border)',
         border: '1px solid var(--color-geg-border)',

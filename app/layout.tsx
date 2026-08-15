@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -56,9 +56,21 @@ const gregoryEditorialMono = localFont({
   display: "swap",
 });
 
+// DC-era (2026-08-15): the dashboard is DC-only, so the tab/app identity is
+// DC Ads (was "Gregory" when fulfillment was the front door). appleWebApp +
+// the manifest (app/manifest.ts) make iOS/Android "Add to Home Screen"
+// install it as a standalone app.
 export const metadata: Metadata = {
-  title: "Gregory",
-  description: "CSM dashboard for The AI Partner.",
+  title: "DC Ads",
+  description: "Digital College ads funnel dashboard.",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "DC Ads" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0b0a09",
 };
 
 export default function RootLayout({

@@ -130,3 +130,19 @@ nothing on this page can break it further.
 7. **Close** with: "everything else is automatic — new campaigns, new landing
    pages, and videos register themselves. You only confirm people and fix
    names."
+
+## On mobile (added 2026-08-15)
+
+The dashboard installs as a home-screen app — the page is a PWA
+(`app/manifest.ts`, standalone display, opens straight on DC Ads):
+
+- **iPhone (Safari):** open the dashboard URL → Share button → **Add to Home
+  Screen** → Add. The "DC Ads" icon opens full-screen with no browser chrome.
+- **Android (Chrome):** open the URL → ⋮ menu → **Add to Home screen** (or the
+  install banner) → Add.
+
+Mobile layout: the sidebar collapses to a slim DC Ads / DC Setup strip, the
+stat boxes wrap, and every wide table (stage row, 30-day, ads, lead list)
+swipes sideways with its first column frozen. The wide tables are still
+best read on a laptop; the phone view is built for checking numbers on the
+go.

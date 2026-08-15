@@ -12,6 +12,14 @@ Every sales page, what it shows, and what was removed. All routes live under
 > its nav entry + allow its path in `middleware.ts` (or delete that file to
 > restore everything). The sections below describe every page as built — hidden
 > pages' code and loaders are untouched.
+>
+> **Mobile / PWA (2026-08-15):** the dashboard installs from the browser as a home-screen app
+> (`app/manifest.ts`, standalone, opens on DC Ads; icons in `public/icons/`; install steps in
+> `docs/runbooks/dc_setup_admin.md` § On mobile). Phone layout: the sidebar collapses to a DC
+> Ads / DC Setup strip (`sales-dashboard/layout.tsx`), stat grids wrap (`speed-to-lead-boxes`
+> auto-fit, `dc-ads-speed-extras` 2/3/6 columns by breakpoint), and the wide surfaces (stage
+> row, 30-day + ads tables, lead list) scroll horizontally with their first column/header
+> sticky.
 
 Pre-DC nav was **flat: Advertising Hub · Outbound · DC Ads · Leads · Talent**, with
 Roster nested under Talent. Outbound is its own top-level page (no longer nested
