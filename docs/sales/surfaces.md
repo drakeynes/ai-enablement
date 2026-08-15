@@ -344,9 +344,12 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   its own opt-in; no maturity dash here — a per-ad DN mixes lead ages) → the full per-ad
   speed-to-lead block (same roster rows + 12p–12a clock as the boxes). Assembled by
   `getDcAdsAdTable()` from `dc_ads_ad_table()` (facts grouped by ad) + `dc_meta_ads` (identity,
-  status, LP; also the table's own **campaign + ad-set dropdowns**, which narrow the LIST
-  client-side without touching the page filter) + `cortana_ad_daily` (spend side) + the page's
-  roster rows. Follows the date picker + cascade + LP dropdown. Untagged historical leads
+  status, LP, campaign/ad-set names) + `cortana_ad_daily` (spend side) + the page's roster rows.
+  Narrowing (boss 2026-08-15): three **multi-select dropdown-toggle pickers** — Campaigns / Ad
+  sets / Ads, checkbox panels with counts — union within a picker, AND across them, higher
+  levels narrowing the lower pickers' options (and pruning invalidated deeper picks); list-only,
+  the page filter is untouched. Every row carries a campaign · ad set lineage sub-line
+  (full path on hover) so picks spanning ad sets stay legible. Follows the date picker + cascade + LP dropdown. Untagged historical leads
   collapse into one "(untagged leads)" row. Per-ad UNIQUE clicks sum ~0.5–1% above
   campaign-level uniques (cross-ad de-dup) — footnoted 2026-08-15 audit finding; spend and
   impressions sum exactly.
