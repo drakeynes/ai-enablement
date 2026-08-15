@@ -25,6 +25,7 @@ import {
 } from '@/lib/db/dc-ads'
 import { getDcAdsLpSummary } from '@/lib/db/dc-ads-summary'
 import { getDcTeam } from '@/lib/db/dc-setup'
+import { getRepEodsByAirtableIds, type RepEod } from '@/lib/db/funnel-eods'
 import { dateRangeFromExplicit, todayEtDate } from '@/lib/db/funnel-window'
 import { DateRangePicker } from '../funnel/landing-pages/date-range-picker'
 import { PersonPill } from '../header-pills'
@@ -115,6 +116,21 @@ export default async function DcAdsPage({
     getDcTeam(),
     getDcAdsLeadRoster(rangeBounds, filter),
   ])
+
+  // EOD dropdown data (boss batch 2026-08-15): every team member's in-window
+  // EOD reports, re-keyed from airtable_user_id to team_members.id — the
+  // identity the by-rep rows carry. Second round-trip (needs the team list)
+  // against a ~150-row mirror; cost is negligible.
+  const eodsByAirtableId = await getRepEodsByAirtableIds(
+    range,
+    team.map((t) => t.airtableUserId).filter((v): v is string => !!v),
+  )
+  const eodsByTeamMemberId: Record<string, RepEod[]> = {}
+  for (const t of team) {
+    if (t.airtableUserId && eodsByAirtableId[t.airtableUserId]) {
+      eodsByTeamMemberId[t.id] = eodsByAirtableId[t.airtableUserId]
+    }
+  }
 
   return (
     <div>
@@ -221,6 +237,7 @@ export default async function DcAdsPage({
         rows={byRep.reps}
         totals={byRep.totals}
         activeTeamMemberIds={team.filter((t) => t.isActive).map((t) => t.id)}
+        eodsByTeamMemberId={eodsByTeamMemberId}
       />
 
       {/* Roster — one card per human on the team (managed in DC Setup),

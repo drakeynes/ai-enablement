@@ -1,4 +1,14 @@
+'use client'
+
+// Client component since the EOD dropdown (boss batch 2026-08-15): clicking a
+// rep name expands their in-window EOD reports inline. Everything else is
+// unchanged presentational rendering.
+
+import { Fragment, useState } from 'react'
+
 import type { DcAdsRepRow, DcAdsRepTotals } from '@/lib/db/dc-ads'
+import type { RepEod } from '@/lib/db/funnel-eods'
+import { EodCard } from './eod-card'
 
 const PLAN_COLS: { key: keyof Omit<DcAdsRepTotals, 'closes'>; label: string }[] = [
   { key: 'base44Monthly', label: 'Base44·Mo' },
@@ -61,11 +71,55 @@ function PlanChip({ label, count }: { label: string; count: number }) {
   )
 }
 
-function RepTr({ r, faded = false }: { r: DcAdsRepRow; faded?: boolean }) {
+// Column count for the expanded EOD row's colSpan — keep in sync with the
+// header row below.
+const COL_COUNT = 11
+
+function RepTr({
+  r,
+  faded = false,
+  eods,
+  expanded = false,
+  onToggle,
+}: {
+  r: DcAdsRepRow
+  faded?: boolean
+  // The rep's in-window EOD reports (undefined = rep not linked, no dropdown).
+  eods?: RepEod[]
+  expanded?: boolean
+  onToggle?: () => void
+}) {
   return (
-    <tr style={{ borderBottom: '1px solid var(--color-geg-border)', opacity: faded ? 0.65 : 1 }}>
+    <tr style={{ borderBottom: expanded ? 'none' : '1px solid var(--color-geg-border)', opacity: faded ? 0.65 : 1 }}>
       <td className="geg-mono" style={{ padding: '9px 14px', fontSize: 12, letterSpacing: '0.02em', color: 'var(--color-geg-text)', whiteSpace: 'nowrap' }}>
-        {r.rep}
+        {onToggle ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            title="Show this rep's EOD reports for the selected dates"
+            className="geg-mono"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              fontSize: 12,
+              letterSpacing: '0.02em',
+              color: 'var(--color-geg-text)',
+              display: 'inline-flex',
+              alignItems: 'baseline',
+              gap: 6,
+            }}
+          >
+            <span style={{ color: 'var(--color-geg-text-faint)', fontSize: 9 }}>{expanded ? '▾' : '▸'}</span>
+            {r.rep}
+            <span style={{ fontSize: 9, letterSpacing: '0.05em', color: eods?.length ? 'var(--color-geg-text-3)' : 'var(--color-geg-text-faint)' }}>
+              {eods?.length ? `${eods.length} EOD${eods.length > 1 ? 's' : ''}` : ''}
+            </span>
+          </button>
+        ) : (
+          r.rep
+        )}
       </td>
       <Cell value={r.dials.toLocaleString('en-US')} />
       <Cell value={r.connections.toLocaleString('en-US')} />
@@ -77,6 +131,30 @@ function RepTr({ r, faded = false }: { r: DcAdsRepRow; faded?: boolean }) {
       <Cell value={r.wixMonthly.toLocaleString('en-US')} muted={r.wixMonthly === 0} />
       <Cell value={r.wixYearly.toLocaleString('en-US')} muted={r.wixYearly === 0} />
       <Cell value={fmtCash(r.cash)} strong />
+    </tr>
+  )
+}
+
+// The expanded dropdown under a rep row — their EOD reports for the window.
+function EodExpandRow({ eods }: { eods: RepEod[] }) {
+  return (
+    <tr style={{ borderBottom: '1px solid var(--color-geg-border)' }}>
+      <td colSpan={COL_COUNT} style={{ padding: '2px 14px 14px 32px' }}>
+        {eods.length === 0 ? (
+          <div
+            className="geg-mono"
+            style={{ fontSize: 10, letterSpacing: '0.04em', color: 'var(--color-geg-text-faint)', padding: '4px 0' }}
+          >
+            No EOD reports filed in the selected dates.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 760 }}>
+            {eods.map((e) => (
+              <EodCard key={e.recordId} eod={e} />
+            ))}
+          </div>
+        )}
+      </td>
     </tr>
   )
 }
@@ -105,6 +183,7 @@ export function DcAdsByRepSection({
   rows,
   totals,
   activeTeamMemberIds,
+  eodsByTeamMemberId,
 }: {
   rows: DcAdsRepRow[]
   totals: DcAdsRepTotals
@@ -114,7 +193,13 @@ export function DcAdsByRepSection({
   // row at all is not rendered — membership is controlled via the Airtable
   // Sales Team Member table → DC Setup verify (Drake 2026-08-14).
   activeTeamMemberIds: string[]
+  // In-window EOD reports keyed by team_members.id (boss batch 2026-08-15) —
+  // clicking a rep name expands them inline. Everyone files the SETTER EOD
+  // form since the DC pivot (setter/closer roles merged), so most cards say
+  // "setter EOD" regardless of who filed them.
+  eodsByTeamMemberId: Record<string, RepEod[]>
 }) {
+  const [openRep, setOpenRep] = useState<string | null>(null)
   const activeIds = new Set(activeTeamMemberIds)
   const confirmed = rows.filter((r) => r.teamMemberId)
   const current = confirmed.filter((r) => activeIds.has(r.teamMemberId as string))
@@ -183,9 +268,22 @@ export function DcAdsByRepSection({
               </tr>
             </thead>
             <tbody>
-              {current.map((r) => (
-                <RepTr key={r.rep} r={r} />
-              ))}
+              {current.map((r) => {
+                const key = r.teamMemberId ?? r.rep
+                const eods = r.teamMemberId ? (eodsByTeamMemberId[r.teamMemberId] ?? []) : undefined
+                const expanded = openRep === key
+                return (
+                  <Fragment key={key}>
+                    <RepTr
+                      r={r}
+                      eods={eods}
+                      expanded={expanded}
+                      onToggle={r.teamMemberId ? () => setOpenRep(expanded ? null : key) : undefined}
+                    />
+                    {expanded ? <EodExpandRow eods={eods ?? []} /> : null}
+                  </Fragment>
+                )
+              })}
               {/* totals — cover EVERYONE incl. the former group below */}
               <tr style={{ background: 'var(--color-geg-bg-elev)' }}>
                 <td className="geg-mono" style={{ padding: '9px 14px', fontSize: 9.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)', whiteSpace: 'nowrap' }}>
@@ -226,9 +324,23 @@ export function DcAdsByRepSection({
               </summary>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <tbody>
-                  {former.map((r) => (
-                    <RepTr key={r.rep} r={r} faded />
-                  ))}
+                  {former.map((r) => {
+                    const key = r.teamMemberId ?? r.rep
+                    const eods = r.teamMemberId ? (eodsByTeamMemberId[r.teamMemberId] ?? []) : undefined
+                    const expanded = openRep === key
+                    return (
+                      <Fragment key={key}>
+                        <RepTr
+                          r={r}
+                          faded
+                          eods={eods}
+                          expanded={expanded}
+                          onToggle={r.teamMemberId ? () => setOpenRep(expanded ? null : key) : undefined}
+                        />
+                        {expanded ? <EodExpandRow eods={eods ?? []} /> : null}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </details>
@@ -247,7 +359,8 @@ export function DcAdsByRepSection({
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);
         people deactivated there collapse into the &ldquo;Former reps&rdquo; group, still counted in
         the column totals. Activity from anyone not confirmed on the team is not shown. All rows cover
-        DC-ads pool leads only.
+        DC-ads pool leads only. Click a rep name to see their <b>EOD reports</b> for the selected dates
+        (everyone files the setter EOD form since the DC pivot).
       </div>
     </div>
   )

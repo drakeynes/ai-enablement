@@ -17,6 +17,39 @@ export type RepEod = {
   fields: Record<string, unknown>
 }
 
+// Batch variant for the DC Ads by-rep table (boss batch 2026-08-15): all EOD
+// entries in-window for a set of reps, keyed by rep_record_id (=
+// team_members.airtable_user_id), newest first. One query — the mirror is
+// tiny (~150 rows). No kind filter: since the DC pivot everyone files the
+// SETTER EOD form (setter/closer roles merged), so closer entries are rare
+// but still shown if one exists.
+export async function getRepEodsByAirtableIds(
+  range: DateRange,
+  airtableIds: string[],
+): Promise<Record<string, RepEod[]>> {
+  if (airtableIds.length === 0) return {}
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('airtable_rep_eods' as never)
+    .select('record_id, kind, rep_record_id, eod_date, fields_raw')
+    .in('rep_record_id', airtableIds)
+    .gte('eod_date', range.startEtDate)
+    .lte('eod_date', range.endEtDate)
+    .order('eod_date', { ascending: false })
+
+  const byRep: Record<string, RepEod[]> = {}
+  for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+    const repId = r.rep_record_id as string
+    ;(byRep[repId] ??= []).push({
+      recordId: r.record_id as string,
+      kind: r.kind as 'setter' | 'closer',
+      eodDate: (r.eod_date as string) ?? null,
+      fields: (r.fields_raw as Record<string, unknown>) ?? {},
+    })
+  }
+  return byRep
+}
+
 export async function getRepEods(
   range: DateRange,
   closeUserId: string,

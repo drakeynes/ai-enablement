@@ -211,7 +211,13 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   page. Only CONFIRMED team members render (Drake 2026-08-14): active members are the main rows,
   deactivated members collapse into the "Former reps" group, and activity from identities with no
   `team_members` row is not shown at all — adding someone to the Airtable roster + verifying in DC
-  Setup makes their history appear retroactively.
+  Setup makes their history appear retroactively. **Clicking a rep name expands their EOD
+  reports** for the selected window inline (boss batch 2026-08-15) — read from
+  `airtable_rep_eods` via `getRepEodsByAirtableIds()` (`lib/db/funnel-eods.ts`), keyed
+  `team_members.airtable_user_id`, cards shared with the Talent Roster
+  (`components/sales/eod-card.tsx`). Since the DC pivot everyone files the SETTER EOD form
+  (setter/closer roles merged — Drake 2026-08-15), so no kind filter is applied and most cards
+  read "setter EOD".
 - **Roster** (added 2026-08-13) — the Talent Roster's card grid **scoped to the DC ad cohort**: one
   card per team member (managed in DC Setup; active-first, "Show inactive" toggle, zero-activity
   actives included so a new hire is visible before their first dial) with Dials / Connects / Shows /
