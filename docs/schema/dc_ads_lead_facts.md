@@ -128,8 +128,8 @@ registered ACTIVE DC campaign's `funnel_label` (the Zapier stamps
 funnel_name from config, so it survives tag loss — no identity matching
 needed, ~150 leads at ship time incl. 11 closes/$5.4k that were invisible).
 They get `campaign_id='non-attributed'`, no adset/ad (ad facets + per-ad
-rows exclude them naturally; they land in the ad table's "(untagged leads)"
-row), source_kind/lp/typeform inherited from the funnel's newest registered
+rows exclude them naturally; the ad table shows them as one "Non-attributed"
+row carrying the pseudo-campaign's identity), source_kind/lp/typeform inherited from the funnel's newest registered
 campaign. The registry row `non-attributed` puts them in the campaign
 dropdown; **deactivating it in DC Setup is the kill switch**. A retired
 funnel's ghosts stay out (the map requires an ACTIVE campaign — the paused

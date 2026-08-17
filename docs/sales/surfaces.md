@@ -370,8 +370,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   sets / Ads, checkbox panels with counts — union within a picker, AND across them, higher
   levels narrowing the lower pickers' options (and pruning invalidated deeper picks); list-only,
   the page filter is untouched. Every row carries a campaign · ad set lineage sub-line
-  (full path on hover) so picks spanning ad sets stay legible. Follows the date picker + cascade + LP dropdown. Untagged historical leads
-  collapse into one "(untagged leads)" row. Per-ad UNIQUE clicks sum ~0.5–1% above
+  (full path on hover) so picks spanning ad sets stay legible. Follows the date picker + cascade + LP dropdown. Leads with no ad identity
+  collapse into one **Non-attributed** row carrying the pseudo-campaign's identity (0148 — real
+  stage numbers, no Meta-side numbers; selectable in the table's campaign picker). Per-ad UNIQUE clicks sum ~0.5–1% above
   campaign-level uniques (cross-ad de-dup) — footnoted 2026-08-15 audit finding; spend and
   impressions sum exactly.
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)

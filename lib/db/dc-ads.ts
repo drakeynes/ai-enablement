@@ -1096,21 +1096,24 @@ export async function getDcAdsAdTable(
   )
 
   const rows = keys.map((key): DcAdsAdTableRow => {
+    // The null-ad bucket IS the Non-attributed campaign's row (boss
+    // 2026-08-17): since 0148 the only cohort leads without an ad_id are the
+    // lost-tag leads (tagged leads carry ad_id at ~100% — audited), so the
+    // bucket takes the pseudo-campaign's identity and the table's campaign
+    // picker can select/exclude it like any other row.
+    const na = key === '(untagged)'
     const agg = aggByAd.get(key)
-    const reg = key === '(untagged)' ? undefined : regByAd.get(key)
-    const spend = key === '(untagged)' ? undefined : spendByAd.get(key)
+    const reg = na ? undefined : regByAd.get(key)
+    const spend = na ? undefined : spendByAd.get(key)
     const speed = summarizeDaySpeed(rosterByAd.get(key) ?? [])
     const spent = spend?.spent ?? null
     const imps = spend?.impressions ?? null
     const clicks = spend?.uniqueClicks ?? null
     return {
-      adId: key === '(untagged)' ? null : key,
-      adName:
-        key === '(untagged)'
-          ? '(untagged leads)'
-          : (reg?.ad_name ?? spend?.name ?? key),
-      campaignId: reg?.campaign_id ?? null,
-      campaignName: reg?.campaign_name ?? null,
+      adId: na ? null : key,
+      adName: na ? 'Non-attributed' : (reg?.ad_name ?? spend?.name ?? key),
+      campaignId: na ? 'non-attributed' : (reg?.campaign_id ?? null),
+      campaignName: na ? 'Non-attributed (ad tags lost)' : (reg?.campaign_name ?? null),
       adsetId: reg?.adset_id ?? null,
       adsetName: reg?.adset_name ?? null,
       lpSlug: reg?.lp_slug ?? null,
