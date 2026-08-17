@@ -222,7 +222,9 @@ export function DcAdsAdTable({
       </div>
       <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 10 }} summary="How to read this table">
         One row per ad with activity in the selected dates (spend, opt-ins, or clicks — an ad
-        spending without opt-ins is exactly the row to notice). Ad-side numbers from Meta; every
+        spending without opt-ins is exactly the row to notice). The <b>Non-attributed</b> row is
+        the lost-ad-tag leads: real stage and speed numbers, but no ad identity by definition — so
+        no Meta-side numbers, and its spend lives inside the real ads&apos; rows. Ad-side numbers from Meta; every
         stage from Opt-ins on is the ad&apos;s own leads through the same definitions as the rest of
         the page, with that ad&apos;s <b>cost per</b> underneath each count. The right block is the
         ad&apos;s speed-to-lead set (12p–12a ET clock). D0/D3/D7 = units closed within 0/3/7 days of
