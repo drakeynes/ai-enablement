@@ -298,7 +298,11 @@ export default async function DcAdsPage({
         the QA note by the cash line shows what&apos;s excluded) · Adspend = the
         registered DC campaigns&apos; spend (Meta API, ET days; with only a landing page selected,
         that path&apos;s campaigns) · ROAS = cash ÷ adspend. The stage row is <b>not</b> a funnel —
-        stages overlap rather than nest, so no stage need be smaller than the one before it.
+        stages overlap rather than nest, so no stage need be smaller than the one before it ·{' '}
+        <b>Non-attributed</b> = DC funnel leads whose ad tags were lost in transit (the forms exist
+        only on the ad pages, so these are ad leads without provable attribution — ~15%); they carry
+        no campaign/ad ids, so the all-campaigns view blends them into every count and cost metric —
+        select a campaign for pure ad economics, or Non-attributed to see just them.
       </FineNote>
     </div>
   )

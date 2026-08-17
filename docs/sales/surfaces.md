@@ -317,7 +317,10 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `campaign_id`/`adset_id`/`ad_id` when a cascade entity is selected, deepest wins — ~1 in 6
   submissions arrives untagged (return visits, rep-sent links, unfilled Meta macros; blank in
   Close too, unrecoverable from the response — a lead-matched hybrid could recover most if ever
-  needed) and is excluded under a selection, footnoted on the page; with cascade + LP both
+  needed) and is excluded under a selection, footnoted on the page — note 0148 made those
+  untagged leads a cohort member via the Non-attributed pseudo-campaign, but their SUBMISSIONS
+  remain unattributable to a real campaign selection (and the Non-attributed facet shows 0
+  attributed submissions, a known edge); with cascade + LP both
   selected, visits SPLIT to only the selection's ads whose creative points at that page — the
   `dc_meta_ads` per-ad registry (0146, boss: "count the ads within the campaign"), falling back
   to the selection's total clicks (footnoted) until the registry has the ads;
@@ -374,6 +377,15 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
 - **Bridge-drift warning** — the page compares Meta-side form submissions (`meta_form_leads`)
   against Close-side opt-ins and prints a ⚠ line when they diverge (a growing gap = the Meta→Close
   bridge is dropping leads). Unfiltered view only (the Meta count isn't cascade-scoped).
+
+**Non-attributed pseudo-campaign (0148, boss 2026-08-17):** campaign-less bridge-stamped DC
+leads (ad tags lost in transit — the forms exist only on ad pages, so they're ad leads without
+provable attribution, ~15%) join the cohort under campaign `non-attributed`: in the campaign
+dropdown, no adset/ad (excluded from ad facets + per-ad rows naturally), lp/source inherited
+from their funnel's newest active campaign. The all-campaigns view therefore BLENDS them into
+every count and cost metric (footnoted on the page — select a campaign for pure ad economics).
+Kill switch: deactivate the `non-attributed` registry row in DC Setup. Details + reconciliation
+in `docs/schema/dc_ads_lead_facts.md` § 0148.
 
 Scoping is mutually exclusive with Outbound: only registered-DC-campaign leads here (never
 outbound pools), and DC ads leads never appear on the Outbound page (separate facts table —

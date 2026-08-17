@@ -116,12 +116,27 @@ is no longer called by the page (retire someday with `p_funnel_label`).
 **0147** adds the `(ad_id)` index, `adId` on the roster payload, and
 `dc_ads_ad_table()` — the daily RPC's stage + D0/D3/D7 semantics grouped by
 ad for the per-ad table (`docs/schema/dc_meta_ads.md` holds the ad identity
-side). ⚠ Cohort membership note (verified 2026-08-15): membership requires
-`close_leads.campaign_id` on an ACTIVE registered campaign. Typeform
-submitters who arrive UNTAGGED (no hidden ad ids — organic/shared links) get
-Close leads with NULL campaign_id and are deliberately excluded from this
-table (~130 leads/30d incl. some closes) — boss decision: an ads page counts
-ad-attributable traffic only; raw Airtable totals will read slightly higher.
+side).
+
+**0148** REVERSES 0147's untagged exclusion as the **`non-attributed`
+pseudo-campaign** (boss 2026-08-17: the DC Typeforms exist only on the ad
+landing pages, so untagged arrivals are ad leads with LOST attribution —
+privacy stripping / unfilled macros — not organic). Second membership branch
+in the refresh: campaign-less, non-excluded leads created since 2026-07-01
+with the bridge's `latest_opt_in_date` stamp AND a `funnel_name` matching a
+registered ACTIVE DC campaign's `funnel_label` (the Zapier stamps
+funnel_name from config, so it survives tag loss — no identity matching
+needed, ~150 leads at ship time incl. 11 closes/$5.4k that were invisible).
+They get `campaign_id='non-attributed'`, no adset/ad (ad facets + per-ad
+rows exclude them naturally; they land in the ad table's "(untagged leads)"
+row), source_kind/lp/typeform inherited from the funnel's newest registered
+campaign. The registry row `non-attributed` puts them in the campaign
+dropdown; **deactivating it in DC Setup is the kill switch**. A retired
+funnel's ghosts stay out (the map requires an ACTIVE campaign — the paused
+instant-form-era ghosts don't resurface). Re-opt-in through a tagged ad
+moves the lead to its real campaign at the next refresh — never
+double-counted. Ship-day reconciliation: Aug-14 went from 52/31/25/13/11
+(optIns/qual/sms/conn/hvc) to 58/34/28/18/14 vs the boss's 60/34/27/17/12.
 
 ## Populated by / read by
 
