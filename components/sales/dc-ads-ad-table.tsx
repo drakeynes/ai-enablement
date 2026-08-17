@@ -269,11 +269,16 @@ export function DcAdsAdTable({
               {HEADERS.map((h, i) => (
                 <th
                   key={h.label}
-                  className={h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}
+                  // Ad (i=0) is sticky-left everywhere; Spend (i=1) joins it
+                  // on md+ (boss 2026-08-17, desktop only) — the Ad column is
+                  // width-fixed at 260px so Spend can pin beside it.
+                  className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
+                    i === 0 ? ' md:w-[260px] md:min-w-[260px]' : i === 1 ? ' md:left-[260px]' : ''
+                  }`}
                   style={{
                     position: 'sticky',
                     top: 0,
-                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: 2 }),
+                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
                     background: 'var(--color-geg-bg-elev)',
                     padding: '9px 12px',
                     fontSize: 9.5,
@@ -321,7 +326,7 @@ export function DcAdsAdTable({
                   <tr key={r.adId ?? '(untagged)'} style={{ opacity: paused ? 0.75 : 1 }}>
                     <td
                       title={lineage}
-                      className="max-w-[150px] md:max-w-[260px]"
+                      className="max-w-[150px] md:w-[260px] md:min-w-[260px] md:max-w-[260px]"
                       style={{
                         position: 'sticky',
                         left: 0,
@@ -346,7 +351,12 @@ export function DcAdsAdTable({
                         {subBits.join(' · ') || '—'}
                       </span>
                     </td>
-                    <Td top={fmtUsd(r.spendUsd)} accent m />
+                    <Td
+                      top={fmtUsd(r.spendUsd)}
+                      accent
+                      m
+                      xcls="md:sticky md:left-[260px] md:z-[1] md:bg-[var(--color-geg-bg)] md:shadow-[1px_0_0_var(--color-geg-border)]"
+                    />
                     <Td top={fmtCount(r.impressions)} />
                     <Td top={fmtCount(r.uniqueClicks)} />
                     <Td top={r.ctr != null ? `${r.ctr.toFixed(1)}%` : '—'} />
@@ -558,10 +568,23 @@ function MultiSelect({
   )
 }
 
-function Td({ top, sub, accent, m }: { top: string; sub?: string; accent?: boolean; m?: boolean }) {
+function Td({
+  top,
+  sub,
+  accent,
+  m,
+  xcls,
+}: {
+  top: string
+  sub?: string
+  accent?: boolean
+  m?: boolean
+  // Extra classes — the Spend cell's md-only sticky-left treatment.
+  xcls?: string
+}) {
   return (
     <td
-      className={m ? undefined : 'hidden md:table-cell'}
+      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
       style={{
         padding: sub ? '8px 12px 7px' : '10px 12px',
         textAlign: 'right',

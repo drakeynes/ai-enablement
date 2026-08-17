@@ -347,12 +347,16 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   rate · dialed <1m/<5m/<10m/<30m/>30m/never as % of that day's opt-ins · SMS engagement ·
   MQL→C / NonQ→C / HVC→C / Conn→C), computed in `getDcAdsDaily()` from the same
   `dc_ads_lead_roster()` per-lead rows + 12p–12a clock math as the speed boxes (cohort size
-  excluded per the boss). Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
+  excluded per the boss), **plus the Q-prefixed repeat of the speed set over that day's
+  QUALIFIED leads only** (boss 2026-08-17; % of the day's Qualified count; `qspeed` on the row).
+  **Day AND Spend are sticky-left on desktop** (boss 2026-08-17; Day width-fixed at 132px so
+  Spend pins beside it — md+ only, the phone's trimmed set doesn't scroll). Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
   called/cash/dials for other consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
 - **Per-ad table** (boss item 10, 2026-08-15, migration 0147) — directly under the 30-day table:
   one row per AD with window activity (spend, opt-ins, or clicks — zero-opt-in spend is visible
   by design), ~35 columns with the daily table's construction (one scroll container, sticky
-  header + sticky ad-name column, cost-per sub-lines under every stage count): Meta ad metrics
+  header + sticky ad-name column — **Spend sticky beside it on desktop too**, boss 2026-08-17,
+  Ad column width-fixed 260px on md+ — cost-per sub-lines under every stage count): Meta ad metrics
   (Spend / Impr / unique Clicks / CTR / CPM / $-per-click) → the stage set (Opt-ins → Closed,
   each with that ad's cost-per) → Cash / ROAS / D0-D3-D7 units (each lead's window relative to
   its own opt-in; no maturity dash here — a per-ad DN mixes lead ages) → the full per-ad

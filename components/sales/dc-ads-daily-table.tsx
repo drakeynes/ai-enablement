@@ -123,6 +123,20 @@ const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
   { label: 'NonQ→C' },
   { label: 'HVC→C' },
   { label: 'Conn→C' },
+  // Qualified-only speed block (boss 2026-08-17): the same speed set over
+  // that day's tf-qualified leads only — % denominators are the day's
+  // Qualified count. Desktop-only like the rest of the speed columns.
+  { label: 'Q avg speed' },
+  { label: 'Q median' },
+  { label: 'Q intensity' },
+  { label: 'Q conn rate' },
+  { label: 'Q <1m' },
+  { label: 'Q <5m' },
+  { label: 'Q <10m' },
+  { label: 'Q <30m' },
+  { label: 'Q >30m' },
+  { label: 'Q never' },
+  { label: 'Q SMS eng' },
 ]
 
 export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; todayEt: string }) {
@@ -144,7 +158,9 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         only ever appears final (early closes show in the stage columns meanwhile); the
         matching ROAS columns = those units × $300 ÷ the day&apos;s spend. The right block is the
         speed-to-lead set per day (12p–12a ET clock, same math as the boxes below): dialed-within
-        shares are % of that day&apos;s opt-ins. Follows the ad chooser and landing-page dropdown.
+        shares are % of that day&apos;s opt-ins. The <b>Q-prefixed block</b> repeats the speed set
+        over that day&apos;s QUALIFIED leads only (% of the day&apos;s Qualified count). Follows the
+        ad chooser and landing-page dropdown.
       </FineNote>
 
       {/* ONE scroll container both ways — sticky header (top) + sticky Day
@@ -152,7 +168,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
       <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflow: 'auto', border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
         {/* min-width from md up only — the phone's six-column set fits as-is. */}
         <table
-          className="md:min-w-[2680px]"
+          className="md:min-w-[3620px]"
           style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}
         >
           <thead>
@@ -252,6 +268,23 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   <Td top={rate1(r.unqualifiedClosed, r.unqualified)} sub={`${r.unqualifiedClosed} / ${r.unqualified}`} />
                   <Td top={rate1(r.closed, r.hvc)} sub={`${r.closed} / ${r.hvc}`} />
                   <Td top={rate1(r.closed, r.connected)} sub={`${r.closed} / ${r.connected}`} />
+                  <Td top={fmtDur(r.qspeed.avgSpeedSec)} />
+                  <Td top={fmtDur(r.qspeed.medianDialSec)} />
+                  <Td top={r.qspeed.avgIntensity !== null ? `${r.qspeed.avgIntensity.toFixed(1)}×` : '—'} />
+                  <Td
+                    top={r.qspeed.connectedRate !== null ? `${(r.qspeed.connectedRate * 100).toFixed(0)}%` : '—'}
+                    sub={`of ${r.qualified} qual`}
+                  />
+                  <Td top={pct(r.qspeed.under1, r.qualified)} sub={fmtCount(r.qspeed.under1)} />
+                  <Td top={pct(r.qspeed.under5, r.qualified)} sub={fmtCount(r.qspeed.under5)} />
+                  <Td top={pct(r.qspeed.under10, r.qualified)} sub={fmtCount(r.qspeed.under10)} />
+                  <Td top={pct(r.qspeed.under30, r.qualified)} sub={fmtCount(r.qspeed.under30)} />
+                  <Td top={pct(r.qspeed.over30, r.qualified)} sub={fmtCount(r.qspeed.over30)} />
+                  <Td top={pct(r.qspeed.neverDialed, r.qualified)} sub={fmtCount(r.qspeed.neverDialed)} />
+                  <Td
+                    top={pct(r.qspeed.smsEngaged, r.qspeed.smsTexted)}
+                    sub={`${r.qspeed.smsEngaged} / ${r.qspeed.smsTexted}`}
+                  />
                 </tr>
               )
             })}

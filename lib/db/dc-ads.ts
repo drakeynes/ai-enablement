@@ -334,7 +334,28 @@ export type DcAdsDailyRow = {
   // Non-qual→Close inputs (the daily NonQ→C column).
   unqualified: number
   unqualifiedClosed: number
+  // The same speed block computed over the day's QUALIFIED leads only (boss
+  // 2026-08-17) — percent denominators are the row's `qualified` count.
+  qspeed: DcAdsDaySpeed
 }
+
+export type DcAdsDaySpeed = Pick<
+  DcAdsDailyRow,
+  | 'avgSpeedSec'
+  | 'medianDialSec'
+  | 'avgIntensity'
+  | 'connectedRate'
+  | 'under1'
+  | 'under5'
+  | 'under10'
+  | 'under30'
+  | 'over30'
+  | 'neverDialed'
+  | 'smsEngaged'
+  | 'smsTexted'
+  | 'unqualified'
+  | 'unqualifiedClosed'
+>
 
 // YYYY-MM-DD shifted by n days (UTC-noon arithmetic — DST-safe for date-only).
 function shiftYmd(ymd: string, n: number): string {
@@ -352,23 +373,7 @@ const ET_DAY_FMT = new Intl.DateTimeFormat('en-CA', {
 
 // The speed block for ANY roster-row subset (one ET day's cohort, one ad's
 // cohort) — the same numbers the speed boxes show.
-function summarizeDaySpeed(dayRows: DcAdsLeadRow[]): Pick<
-  DcAdsDailyRow,
-  | 'avgSpeedSec'
-  | 'medianDialSec'
-  | 'avgIntensity'
-  | 'connectedRate'
-  | 'under1'
-  | 'under5'
-  | 'under10'
-  | 'under30'
-  | 'over30'
-  | 'neverDialed'
-  | 'smsEngaged'
-  | 'smsTexted'
-  | 'unqualified'
-  | 'unqualifiedClosed'
-> {
+function summarizeDaySpeed(dayRows: DcAdsLeadRow[]): DcAdsDaySpeed {
   const speeds = dayRows
     .map((r) => r.timeToDialSec)
     .filter((s): s is number => s !== null)
@@ -429,7 +434,7 @@ export async function getDcAdsDaily(
   ])
   if (error) throw new Error(`dc_ads_daily RPC failed: ${error.message}`)
   const rows = (data ?? []) as unknown as Array<
-    Omit<DcAdsDailyRow, 'spendUsd' | keyof typeof EMPTY_DAY_SPEED>
+    Omit<DcAdsDailyRow, 'spendUsd' | 'qspeed' | keyof typeof EMPTY_DAY_SPEED>
   >
   if (rows.length === 0) return []
 
@@ -456,11 +461,20 @@ export async function getDcAdsDaily(
     else byDay.set(day, [r])
   }
 
-  return rows.map((r) => ({
-    ...r,
-    spendUsd: daySpend.get(r.etDate) ?? null,
-    ...(byDay.has(r.etDate) ? summarizeDaySpeed(byDay.get(r.etDate)!) : EMPTY_DAY_SPEED),
-  }))
+  return rows.map((r) => {
+    const dayRows = byDay.get(r.etDate) ?? []
+    return {
+      ...r,
+      spendUsd: daySpend.get(r.etDate) ?? null,
+      ...(dayRows.length > 0 ? summarizeDaySpeed(dayRows) : EMPTY_DAY_SPEED),
+      // The qualified-only speed block (boss 2026-08-17): same math over the
+      // day's tf-qualified leads only.
+      qspeed:
+        dayRows.length > 0
+          ? summarizeDaySpeed(dayRows.filter((lr) => lr.qualified))
+          : EMPTY_DAY_SPEED,
+    }
+  })
 }
 
 // Campaign → Ad Set → Ad hierarchy for the cascade chooser, built from the
