@@ -10,10 +10,12 @@ import { DcAdsAdTable } from '@/components/sales/dc-ads-ad-table'
 import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
 import { DcAdsSpeedLeadsSection } from '@/components/sales/dc-ads-speed-leads'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
+import { DcAdsBreakdownButton } from '@/components/sales/dc-ads-breakdown'
 import {
   getDcAdsFunnel,
   getDcAdsByRep,
   getDcAdsSpend,
+  getDcAdsBreakdown,
   getDcAdsMetaOptIns,
   getDcAdsInstantFormOptIns,
   getDcAdsDaily,
@@ -102,6 +104,7 @@ export default async function DcAdsPage({
     adsLp,
     team,
     leadRoster,
+    breakdown,
   ] = await Promise.all([
     getDcAdsFunnel(rangeBounds, filter),
     getDcAdsByRep(rangeBounds, filter),
@@ -113,6 +116,9 @@ export default async function DcAdsPage({
     getDcAdsLpSummary(range, filter),
     getDcTeam(),
     getDcAdsLeadRoster(rangeBounds, filter),
+    // Header popover (0149): always the unfiltered whole-window view — the
+    // Close-style reference it reconciles against has no facets.
+    getDcAdsBreakdown(rangeBounds),
   ])
 
   // Second round: fetches that need the first round's results. The ad table
@@ -137,7 +143,12 @@ export default async function DcAdsPage({
       <HeaderBand
         eyebrow="SALES · DIGITAL COLLEGE"
         title="DC Ads."
-        actions={<PersonPill label="EST · Nabeel" />}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DcAdsBreakdownButton data={breakdown} startEtDate={startEt} endEtDate={endEt} />
+            <PersonPill label="EST · Nabeel" />
+          </div>
+        }
       />
 
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>

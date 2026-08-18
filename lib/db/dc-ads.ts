@@ -288,6 +288,53 @@ export async function getDcAdsSpend(
   return { spendUsd: spend, campaigns: scope.campaigns }
 }
 
+// The header's "Data breakdown" popover (0149): the Close-style date-filter
+// reference (created OR re-opted in window, ALL of Close — how ops hand-pulls
+// for validation) vs the counted cohort, with every gap lead named and
+// reasoned. Reason codes mirror refresh_dc_ads_facts()'s membership gates;
+// names cap at 50 per reason (excludedByReason has the true group totals).
+// Never facet-scoped — the reference is an org-wide pull by definition.
+export type DcAdsBreakdownLead = {
+  closeId: string
+  name: string
+  reason: string
+  mq: boolean
+  funnel: string | null
+  day: string // YYYY-MM-DD (ET) — the in-window event the date filter caught
+}
+
+export type DcAdsBreakdownMoved = {
+  closeId: string
+  name: string
+  mq: boolean
+  anchorDay: string // YYYY-MM-DD (ET) — the day this lead IS counted under
+}
+
+export type DcAdsBreakdown = {
+  reference: number
+  referenceMq: number
+  counted: number
+  countedMq: number
+  excluded: DcAdsBreakdownLead[]
+  excludedByReason: Record<string, number>
+  excludedTotal: number
+  moved: DcAdsBreakdownMoved[]
+  movedTotal: number
+}
+
+export async function getDcAdsBreakdown(range: {
+  startUtcIso: string
+  endUtcIso: string
+}): Promise<DcAdsBreakdown> {
+  const sb = createAdminClient()
+  const { data, error } = await sb.rpc('dc_ads_breakdown' as never, {
+    p_start: range.startUtcIso,
+    p_end: range.endUtcIso,
+  } as never)
+  if (error) throw new Error(`dc_ads_breakdown RPC failed: ${error.message}`)
+  return data as unknown as DcAdsBreakdown
+}
+
 // The rolling daily cohort table (last 30 days on the page since 0134):
 // per-ET-day rows, newest first — the DC sibling of the hub's
 // getDailyFunnelTable. Spend + opt-ins freeze once the day ends; every other

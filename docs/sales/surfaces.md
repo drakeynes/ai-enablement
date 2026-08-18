@@ -186,6 +186,18 @@ Both are scoped by the `dc_ads_campaigns` registry (never "all `OFFSITE_CONVERSI
 the same ad account runs the unrelated Closer Funnel motion against `theaipartner.io`; see
 `docs/schema/dc_ads_campaigns.md`). The Outbound page's shape with **ad spend leading the funnel**:
 
+- **Data breakdown button** (header, next to the EST pill — 2026-08-18, migration 0149,
+  `components/sales/dc-ads-breakdown.tsx`) — pre-answers the recurring "why doesn't this match a
+  Close pull" validation question. Popover shows the **Close-style date-filter reference**
+  (created OR latest-opt-in in window, org-wide, no campaign scoping — how ops hand-pulls) vs
+  the counted cohort, then **names every gap lead** (Close-linked, MQ-badged) grouped by the
+  reason it isn't counted — reason codes mirror the facts refresh's membership gates
+  (stale ad tag / pre-July re-opt / retired campaign / not an ad lead / …), plus a "counted on
+  another day" group for re-opts whose cohort day moved. Footer carries the **time-basis note**:
+  stage counts are cohort-scope (SMS/Connects/HVC accrue after the day; a same-day-activity
+  Close pull reads lower — D0/D3/D7 on the daily table are the day-of view). Names cap at 50
+  per reason with true group totals ("+N more"). Ignores the cascade/LP facets by design.
+  Data: `dc_ads_breakdown()` RPC (see `docs/schema/dc_ads_lead_facts.md` § 0149).
 - **Stage row** (reshaped 2026-08-13, migration 0133 — was the Adspend→Called→Connected→Closed
   funnel) — the boss's nine numbers:
   `Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed`, plus the

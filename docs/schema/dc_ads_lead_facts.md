@@ -138,13 +138,34 @@ moves the lead to its real campaign at the next refresh — never
 double-counted. Ship-day reconciliation: Aug-14 went from 52/31/25/13/11
 (optIns/qual/sms/conn/hvc) to 58/34/28/18/14 vs the boss's 60/34/27/17/12.
 
+**0149** (no facts columns) adds `dc_ads_breakdown(p_start, p_end)` — the
+page header's "Data breakdown" popover. Reference = the **Close-style date
+filter** (created OR `latest_opt_in_date` in window, across ALL of Close —
+how ops validates by hand); counted = the facts cohort (anchor in window);
+every gap lead is returned by name with a reason code derived **at read
+time** from the same registry conditions the refresh's membership branches
+use (no side table, nothing to go stale — but if membership rules change,
+the RPC's CASE ladder must change with them): `manually_excluded` /
+`inactive_campaign` / `stale_campaign` (tag not in the registry at all) /
+`not_ad_lead` / `no_optin_stamp` / `pre_floor_reopt` (campaign-less re-opt
+whose lead predates the 2026-07-01 floor) / `non_attributed_off` /
+`pending_refresh` (meets membership, arrived after the last 15-min refresh).
+`moved` = leads counted under an anchor OUTSIDE the window (a re-opt shifted
+their cohort day — a Close date pull double-counts these on both days).
+Names cap at 50 per reason; `excludedByReason` carries true group totals.
+Ship-day check: Aug-17 reads reference 77 / counted 74 / MQ 46→44 with the
+three gap leads reasoned (`not_ad_lead`, `stale_campaign`,
+`pre_floor_reopt`) — the exact hand-reconciliation it replaces. Also adds
+`close_leads_latest_opt_in_idx` so the OR-of-ranges reference scan can
+BitmapOr with the 0043 `date_created` index.
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by
   `api/outbound_facts_refresh_cron.py` (15-min tick, after Close/Airtable
   syncs) and by `ingestion/meta_ads/leads_pipeline.py` after each lead sync.
 - **Reads:** `dc_ads_funnel()` / `dc_ads_funnel_by_rep()` / `dc_ads_daily()` /
-  `dc_ads_speed_cohort()` RPCs behind `lib/db/dc-ads.ts`.
+  `dc_ads_speed_cohort()` / `dc_ads_breakdown()` RPCs behind `lib/db/dc-ads.ts`.
 
 ## Example queries
 
