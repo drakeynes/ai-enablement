@@ -65,12 +65,16 @@ Missed-sales / great-saves flags are deliberately NOT columns — they derive
 in SQL from (`lead_score`, `intent`, `rep_score`, `closed`) so thresholds
 stay tunable without re-reviewing.
 
-**Forward-only rollout (Drake 2026-08-18):** pre-0150 DC-cohort calls were
-graded `outbound` (wrong motion — the CF-based detection predates the ads
-cohort). They keep their rows; the DC Ads dashboard reads
-`call_type='dc_ads'` ONLY, so old-rubric reviews never surface there.
-Backfill = re-review with `force=True` (transcripts persist; ~$0.02/call) —
-pending Nabeel's verification of the new output.
+**Rollout (2026-08-18):** pre-0150 DC-cohort calls were graded `outbound`
+(wrong motion — the CF-based detection predates the ads cohort); the DC Ads
+dashboard reads `call_type='dc_ads'` ONLY, so wrong-rubric reviews never
+surface there. Shipped forward-only; after Nabeel verified the first v3
+output the ~460-call **backfill was approved and run the same day** via
+`api/dc_reviews_backfill_cron.py` + `dc_ads_backfill_candidates()` (0153)
+— re-reviews with `force=True`, Sonnet-only (~$0.02/call), no Slack
+reposts. The candidates function excludes revival-CF leads (correctly
+graded) so the queue provably drains; the endpoint stays for any future
+rubric migration, its cron schedule removed once the queue read 0.
 
 ## Populated by / read by
 

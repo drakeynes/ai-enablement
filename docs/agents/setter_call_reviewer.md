@@ -61,5 +61,6 @@ validation per rubric, dc_ads signal validation + vocab coercion, prompt
 wiring/contract assertions. Prompt iteration is direct (no golden-set
 gate); `prompt_version` on every row keeps old output attributable. v3
 (2026-08-18) added the dc_ads rubric — earlier DC-cohort calls were graded
-`outbound` (wrong motion); forward-only by decision, dashboard reads
-filter `call_type='dc_ads'`.
+`outbound` (wrong motion); shipped forward-only, then backfilled the same
+day after Nabeel verified (api/dc_reviews_backfill_cron.py + 0153's
+queue). Dashboard reads filter `call_type='dc_ads'`.

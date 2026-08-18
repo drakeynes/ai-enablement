@@ -202,9 +202,11 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   connected call (≥90s, recorded) on a cohort lead is transcribed + Sonnet-reviewed under the
   **dc_ads rubric** (close-on-phone + intent / offer-understanding / rep-score / main objection /
   why-not-closed vocabulary / recoverable / VoC quotes / archetype — `docs/agents/
-  setter_call_reviewer.md`). **Forward-only from 2026-08-18**: pre-rubric DC calls were graded on
-  the book rubric and are deliberately invisible on this dashboard (no backfill until Nabeel
-  verifies; re-review with force=True is the backfill path). Surfaces: **AI Q column** on the
+  setter_call_reviewer.md`). Shipped 2026-08-18 forward-only; after Nabeel verified the first
+  v3 output the ~460 pre-rubric DC calls were **backfilled the same day**
+  (`api/dc_reviews_backfill_cron.py` + 0153's queue), so historical days/ads carry AI scores
+  too — the dashboard reads `call_type='dc_ads'` rows only, so wrong-rubric grades never
+  surface. Surfaces: **AI Q column** on the
   daily + ad tables (avg lead-quality /10, lead-level newest-review-wins; sub-line = the
   qualified-only avg + n) · **AI Rep column** on the by-rep table (call-level avg execution) ·
   the **Connected Calls subpage** (`/dc-ads/calls`, same URL contract as the parent): summary
