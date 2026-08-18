@@ -27,6 +27,7 @@ from typing import Any
 from agents.setter_call_reviewer.prompt import (
     BOOK_SYSTEM_PROMPT,
     CLOSE_SYSTEM_PROMPT,
+    DC_ADS_SYSTEM_PROMPT,
     PROMPT_VERSION,
 )
 from agents.setter_call_reviewer.slack_post import post_review_to_slack
@@ -71,11 +72,59 @@ _BASE_REQUIRED_KEYS = frozenset(
 _OUTCOME_FIELDS = {
     "outbound": ("booked", "no_book_reason"),
     "revival": ("closed", "no_close_reason"),
+    "dc_ads": ("closed", "no_close_reason"),
 }
 _SYSTEM_PROMPTS = {
     "outbound": BOOK_SYSTEM_PROMPT,
     "revival": CLOSE_SYSTEM_PROMPT,
+    "dc_ads": DC_ADS_SYSTEM_PROMPT,
 }
+
+# The dc_ads rubric's extra signal keys (migration 0150). All required in
+# the model output; vocab fields are coerced (not rejected) off-vocab.
+_DC_ADS_EXTRA_KEYS = frozenset(
+    {
+        "intent",
+        "offer_understanding",
+        "rep_score",
+        "rep_score_reason",
+        "main_objection",
+        "why_not_closed",
+        "recoverable",
+        "recoverable_note",
+        "voc_quotes",
+        "archetype",
+    }
+)
+
+# Fixed vocabularies — keep in sync with migration 0150's CHECKs. Off-vocab
+# model output coerces to 'other' (structural fix: never fail a review over
+# a label the CHECK would reject anyway).
+_WHY_NOT_CLOSED_VOCAB = frozenset(
+    {
+        "didnt_understand_offer",
+        "low_intent",
+        "price_platform_objection",
+        "rep_execution",
+        "bad_timing",
+        "skepticism",
+        "cant_pay_today",
+        "spouse_partner",
+        "other",
+    }
+)
+_ARCHETYPE_VOCAB = frozenset(
+    {
+        "high_intent_entrepreneur",
+        "curious_ai_learner",
+        "broke_opportunity_seeker",
+        "skeptic",
+        "existing_business_owner",
+        "other",
+    }
+)
+_VOC_TOPIC_VOCAB = frozenset({"goal", "fear", "objection", "why_applied", "other"})
+_MAX_VOC_QUOTES = 4
 
 
 class ReviewError(RuntimeError):
@@ -133,10 +182,12 @@ def review_call(
     transcript_text = transcript_row["transcript_text"]
     words = transcript_row.get("words") or []
 
-    # Pick the rubric BEFORE the Sonnet call. A revival (Digital College
-    # reactivation) call is graded on close-on-phone; everything else on
-    # book-a-closer. The call_type also drives which outcome columns we write.
-    call_type = "revival" if _is_revival_call(db, close_call_id) else "outbound"
+    # Pick the rubric BEFORE the Sonnet call. Precedence: the REVIVAL_CF
+    # marker (explicit revival-campaign lead) → dc_ads_lead_facts membership
+    # (the DC paid-ads cohort — graded close-on-phone + the 0150 signal set)
+    # → outbound book-a-closer. The call_type also drives which outcome
+    # columns we write.
+    call_type = _resolve_call_type(db, close_call_id)
     bool_key, reason_key = _OUTCOME_FIELDS[call_type]
 
     logger.info(
@@ -170,6 +221,15 @@ def review_call(
     outcome_cols[bool_key] = review[bool_key]
     outcome_cols[reason_key] = review[reason_key]
 
+    # The dc_ads signal set (0150) — explicitly nulled for the other call
+    # types for the same re-grade reason as outcome_cols (a flip away from
+    # dc_ads must clear the stale signals).
+    signal_cols: dict[str, Any] = {key: None for key in _DC_ADS_EXTRA_KEYS}
+    signal_cols["voc_quotes"] = []  # column is NOT NULL DEFAULT '[]'
+    if call_type == "dc_ads":
+        for key in _DC_ADS_EXTRA_KEYS:
+            signal_cols[key] = review[key]
+
     row = {
         "close_call_id": close_call_id,
         "call_type": call_type,
@@ -179,6 +239,7 @@ def review_call(
         "should_be_dqd": review["should_be_dqd"],
         "dq_reason": review["dq_reason"],
         **outcome_cols,
+        **signal_cols,
         "setter_strengths": review["setter_strengths"],
         "setter_weaknesses": review["setter_weaknesses"],
         "lead_attributes": review["lead_attributes"],
@@ -214,10 +275,9 @@ def _maybe_post_to_slack(
     """
     try:
         ctx = _load_slack_context(db, close_call_id)
-        # call_type on the persisted row is authoritative for the revival
+        # call_type on the persisted row is authoritative for the type
         # badge / close-vs-book outcome line (call_type is NOT NULL on every
         # row since migration 0121).
-        is_revival = review_row.get("call_type") == "revival"
         post_review_to_slack(
             db,
             close_call_id=close_call_id,
@@ -226,7 +286,7 @@ def _maybe_post_to_slack(
             prospect_name=ctx["prospect_name"],
             duration_s=ctx["duration_s"],
             direction=ctx["direction"],
-            is_revival=is_revival,
+            call_type=review_row.get("call_type") or "outbound",
         )
     except Exception as exc:
         # Defensive — post_review_to_slack already swallows Slack
@@ -238,14 +298,19 @@ def _maybe_post_to_slack(
         )
 
 
-def _is_revival_call(db: Any, close_call_id: str) -> bool:
-    """True when this call's lead is a DC Revival lead.
+def _resolve_call_type(db: Any, close_call_id: str) -> str:
+    """Pick the rubric for this call from its lead. One lead-chain lookup.
 
-    Resolves close_calls.lead_id → close_leads.custom_fields_raw and checks
-    the REVIVAL_CF marker (non-empty = revival), matching the canonical
-    revival predicate the tagger and the /outbound funnel use. Fail-safe:
-    any lookup miss returns False, so an unresolved lead is graded on the
-    default book rubric.
+    Precedence:
+      1. revival — the lead carries the REVIVAL_CF "DC Revival Lead"
+         custom field (non-empty), matching the canonical revival
+         predicate the tagger and the /outbound funnel use.
+      2. dc_ads  — the lead is a member of dc_ads_lead_facts (the DC
+         paid-ads cohort, same membership the DC Ads dashboard reads,
+         refreshed every 15 min — a fresh opt-in lands there before its
+         first ≥90s call finishes transcribing).
+      3. outbound — everything else. Fail-safe default: any lookup miss
+         grades on the book rubric.
     """
     call_resp = (
         db.table("close_calls")
@@ -256,7 +321,7 @@ def _is_revival_call(db: Any, close_call_id: str) -> bool:
     )
     lead_id = (call_resp.data or {}).get("lead_id") if call_resp else None
     if not lead_id:
-        return False
+        return "outbound"
 
     ld_resp = (
         db.table("close_leads")
@@ -266,7 +331,20 @@ def _is_revival_call(db: Any, close_call_id: str) -> bool:
         .execute()
     )
     cf = (ld_resp.data or {}).get("custom_fields_raw") if ld_resp else None
-    return bool((cf or {}).get(REVIVAL_CF))
+    if (cf or {}).get(REVIVAL_CF):
+        return "revival"
+
+    facts_resp = (
+        db.table("dc_ads_lead_facts")
+        .select("close_id")
+        .eq("close_id", lead_id)
+        .maybe_single()
+        .execute()
+    )
+    if facts_resp and facts_resp.data:
+        return "dc_ads"
+
+    return "outbound"
 
 
 def _load_slack_context(db: Any, close_call_id: str) -> dict[str, Any]:
@@ -413,6 +491,8 @@ def _parse_and_validate(
     """
     bool_key, reason_key = _OUTCOME_FIELDS[call_type]
     required_keys = _BASE_REQUIRED_KEYS | {bool_key, reason_key}
+    if call_type == "dc_ads":
+        required_keys = required_keys | _DC_ADS_EXTRA_KEYS
 
     candidate = _strip_fences(text).strip()
     if not candidate:
@@ -484,7 +564,86 @@ def _parse_and_validate(
             f"{type(parsed['lead_attributes']).__name__}"
         )
 
+    if call_type == "dc_ads":
+        _validate_dc_ads_signals(parsed, close_call_id)
+
     return parsed
+
+
+def _validate_dc_ads_signals(parsed: dict[str, Any], close_call_id: str) -> None:
+    """Validate + normalize the dc_ads signal set IN PLACE.
+
+    Range violations and shape violations fail the review (same bar as
+    the base fields). Vocabulary violations COERCE to 'other' with a
+    warning instead — the fixed vocab exists so aggregation stays
+    stable, and 'other' is the vocab's own catch-all; failing an
+    otherwise-good review over a label would trade a whole row for one
+    field. (Structural-fix principle, migration 0150.)
+    """
+    for score_key in ("intent", "offer_understanding", "rep_score"):
+        if not isinstance(parsed[score_key], int) or not 0 <= parsed[score_key] <= 10:
+            raise ReviewError(
+                f"{score_key} out of range for {close_call_id}: {parsed[score_key]!r}"
+            )
+    if not parsed.get("rep_score_reason"):
+        raise ReviewError(f"missing rep_score_reason for {close_call_id}")
+
+    if not isinstance(parsed["recoverable"], bool):
+        raise ReviewError(
+            f"recoverable not bool for {close_call_id}: {parsed['recoverable']!r}"
+        )
+    if parsed["recoverable"] and not parsed.get("recoverable_note"):
+        raise ReviewError(
+            f"recoverable=true but no recoverable_note for {close_call_id}"
+        )
+
+    # why_not_closed: required iff the call didn't close (the model gets
+    # this right structurally; the closed=false case is the one to guard).
+    if parsed.get("closed") is False:
+        wnc = parsed.get("why_not_closed")
+        if not wnc:
+            raise ReviewError(
+                f"closed=false but no why_not_closed for {close_call_id}"
+            )
+        if wnc not in _WHY_NOT_CLOSED_VOCAB:
+            logger.warning(
+                "setter_review.off_vocab close_call_id=%s key=why_not_closed value=%r (coercing to other)",
+                close_call_id, wnc,
+            )
+            parsed["why_not_closed"] = "other"
+    else:
+        parsed["why_not_closed"] = None
+
+    if parsed.get("archetype") not in _ARCHETYPE_VOCAB:
+        logger.warning(
+            "setter_review.off_vocab close_call_id=%s key=archetype value=%r (coercing to other)",
+            close_call_id, parsed.get("archetype"),
+        )
+        parsed["archetype"] = "other"
+
+    quotes = parsed.get("voc_quotes")
+    if not isinstance(quotes, list):
+        raise ReviewError(
+            f"voc_quotes not list for {close_call_id}: {type(quotes).__name__}"
+        )
+    cleaned: list[dict[str, str]] = []
+    for item in quotes[:_MAX_VOC_QUOTES]:
+        if not isinstance(item, dict) or not (item.get("quote") or "").strip():
+            logger.warning(
+                "setter_review.voc_quote_dropped close_call_id=%s item=%r",
+                close_call_id, item,
+            )
+            continue
+        topic = item.get("topic")
+        if topic not in _VOC_TOPIC_VOCAB:
+            topic = "other"
+        cleaned.append({"quote": str(item["quote"]).strip(), "topic": topic})
+    if len(quotes) > _MAX_VOC_QUOTES:
+        logger.warning(
+            "setter_review.over_cap close_call_id=%s key=voc_quotes len=%d (truncating to %d)",
+            close_call_id, len(quotes), _MAX_VOC_QUOTES,
+        )
+    parsed["voc_quotes"] = cleaned
 
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
@@ -505,8 +664,12 @@ def _upsert(db: Any, row: dict[str, Any]) -> dict[str, Any]:
             f"setter_call_reviews upsert returned no row for {row['close_call_id']}"
         )
     # Outcome label is call_type-dependent (booked for outbound, closed for
-    # revival); log whichever pair the active call_type carries.
-    outcome = row.get("closed") if row.get("call_type") == "revival" else row.get("booked")
+    # revival/dc_ads); log whichever pair the active call_type carries.
+    outcome = (
+        row.get("closed")
+        if row.get("call_type") in ("revival", "dc_ads")
+        else row.get("booked")
+    )
     logger.info(
         "setter_review.persisted close_call_id=%s call_type=%s score=%s dq=%s outcome=%s cost=$%s",
         row["close_call_id"], row.get("call_type"), row["lead_score"],

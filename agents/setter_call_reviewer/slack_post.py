@@ -51,7 +51,7 @@ def post_review_to_slack(
     prospect_name: str | None,
     duration_s: float | None,
     direction: str | None,
-    is_revival: bool = False,
+    call_type: str = "outbound",
 ) -> str | None:
     """Post one review to the sales-reviews channel. Returns the Slack
     `ts` on success, None on failure or skip.
@@ -76,7 +76,7 @@ def post_review_to_slack(
         prospect_name=prospect_name,
         duration_s=duration_s,
         direction=direction,
-        is_revival=is_revival,
+        call_type=call_type,
     )
 
     result = post_message(channel_id=channel, text=text, blocks=blocks)
@@ -127,7 +127,7 @@ def _build_message(
     prospect_name: str | None,
     duration_s: float | None,
     direction: str | None,
-    is_revival: bool = False,
+    call_type: str = "outbound",
 ) -> tuple[str, list[dict[str, Any]]]:
     """Compose the Slack mrkdwn message + Block Kit payload.
 
@@ -141,10 +141,11 @@ def _build_message(
     sentiment = (review_row.get("sentiment") or "").strip()
     dq_reason = (review_row.get("dq_reason") or "").strip()
 
-    # Outcome is call-type-dependent. Revival (Digital College) calls are
-    # graded on closing on the phone — closed / no_close_reason. Outbound
-    # setting calls are graded on booking — booked / no_book_reason.
-    if is_revival:
+    # Outcome is call-type-dependent. Revival + DC-ads calls are graded on
+    # closing on the phone — closed / no_close_reason. Outbound setting
+    # calls are graded on booking — booked / no_book_reason.
+    is_close_rubric = call_type in ("revival", "dc_ads")
+    if is_close_rubric:
         outcome_hit = bool(review_row.get("closed"))
         outcome_reason = (review_row.get("no_close_reason") or "").strip()
         outcome_yes, outcome_no = "Closed", "Not closed"
@@ -163,8 +164,9 @@ def _build_message(
     # Plain-text fallback (used by mobile push, screen readers, and
     # any client that doesn't render the Block Kit payload). Keep
     # under ~250 chars so push notifications surface the gist.
+    type_prefix = {"revival": "🔁 REVIVAL  ·  ", "dc_ads": "🎯 DC ADS  ·  "}.get(call_type, "")
     fallback_text = (
-        f"{'🔁 REVIVAL  ·  ' if is_revival else ''}"
+        f"{type_prefix}"
         f"{setter} → {prospect}  ·  Score {score}/10"
         f"{'  ·  DQ FLAGGED' if dq else ''}"
         f"  ·  {outcome_yes if outcome_hit else outcome_no}"
@@ -189,9 +191,12 @@ def _build_message(
     ]
     if dq:
         headline_parts.append(":rotating_light: *DQ flagged*")
-    # Revival chip — a call to a cold pre-horizon lead (re-engagement campaign).
-    if is_revival:
+    # Call-type chip — revival (re-engagement campaign) or DC ads (paid-ads
+    # dial-up). Outbound is the unmarked default.
+    if call_type == "revival":
         headline_parts.append(":repeat: *Revival*")
+    elif call_type == "dc_ads":
+        headline_parts.append(":dart: *DC Ads*")
     headline = "  ·  ".join(headline_parts)
 
     # Sub-line — duration / direction / call-id (short).
