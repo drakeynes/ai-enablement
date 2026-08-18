@@ -38,6 +38,19 @@ function fmtCount(value: number): string {
   return value.toLocaleString('en-US')
 }
 
+// AI lead-quality cell (0151): avg /10 over the cohort's dc_ads-reviewed
+// leads; '—' until the 0150 rubric has graded any (forward-only — old-rubric
+// reviews never show). Sub-line = the qualified-only avg + how many leads
+// the average stands on (small n = read with care).
+export function aiQTop(aiQ: number | null): string {
+  return aiQ !== null ? aiQ.toFixed(1) : '—'
+}
+
+export function aiQSub(aiQQual: number | null, n: number): string | undefined {
+  if (n === 0) return undefined
+  return `Q ${aiQQual !== null ? aiQQual.toFixed(1) : '—'} · n ${n}`
+}
+
 // Cost-per sub-line: the day's spend ÷ the count. '—' when the count is 0
 // (no division), $0 when the spend is null/zero (boss rule: $0, not "—").
 function costPer(spendUsd: number | null, count: number): string {
@@ -99,6 +112,9 @@ const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
   { label: 'SMS+MQL' },
   { label: 'Connects' },
   { label: 'HVC' },
+  // AI lead-quality (0151): the day's avg dc_ads-rubric review score over
+  // reviewed cohort leads — sub-line carries the qualified-only avg + n.
+  { label: 'AI Q' },
   { label: 'Units', m: true },
   { label: 'Closed', m: true },
   { label: 'D0 U' },
@@ -153,6 +169,11 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         scrolls. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
         small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).{' '}
+        <b>AI Q</b> = the day&apos;s average AI lead-quality score (0–10) from the call reviews —
+        each reviewed lead counts once (its newest reviewed call); the sub-line is the same average
+        over <b>qualified</b> leads only, with <b>n</b> = how many reviewed leads the average stands
+        on (only connected calls get reviews, and scoring started 2026-08-18 — a dash means no
+        reviewed leads that day, not zero quality).{' '}
         <b>D0 / D3 / D7 U</b> = units closed the same day / under 3 days / under 7 days after the
         opt-in (cumulative); a cell stays a dash until its window has FULLY elapsed — a DN number
         only ever appears final (early closes show in the stage columns meanwhile); the
@@ -237,6 +258,7 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                   <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
                   <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
                   <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
+                  <Td top={aiQTop(r.aiQ)} sub={aiQSub(r.aiQQual, r.aiQN)} />
                   <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
                   <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
                   {/* STRICT maturity dashes (boss 2026-08-15): a DN cell is a

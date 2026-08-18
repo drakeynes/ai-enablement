@@ -260,12 +260,17 @@ export function DcAdsLeadsSection({
               }}
             >
               <span style={{ minWidth: 0 }}>
-                <span
+                {/* → the per-lead lifecycle page (timeline + call reviews) —
+                    middleware-allowlisted for these deep links (2026-08-18). */}
+                <a
+                  href={`/sales-dashboard/leads/${encodeURIComponent(r.closeId)}`}
                   className="geg-serif"
-                  style={{ display: 'block', fontSize: 13.5, color: 'var(--color-geg-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  style={{ display: 'block', fontSize: 13.5, color: 'var(--color-geg-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: 'none' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none' }}
                 >
                   {r.name}
-                </span>
+                </a>
                 <span
                   className="geg-mono"
                   style={{ display: 'block', fontSize: 9.5, color: 'var(--color-geg-text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}

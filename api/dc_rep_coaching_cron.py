@@ -1,0 +1,123 @@
+"""Weekly DC rep-coaching cron (0152).
+
+Vercel Cron POSTs here Monday 08:45 UTC and generates the PRIOR ET week's
+per-rep coaching rows (week_start = last Monday) into dc_rep_coaching via
+agents/dc_intel/rep_coaching.py — one Sonnet call per rep with reviewed
+dc_ads calls that week. The Connected Calls subpage renders the newest
+week. Dashboard-only by decision (no Slack delivery).
+
+Idempotent per (week, rep): existing rows skip (?force=1 regenerates).
+Manual runs can target any week with ?week=YYYY-MM-DD (a Monday).
+
+Auth: shared `CRON_SECRET` Bearer. Side effects: ≤ a handful of Sonnet
+calls (billable, ~$0.02 each); a webhook_deliveries audit row
+(source='dc_rep_coaching').
+
+Manual trigger:
+  curl -i -X POST -H "Authorization: Bearer $CRON_SECRET" \\
+       "https://ai-enablement-sigma.vercel.app/api/dc_rep_coaching_cron?week=2026-08-17"
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import logging
+import os
+import sys
+import uuid
+from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from agents.dc_intel import generate_rep_coaching
+from shared.db import get_client
+
+logging.getLogger().setLevel(logging.INFO)
+logger = logging.getLogger("ai_enablement.dc_rep_coaching_cron")
+logger.setLevel(logging.INFO)
+
+_AUDIT_SOURCE = "dc_rep_coaching"
+_ET = ZoneInfo("America/New_York")
+
+
+def _last_monday_et() -> str:
+    today = datetime.now(_ET).date()
+    # On Monday this yields LAST Monday (the completed week), not today.
+    return (today - timedelta(days=today.weekday() or 7)).isoformat()
+
+
+class handler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        try:
+            self._handle()
+        except Exception:
+            logger.exception("dc_rep_coaching_cron: unhandled error")
+            self._respond(500, {"error": "internal_error"})
+
+    def do_GET(self) -> None:
+        self.do_POST()
+
+    def _handle(self) -> None:
+        if not _verify_auth(self.headers):
+            self._respond(401, {"error": "unauthorized"})
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        week = (qs.get("week") or [None])[0] or _last_monday_et()
+        force = (qs.get("force") or ["0"])[0] == "1"
+        self._respond(200, run(week, force=force))
+
+    def _respond(self, status: int, body: dict[str, Any]) -> None:
+        encoded = json.dumps(body, default=str).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        if encoded:
+            self.wfile.write(encoded)
+
+
+def run(week_start: str, *, force: bool = False) -> dict[str, Any]:
+    db = get_client()
+    status, error = "ok", None
+    result: dict[str, Any] = {}
+    try:
+        result = generate_rep_coaching(week_start, db=db, force=force)
+    except Exception as exc:
+        logger.exception("dc_rep_coaching_cron: generation failed for %s", week_start)
+        status, error = "error", str(exc)[:2000]
+
+    try:
+        row: dict[str, Any] = {
+            "webhook_id": f"{_AUDIT_SOURCE}_{uuid.uuid4()}",
+            "source": _AUDIT_SOURCE,
+            "processing_status": status,
+            "payload": {"week_start": week_start, "force": force, "result": result},
+            "headers": {},
+            "processed_at": datetime.now(ZoneInfo("UTC")).isoformat(),
+        }
+        if error is not None:
+            row["processing_error"] = error
+        db.table("webhook_deliveries").insert(row).execute()
+    except Exception:
+        logger.warning("dc_rep_coaching_cron: audit insert failed", exc_info=True)
+
+    return {"status": status, "week_start": week_start, "error": error, "result": result}
+
+
+def _verify_auth(headers: Any) -> bool:
+    expected = os.environ.get("CRON_SECRET") or ""
+    if not expected:
+        logger.error("dc_rep_coaching_cron: CRON_SECRET not configured")
+        return False
+    auth_header = headers.get("Authorization") or headers.get("authorization") or ""
+    if not auth_header.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(auth_header[len("Bearer ") :], expected)

@@ -76,7 +76,7 @@ function PlanChip({ label, count }: { label: string; count: number }) {
 
 // Column count for the expanded EOD row's colSpan — keep in sync with the
 // header row below.
-const COL_COUNT = 11
+const COL_COUNT = 12
 
 function RepTr({
   r,
@@ -127,6 +127,7 @@ function RepTr({
       <Cell value={r.dials.toLocaleString('en-US')} m />
       <Cell value={r.connections.toLocaleString('en-US')} m />
       <Cell value={fmtTalk(r.talkSeconds ?? 0)} muted={!r.talkSeconds} />
+      <Cell value={r.aiRepScore != null ? r.aiRepScore.toFixed(1) : '—'} muted={!r.aiRepN} />
       <Cell value={r.closes.toLocaleString('en-US')} strong m />
       <Cell value={r.units.toLocaleString('en-US')} />
       <Cell value={r.base44Monthly.toLocaleString('en-US')} muted={r.base44Monthly === 0} />
@@ -212,11 +213,13 @@ export function DcAdsByRepSection({
       dials: a.dials + r.dials,
       connections: a.connections + r.connections,
       talkSeconds: a.talkSeconds + (r.talkSeconds ?? 0),
+      aiScoreSum: a.aiScoreSum + (r.aiRepScore ?? 0) * (r.aiRepN ?? 0),
+      aiN: a.aiN + (r.aiRepN ?? 0),
       closes: a.closes + r.closes,
       units: a.units + r.units,
       cash: a.cash + r.cash,
     }),
-    { dials: 0, connections: 0, talkSeconds: 0, closes: 0, units: 0, cash: 0 },
+    { dials: 0, connections: 0, talkSeconds: 0, aiScoreSum: 0, aiN: 0, closes: 0, units: 0, cash: 0 },
   )
 
   return (
@@ -261,6 +264,7 @@ export function DcAdsByRepSection({
                 <HeadCell label="Dials" m />
                 <HeadCell label="Connections" m />
                 <HeadCell label="Talk time" />
+                <HeadCell label="AI Rep" />
                 <HeadCell label="Closes" m />
                 <HeadCell label="Units" />
                 <HeadCell label="B44·Mo" />
@@ -295,6 +299,10 @@ export function DcAdsByRepSection({
                 <Cell value={colTotals.dials.toLocaleString('en-US')} muted m />
                 <Cell value={colTotals.connections.toLocaleString('en-US')} muted m />
                 <Cell value={fmtTalk(colTotals.talkSeconds)} muted />
+                <Cell
+                  value={colTotals.aiN > 0 ? (colTotals.aiScoreSum / colTotals.aiN).toFixed(1) : '—'}
+                  muted
+                />
                 <Cell value={colTotals.closes.toLocaleString('en-US')} strong m />
                 <Cell value={colTotals.units.toLocaleString('en-US')} strong />
                 <Cell value={totals.base44Monthly.toLocaleString('en-US')} muted />
@@ -357,7 +365,10 @@ export function DcAdsByRepSection({
         lead opted in. <b>Dials</b> = outbound calls · <b>Connections</b> = calls ≥90s, counted per CALL
         (a lead reached twice counts twice; inbound pickups count) — so the column sum runs higher than the
         funnel&apos;s Connected, which counts each <i>lead</i> once · <b>Talk time</b> = total time on the
-        phone (sum of call durations, all calls both directions) · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
+        phone (sum of call durations, all calls both directions) · <b>AI Rep</b> = the rep&apos;s average
+        AI execution score (0–10) over their reviewed calls in the window — per call, from the call
+        reviews (scored from 2026-08-18; a dash = no reviewed calls yet, not a zero)
+        · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
         (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);
         people deactivated there collapse into the &ldquo;Former reps&rdquo; group, still counted in

@@ -181,6 +181,16 @@
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 60,
       "excludeFiles": "{.next,node_modules}/**"
+    },
+    "api/dc_exec_summary_cron.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 120,
+      "excludeFiles": "{.next,node_modules}/**"
+    },
+    "api/dc_rep_coaching_cron.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 300,
+      "excludeFiles": "{.next,node_modules}/**"
     }
   },
   "crons": [
@@ -206,6 +216,8 @@
     { "path": "/api/setter_calls_sweep_cron", "schedule": "*/15 * * * *" },
     { "path": "/api/engagement_ping_cron", "schedule": "*/5 * * * *" },
     { "path": "/api/outbound_facts_refresh_cron", "schedule": "*/15 * * * *" },
-    { "path": "/api/ghl_sync_cron", "schedule": "*/15 * * * *" }
+    { "path": "/api/ghl_sync_cron", "schedule": "*/15 * * * *" },
+    { "path": "/api/dc_exec_summary_cron", "schedule": "15 8 * * *" },
+    { "path": "/api/dc_rep_coaching_cron", "schedule": "45 8 * * 1" }
   ]
 }

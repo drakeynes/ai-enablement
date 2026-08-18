@@ -11,11 +11,13 @@ import { DcAdsByRepSection } from '@/components/sales/dc-ads-by-rep'
 import { DcAdsSpeedLeadsSection } from '@/components/sales/dc-ads-speed-leads'
 import { DcAdsRosterSection } from '@/components/sales/dc-ads-roster'
 import { DcAdsBreakdownButton } from '@/components/sales/dc-ads-breakdown'
+import { DcAdsExecSummaryCard } from '@/components/sales/dc-ads-exec-summary'
 import {
   getDcAdsFunnel,
   getDcAdsByRep,
   getDcAdsSpend,
   getDcAdsBreakdown,
+  getDcAdsExecSummary,
   getDcAdsMetaOptIns,
   getDcAdsInstantFormOptIns,
   getDcAdsDaily,
@@ -105,6 +107,7 @@ export default async function DcAdsPage({
     team,
     leadRoster,
     breakdown,
+    execSummary,
   ] = await Promise.all([
     getDcAdsFunnel(rangeBounds, filter),
     getDcAdsByRep(rangeBounds, filter),
@@ -119,6 +122,9 @@ export default async function DcAdsPage({
     // Header popover (0149): always the unfiltered whole-window view — the
     // Close-style reference it reconciles against has no facets.
     getDcAdsBreakdown(rangeBounds),
+    // Newest nightly AI exec summary (0152) — window-independent by design
+    // (it always covers the last closed ET day); null until the first run.
+    getDcAdsExecSummary(),
   ])
 
   // Second round: fetches that need the first round's results. The ad table
@@ -180,6 +186,28 @@ export default async function DcAdsPage({
         >
           Started {monthDay(DC_ADS_FLOOR_ET)}
         </span>
+        {/* → the AI call-intelligence subpage (2026-08-18) — carries the
+            current window + facets so the two pages navigate as one. */}
+        <a
+          href={`/sales-dashboard/dc-ads/calls?${new URLSearchParams(
+            Object.entries({ start: startEt, end: endEt, campaign, adset, ad, lp }).filter(
+              (e): e is [string, string] => !!e[1],
+            ),
+          ).toString()}`}
+          className="geg-mono"
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--color-geg-accent)',
+            textDecoration: 'none',
+            border: '1px solid var(--color-geg-border-strong)',
+            borderRadius: 5,
+            padding: '4px 10px',
+          }}
+        >
+          Connected calls →
+        </a>
       </div>
 
       {/* Bridge-drift check only reads on the unfiltered view — the Meta-side
@@ -237,6 +265,8 @@ export default async function DcAdsPage({
       ) : null}
 
       <DcAdsFunnelSection funnel={funnel} spendUsd={spend.spendUsd} />
+
+      <DcAdsExecSummaryCard exec={execSummary} />
 
       <DcAdsDailyTable rows={dailyRows} todayEt={todayEt} />
 

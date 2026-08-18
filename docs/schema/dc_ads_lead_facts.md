@@ -159,6 +159,22 @@ three gap leads reasoned (`not_ad_lead`, `stale_campaign`,
 `close_leads_latest_opt_in_idx` so the OR-of-ranges reference scan can
 BitmapOr with the 0043 `date_created` index.
 
+**0151** (no facts columns) wires the **AI call reviews** (0150's dc_ads
+rubric on `setter_call_reviews`) into the read layer: `dc_ads_daily()` and
+`dc_ads_ad_table()` gain `aiQ/aiQN/aiQQual/aiQQualN` (avg AI lead-quality
+0-10 over the cohort's reviewed leads — LEAD-level, the newest reviewed
+call wins, all-leads + tf_qualified-only, with n counts);
+`dc_ads_funnel_by_rep()` gains `aiRepScore/aiRepN` (CALL-level avg rep
+execution). New RPC **`dc_ads_call_reviews(p_start, p_end, facets…)`** —
+the ONE call-level read behind the Connected Calls subpage: per-call
+review rows (capped 500 newest + true total), SQL-derived missed-sale
+(`not closed ∧ lead≥7 ∧ intent≥7 ∧ rep≤5`) and great-save
+(`closed ∧ (lead≤4 ∨ intent≤4)`) flags with capped lists, the
+why-not-closed distribution, archetype × closes, VoC quotes (newest 100),
+and window averages. ACTIVITY-scoped, unlike the cohort tables. Everything
+reads `call_type='dc_ads'` rows only — pre-0150 book-rubric reviews never
+surface (forward-only decision).
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

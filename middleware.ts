@@ -15,6 +15,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 const ALLOWED_PREFIXES = [
   '/sales-dashboard/dc-ads',
   '/sales-dashboard/dc-setup',
+  // Deep-link targets for the DC Ads AI call-review layer (2026-08-18): the
+  // per-lead lifecycle page and the per-call review page. Reachable by URL
+  // (the DC pages link into them); their NAV entries stay hidden — this is
+  // not the full-dashboard unhide.
+  '/sales-dashboard/leads',
+  '/sales-dashboard/calls',
   '/login',
   // Terminal page for authenticated users WITHOUT the sales area (CSMs) —
   // without it they'd loop: sales layout → home → guard → sales layout.

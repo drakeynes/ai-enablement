@@ -198,6 +198,25 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   Close pull reads lower — D0/D3/D7 on the daily table are the day-of view). Names cap at 50
   per reason with true group totals ("+N more"). Ignores the cascade/LP facets by design.
   Data: `dc_ads_breakdown()` RPC (see `docs/schema/dc_ads_lead_facts.md` § 0149).
+- **AI call intelligence** (2026-08-18, migrations 0150–0152 — Nabeel's build list): every
+  connected call (≥90s, recorded) on a cohort lead is transcribed + Sonnet-reviewed under the
+  **dc_ads rubric** (close-on-phone + intent / offer-understanding / rep-score / main objection /
+  why-not-closed vocabulary / recoverable / VoC quotes / archetype — `docs/agents/
+  setter_call_reviewer.md`). **Forward-only from 2026-08-18**: pre-rubric DC calls were graded on
+  the book rubric and are deliberately invisible on this dashboard (no backfill until Nabeel
+  verifies; re-review with force=True is the backfill path). Surfaces: **AI Q column** on the
+  daily + ad tables (avg lead-quality /10, lead-level newest-review-wins; sub-line = the
+  qualified-only avg + n) · **AI Rep column** on the by-rep table (call-level avg execution) ·
+  the **Connected Calls subpage** (`/dc-ads/calls`, same URL contract as the parent): summary
+  strip, the "Why aren't DC leads closing?" % table, 🔴 missed-sales / 🟢 great-saves queues
+  (SQL-derived thresholds, `dc_ads_call_reviews()`), archetype × close-rate, verbatim VoC quotes
+  grouped by topic, and the filterable feed (outcome / recoverable / flags / rep / search; 500
+  newest, true totals) — every lead links to its lifecycle page, every call to its full review ·
+  the **AI executive summary card** on the main page (nightly, `dc_ads_exec_summaries` — see
+  `docs/agents/dc_intel.md`) · **Rep coaching** cards on the calls subpage (weekly,
+  `dc_rep_coaching`). Deep links: `middleware.ts` allowlists `/sales-dashboard/leads/*` +
+  `/sales-dashboard/calls/*` (nav entries stay hidden — not the full-dashboard unhide); the
+  embedded lead list's names now link to the per-lead page.
 - **Stage row** (reshaped 2026-08-13, migration 0133 — was the Adspend→Called→Connected→Closed
   funnel) — the boss's nine numbers:
   `Adspend > Opt-ins > Qualified > SMS > SMS+MQL > Connects > HVC > Units > Closed`, plus the

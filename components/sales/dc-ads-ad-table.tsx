@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import type { DcAdsAdTableRow } from '@/lib/db/dc-ads'
 
 import { FineNote } from './fine-note'
+import { aiQSub, aiQTop } from './dc-ads-daily-table'
 
 // DC ads page — the PER-AD table (boss item 10, 2026-08-15), directly under
 // the 30-day daily table: one row per ad with window activity (spend, opt-ins,
@@ -84,6 +85,8 @@ const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
   { label: 'SMS+MQL' },
   { label: 'Connects' },
   { label: 'HVC' },
+  // AI lead-quality (0151) — same semantics as the daily table's column.
+  { label: 'AI Q' },
   { label: 'Units', m: true },
   { label: 'Closed', m: true },
   { label: 'Cash' },
@@ -228,7 +231,10 @@ export function DcAdsAdTable({
         stage from Opt-ins on is the ad&apos;s own leads through the same definitions as the rest of
         the page, with that ad&apos;s <b>cost per</b> underneath each count. The right block is the
         ad&apos;s speed-to-lead set (12p–12a ET clock). D0/D3/D7 = units closed within 0/3/7 days of
-        each lead&apos;s own opt-in. The three pickers narrow this list only (the page filter above
+        each lead&apos;s own opt-in. <b>AI Q</b> = the ad&apos;s average AI lead-quality score (0–10)
+        from the call reviews, one count per reviewed lead (newest reviewed call wins); sub-line =
+        the qualified-only average and <b>n</b> reviewed leads — only connected calls get reviews
+        (scored from 2026-08-18), so read small-n cells with care. The three pickers narrow this list only (the page filter above
         is untouched): tick any mix — within a picker selections add together, across pickers they
         combine, and higher levels narrow what the lower ones offer. Each row&apos;s sub-line says
         which campaign · ad set the ad lives in (hover for the full path). Follows the date picker
@@ -370,6 +376,7 @@ export function DcAdsAdTable({
                     <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
                     <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
                     <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
+                    <Td top={aiQTop(r.aiQ)} sub={aiQSub(r.aiQQual, r.aiQN)} />
                     <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
                     <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
                     <Td top={fmtUsd(r.cashUsd)} />
