@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { DcAdsLeadRow } from '@/lib/db/dc-ads'
 import { summarizeCohortRows } from '@/lib/db/cohort-stats'
@@ -45,6 +45,15 @@ export function DcAdsSpeedLeadsSection({
 }) {
   const [dispSel, setDispSel] = useState<ReadonlySet<Disposition>>(new Set(initialDispSel ?? []))
   const [qualSel, setQualSel] = useState<ReadonlySet<QualKey>>(new Set(initialQualSel ?? []))
+
+  // Stage-drill landing: the page STREAMS (loading skeleton first), so the
+  // browser evaluates #leads before this section exists and silently gives
+  // up. Re-scroll once we're actually mounted.
+  useEffect(() => {
+    if (window.location.hash === '#leads') {
+      document.getElementById('leads')?.scrollIntoView({ block: 'start' })
+    }
+  }, [])
 
   const toggleIn = <T,>(set: ReadonlySet<T>, key: T): ReadonlySet<T> => {
     const next = new Set(set)
