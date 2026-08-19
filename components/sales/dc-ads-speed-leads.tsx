@@ -31,14 +31,20 @@ export function DcAdsSpeedLeadsSection({
   lpLabels,
   spendUsd,
   clockLabel,
+  initialDispSel,
+  initialQualSel,
 }: {
   rows: DcAdsLeadRow[]
   lpLabels: Record<string, string>
   spendUsd: number
   clockLabel: string
+  // Deep-link presets (?ld= / ?lq=, parsed by the page) — the daily/ad
+  // tables' stage counts link here with the matching toggles lit.
+  initialDispSel?: Disposition[]
+  initialQualSel?: QualKey[]
 }) {
-  const [dispSel, setDispSel] = useState<ReadonlySet<Disposition>>(new Set())
-  const [qualSel, setQualSel] = useState<ReadonlySet<QualKey>>(new Set())
+  const [dispSel, setDispSel] = useState<ReadonlySet<Disposition>>(new Set(initialDispSel ?? []))
+  const [qualSel, setQualSel] = useState<ReadonlySet<QualKey>>(new Set(initialQualSel ?? []))
 
   const toggleIn = <T,>(set: ReadonlySet<T>, key: T): ReadonlySet<T> => {
     const next = new Set(set)
@@ -98,7 +104,7 @@ export function DcAdsSpeedLeadsSection({
 
   return (
     <>
-      <div style={{ marginTop: 26 }}>
+      <div id="leads" style={{ marginTop: 26, scrollMarginTop: 80 }}>
         <div
           className="geg-mono"
           style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)', marginBottom: 10 }}

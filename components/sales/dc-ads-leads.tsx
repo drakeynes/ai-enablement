@@ -260,10 +260,13 @@ export function DcAdsLeadsSection({
               }}
             >
               <span style={{ minWidth: 0 }}>
-                {/* → the per-lead lifecycle page (timeline + call reviews) —
-                    middleware-allowlisted for these deep links (2026-08-18). */}
+                {/* → the lead's CLOSE profile (boss 2026-08-18: reps live in
+                    Close — the in-app lifecycle page lost its link, still
+                    reachable by URL). */}
                 <a
-                  href={`/sales-dashboard/leads/${encodeURIComponent(r.closeId)}`}
+                  href={`https://app.close.com/lead/${encodeURIComponent(r.closeId)}/`}
+                  target="_blank"
+                  rel="noreferrer"
                   className="geg-serif"
                   style={{ display: 'block', fontSize: 13.5, color: 'var(--color-geg-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: 'none' }}
                   onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline' }}

@@ -155,7 +155,23 @@ const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
   { label: 'Q SMS eng' },
 ]
 
-export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; todayEt: string }) {
+// Build one stage-drill href: the day as the window + the current facets +
+// the lead-list toggles for that stage, anchored at the list (Nabeel
+// 2026-08-18: click a count → see the leads behind it).
+function drillHref(etDate: string, facetQuery: string, toggles: string): string {
+  const parts = [`start=${etDate}`, `end=${etDate}`, facetQuery, toggles].filter(Boolean)
+  return `/sales-dashboard/dc-ads?${parts.join('&')}#leads`
+}
+
+export function DcAdsDailyTable({
+  rows,
+  todayEt,
+  facetQuery,
+}: {
+  rows: DcAdsDailyRow[]
+  todayEt: string
+  facetQuery: string
+}) {
   return (
     <div style={{ marginTop: 24 }}>
       <div
@@ -168,7 +184,9 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
         Each row is the cohort that opted in that ET day; the Day and Spend columns stay frozen while the rest
         scrolls. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
-        small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).{' '}
+        small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).
+        <b> Stage counts are clickable</b> — a click jumps to the lead list below, scoped to that
+        day with the matching toggles lit, so the number turns into names.{' '}
         <b>AI Q</b> = the day&apos;s average AI lead-quality score (0–10) from the call reviews —
         each reviewed lead counts once (its newest reviewed call); the sub-line is the same average
         over <b>qualified</b> leads only, with <b>n</b> = how many reviewed leads the average stands
@@ -252,15 +270,15 @@ export function DcAdsDailyTable({ rows, todayEt }: { rows: DcAdsDailyRow[]; toda
                     m
                     xcls="md:sticky md:left-[132px] md:z-[1] md:bg-[var(--color-geg-bg)] md:shadow-[1px_0_0_var(--color-geg-border)]"
                   />
-                  <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m />
-                  <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} />
-                  <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} />
-                  <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
-                  <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
-                  <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
+                  <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m href={drillHref(r.etDate, facetQuery, '')} />
+                  <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} href={drillHref(r.etDate, facetQuery, 'lq=qualified')} />
+                  <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} href={drillHref(r.etDate, facetQuery, 'ld=sms')} />
+                  <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} href={drillHref(r.etDate, facetQuery, 'ld=sms&lq=qualified')} />
+                  <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} href={drillHref(r.etDate, facetQuery, 'ld=connected')} />
+                  <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} href={drillHref(r.etDate, facetQuery, 'ld=hvc')} />
                   <Td top={aiQTop(r.aiQ)} sub={aiQSub(r.aiQQual, r.aiQN)} />
-                  <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
-                  <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
+                  <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m href={drillHref(r.etDate, facetQuery, 'ld=closed')} />
+                  <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m href={drillHref(r.etDate, facetQuery, 'ld=closed')} />
                   {/* STRICT maturity dashes (boss 2026-08-15): a DN cell is a
                       dash until the window has fully elapsed — even if units
                       already landed (the stage columns tell that story). A DN
@@ -323,6 +341,7 @@ function Td({
   accent,
   m,
   xcls,
+  href,
 }: {
   top: string
   sub?: string
@@ -331,18 +350,12 @@ function Td({
   // Extra classes — the Spend cell uses this for its md-only sticky-left
   // treatment (frozen beside Day on desktop; normal cell on the phone).
   xcls?: string
+  // Stage-drill link (Nabeel 2026-08-18) — the whole cell becomes a quiet
+  // link to the lead list pre-filtered to this slice.
+  href?: string
 }) {
-  return (
-    <td
-      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
-      style={{
-        padding: sub ? '8px 12px 7px' : '10px 12px',
-        textAlign: 'right',
-        whiteSpace: 'nowrap',
-        verticalAlign: 'middle',
-        borderBottom: '1px dashed var(--color-geg-border)',
-      }}
-    >
+  const body = (
+    <>
       <span
         className="geg-numeric-serif"
         style={{
@@ -362,6 +375,26 @@ function Td({
           {sub}
         </span>
       ) : null}
+    </>
+  )
+  return (
+    <td
+      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
+      style={{
+        padding: sub ? '8px 12px 7px' : '10px 12px',
+        textAlign: 'right',
+        whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
+        borderBottom: '1px dashed var(--color-geg-border)',
+      }}
+    >
+      {href ? (
+        <a href={href} title="See these leads in the list below" style={{ display: 'block', textDecoration: 'none', cursor: 'pointer' }}>
+          {body}
+        </a>
+      ) : (
+        body
+      )}
     </td>
   )
 }

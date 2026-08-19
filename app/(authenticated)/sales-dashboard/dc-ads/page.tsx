@@ -93,6 +93,22 @@ export default async function DcAdsPage({
   const filter: DcAdsEntityFilter = { campaignId: campaign, adsetId: adset, adId: ad, lpSlug: lp }
   const filterActive = !!(ad || adset || campaign || lp)
 
+  // Stage-count drill (Nabeel 2026-08-18): ?ld= (dispositions) / ?lq= (qual
+  // states) preset the lead list's stacked toggles — the daily/ad tables'
+  // counts link here with the matching slice lit. Unknown values drop.
+  const DISPOSITIONS = ['closed', 'hvc', 'connected', 'sms', 'optin'] as const
+  const QUAL_KEYS = ['qualified', 'unqualified', 'partial'] as const
+  const parseList = <T extends string>(v: string | null, allowed: readonly T[]): T[] =>
+    (v ?? '').split(',').filter((x): x is T => (allowed as readonly string[]).includes(x))
+  const initialDispSel = parseList(param((searchParams as Record<string, string | string[]>)?.ld), DISPOSITIONS)
+  const initialQualSel = parseList(param((searchParams as Record<string, string | string[]>)?.lq), QUAL_KEYS)
+
+  // The current facet selection as a query-string fragment, so table drills
+  // preserve the view they were clicked in.
+  const facetQuery = new URLSearchParams(
+    Object.entries({ campaign, adset, ad, lp }).filter((e): e is [string, string] => !!e[1]),
+  ).toString()
+
   const range = dateRangeFromExplicit(startEt, endEt)
   const rangeBounds = { startUtcIso: range.startUtcIso, endUtcIso: range.endUtcIso }
   const [
@@ -268,13 +284,15 @@ export default async function DcAdsPage({
 
       <DcAdsExecSummaryCard exec={execSummary} />
 
-      <DcAdsDailyTable rows={dailyRows} todayEt={todayEt} />
+      <DcAdsDailyTable rows={dailyRows} todayEt={todayEt} facetQuery={facetQuery} />
 
       {/* The per-ad table (boss item 10) — every ad with window activity,
           full stage + speed metrics; its dropdowns narrow the list only. */}
       <DcAdsAdTable
         rows={adTableRows}
         lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
+        startEtDate={startEt}
+        endEtDate={endEt}
       />
 
       {/* Ads + Landing page + Videos — the Hub's summary section shaped to
@@ -302,6 +320,8 @@ export default async function DcAdsPage({
         lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
         spendUsd={spend.spendUsd}
         clockLabel={DC_CLOCK_LABEL}
+        initialDispSel={initialDispSel}
+        initialQualSel={initialQualSel}
       />
 
       <DcAdsCalledSection called={called} />

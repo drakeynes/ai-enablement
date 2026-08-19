@@ -198,6 +198,17 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   Close pull reads lower — D0/D3/D7 on the daily table are the day-of view). Names cap at 50
   per reason with true group totals ("+N more"). Ignores the cascade/LP facets by design.
   Data: `dc_ads_breakdown()` RPC (see `docs/schema/dc_ads_lead_facts.md` § 0149).
+- **Stage-count drill** (Nabeel 2026-08-18): the daily + ad tables' stage counts are links —
+  a click navigates to the SAME page with the slice as the view (`?start/?end` = the day, or
+  `?ad=`/`?campaign=non-attributed` for an ad row) plus `?ld=`/`?lq=` presetting the lead
+  list's stacked toggles, anchored `#leads`. Mapping: Opt-ins → no toggles · Qualified →
+  lq=qualified · SMS → ld=sms · SMS+MQL → ld=sms&lq=qualified · Connects → ld=connected ·
+  HVC → ld=hvc · Units/Closed → ld=closed. Because it IS a navigation, the whole page
+  (stage row, speed boxes) rescopes to the clicked slice — that's the Advertising-Hub drill
+  pattern, not a side effect. **Lead names now open the lead's CLOSE profile** (new tab) on
+  both the embedded lead list and DC Calls — the in-app per-lead lifecycle page kept its
+  route + middleware allowlist but has no inbound links (boss decision; call reviews stay
+  reachable via each call's "review →").
 - **AI call intelligence** (2026-08-18, migrations 0150–0152 — Nabeel's build list): every
   connected call (≥90s, recorded) on a cohort lead is transcribed + Sonnet-reviewed under the
   **dc_ads rubric** (close-on-phone + intent / offer-understanding / rep-score / main objection /

@@ -85,8 +85,10 @@ function ScoreChip({ label, value }: { label: string; value: number | null }) {
   )
 }
 
+// The lead's CLOSE profile (boss 2026-08-18: clicking a lead opens Close,
+// where reps actually work — the in-app lifecycle page lost its links).
 function leadHref(id: string): string {
-  return `/sales-dashboard/leads/${encodeURIComponent(id)}`
+  return `https://app.close.com/lead/${encodeURIComponent(id)}/`
 }
 
 function callHref(c: DcAdsReviewedCall): string {
@@ -120,6 +122,8 @@ function CallLine({ c }: { c: DcAdsReviewedCall }) {
       <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 86 }}>{fmtAt(c.at)}</span>
       <a
         href={leadHref(c.leadId)}
+        target="_blank"
+        rel="noreferrer"
         className="geg-serif"
         style={{ fontSize: 13, color: 'var(--color-geg-text)', textDecoration: 'none' }}
       >
@@ -336,6 +340,8 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
                     <Td>
                       <a
                         href={leadHref(c.leadId)}
+                        target="_blank"
+                        rel="noreferrer"
                         className="geg-serif"
                         style={{ fontSize: 13, color: 'var(--color-geg-text)', textDecoration: 'none' }}
                       >

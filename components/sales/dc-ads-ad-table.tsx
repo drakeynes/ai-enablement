@@ -113,12 +113,25 @@ const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
 
 type MsOption = { id: string; label: string; sub?: string; count?: number }
 
+// Stage-drill href (Nabeel 2026-08-18): the current window + this row's ad
+// identity + the lead-list toggles, anchored at the list. The Non-attributed
+// pseudo-row drills via its pseudo-campaign facet.
+function drillHref(r: DcAdsAdTableRow, startEt: string, endEt: string, toggles: string): string {
+  const facet = r.adId ? `ad=${r.adId}` : 'campaign=non-attributed'
+  const parts = [`start=${startEt}`, `end=${endEt}`, facet, toggles].filter(Boolean)
+  return `/sales-dashboard/dc-ads?${parts.join('&')}#leads`
+}
+
 export function DcAdsAdTable({
   rows,
   lpLabels,
+  startEtDate,
+  endEtDate,
 }: {
   rows: DcAdsAdTableRow[]
   lpLabels: Record<string, string>
+  startEtDate: string
+  endEtDate: string
 }) {
   // Multi-select narrowing (boss 2026-08-15): union WITHIN a dropdown, AND
   // ACROSS them — pick one campaign, two of its ad sets, three ads spread
@@ -229,7 +242,7 @@ export function DcAdsAdTable({
         the lost-ad-tag leads: real stage and speed numbers, but no ad identity by definition — so
         no Meta-side numbers, and its spend lives inside the real ads&apos; rows. Ad-side numbers from Meta; every
         stage from Opt-ins on is the ad&apos;s own leads through the same definitions as the rest of
-        the page, with that ad&apos;s <b>cost per</b> underneath each count. The right block is the
+        the page, with that ad&apos;s <b>cost per</b> underneath each count. <b>Stage counts are clickable</b> — a click jumps to the lead list, scoped to that ad (or the Non-attributed slice) with the matching toggles lit. The right block is the
         ad&apos;s speed-to-lead set (12p–12a ET clock). D0/D3/D7 = units closed within 0/3/7 days of
         each lead&apos;s own opt-in. <b>AI Q</b> = the ad&apos;s average AI lead-quality score (0–10)
         from the call reviews, one count per reviewed lead (newest reviewed call wins); sub-line =
@@ -370,15 +383,15 @@ export function DcAdsAdTable({
                     <Td top={r.ctr != null ? `${r.ctr.toFixed(1)}%` : '—'} />
                     <Td top={fmtUsd(r.cpm, 2)} />
                     <Td top={fmtUsd(r.cpcUnique, 2)} />
-                    <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m />
-                    <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} />
-                    <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} />
-                    <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} />
-                    <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} />
-                    <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} />
+                    <Td top={fmtCount(r.optIns)} sub={costPer(r.spendUsd, r.optIns)} accent m href={drillHref(r, startEtDate, endEtDate, '')} />
+                    <Td top={fmtCount(r.qualified)} sub={costPer(r.spendUsd, r.qualified)} href={drillHref(r, startEtDate, endEtDate, 'lq=qualified')} />
+                    <Td top={fmtCount(r.sms)} sub={costPer(r.spendUsd, r.sms)} href={drillHref(r, startEtDate, endEtDate, 'ld=sms')} />
+                    <Td top={fmtCount(r.smsMql)} sub={costPer(r.spendUsd, r.smsMql)} href={drillHref(r, startEtDate, endEtDate, 'ld=sms&lq=qualified')} />
+                    <Td top={fmtCount(r.connected)} sub={costPer(r.spendUsd, r.connected)} href={drillHref(r, startEtDate, endEtDate, 'ld=connected')} />
+                    <Td top={fmtCount(r.hvc)} sub={costPer(r.spendUsd, r.hvc)} href={drillHref(r, startEtDate, endEtDate, 'ld=hvc')} />
                     <Td top={aiQTop(r.aiQ)} sub={aiQSub(r.aiQQual, r.aiQN)} />
-                    <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m />
-                    <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m />
+                    <Td top={fmtCount(r.units)} sub={costPer(r.spendUsd, r.units)} m href={drillHref(r, startEtDate, endEtDate, 'ld=closed')} />
+                    <Td top={fmtCount(r.closed)} sub={costPer(r.spendUsd, r.closed)} m href={drillHref(r, startEtDate, endEtDate, 'ld=closed')} />
                     <Td top={fmtUsd(r.cashUsd)} />
                     <Td top={roas(r.cashUsd, r.spendUsd)} accent m />
                     <Td top={fmtCount(r.unitsD0)} />
@@ -583,6 +596,7 @@ function Td({
   accent,
   m,
   xcls,
+  href,
 }: {
   top: string
   sub?: string
@@ -590,18 +604,12 @@ function Td({
   m?: boolean
   // Extra classes — the Spend cell's md-only sticky-left treatment.
   xcls?: string
+  // Stage-drill link — the whole cell quietly links to the lead list
+  // pre-filtered to this ad + stage.
+  href?: string
 }) {
-  return (
-    <td
-      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
-      style={{
-        padding: sub ? '8px 12px 7px' : '10px 12px',
-        textAlign: 'right',
-        whiteSpace: 'nowrap',
-        verticalAlign: 'middle',
-        borderBottom: '1px dashed var(--color-geg-border)',
-      }}
-    >
+  const body = (
+    <>
       <span
         className="geg-numeric-serif"
         style={{
@@ -621,6 +629,26 @@ function Td({
           {sub}
         </span>
       ) : null}
+    </>
+  )
+  return (
+    <td
+      className={[m ? '' : 'hidden md:table-cell', xcls ?? ''].join(' ').trim() || undefined}
+      style={{
+        padding: sub ? '8px 12px 7px' : '10px 12px',
+        textAlign: 'right',
+        whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
+        borderBottom: '1px dashed var(--color-geg-border)',
+      }}
+    >
+      {href ? (
+        <a href={href} title="See these leads in the lead list" style={{ display: 'block', textDecoration: 'none', cursor: 'pointer' }}>
+          {body}
+        </a>
+      ) : (
+        body
+      )}
     </td>
   )
 }
