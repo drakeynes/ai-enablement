@@ -209,11 +209,17 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   surface. Surfaces: **AI Q column** on the
   daily + ad tables (avg lead-quality /10, lead-level newest-review-wins; sub-line = the
   qualified-only avg + n) · **AI Rep column** on the by-rep table (call-level avg execution) ·
-  the **Connected Calls subpage** (`/dc-ads/calls`, same URL contract as the parent): summary
-  strip, the "Why aren't DC leads closing?" % table, 🔴 missed-sales / 🟢 great-saves queues
-  (SQL-derived thresholds, `dc_ads_call_reviews()`), archetype × close-rate, verbatim VoC quotes
-  grouped by topic, and the filterable feed (outcome / recoverable / flags / rep / search; 500
-  newest, true totals) — every lead links to its lifecycle page, every call to its full review ·
+  the **Connected Calls page** (`/dc-ads/calls` — its OWN sidebar entry + mobile-strip link since
+  the boss's same-day feedback; route stays nested under /dc-ads for the middleware allowlist;
+  same URL contract as DC Ads): the **feed leads the page** as a labeled table (Time / Lead /
+  Rep / Dur / the four 0-10 scores / Outcome-with-reason / flags; filters: outcome, recoverable,
+  flags, rep, search; 500 newest, true totals), then window averages, the "Why aren't DC leads
+  closing?" % table, 🔴 missed-sales / 🟢 great-saves queues (SQL-derived thresholds,
+  `dc_ads_call_reviews()`), archetype × close-rate, and verbatim VoC quotes grouped by topic —
+  every lead links to its lifecycle page, every call to its full review. The per-call review
+  page (`/sales-dashboard/calls/[id]`) is dc_ads-aware: Closed/Not-closed pill + a DC-signals
+  block (intent / offer understanding / rep execution, archetype, main objection, recoverable,
+  VoC quotes) ·
   the **AI executive summary card** on the main page (nightly, `dc_ads_exec_summaries` — see
   `docs/agents/dc_intel.md`) · **Rep coaching** cards on the calls subpage (weekly,
   `dc_rep_coaching`). Deep links: `middleware.ts` allowlists `/sales-dashboard/leads/*` +

@@ -12,22 +12,26 @@ import { dateRangeFromExplicit, todayEtDate } from '@/lib/db/funnel-window'
 import { DateRangePicker } from '../../funnel/landing-pages/date-range-picker'
 import { PersonPill } from '../../header-pills'
 
-// Sales Dashboard — DC Ads · Connected Calls (subpage, 2026-08-18).
+// Sales Dashboard — Connected Calls (own sidebar entry since the boss's
+// same-day feedback; route stays nested under /dc-ads for the middleware
+// allowlist).
 //
 // The AI call-intelligence surface (Nabeel's build list): every connected
-// call on a DC-ads cohort lead with its dc_ads-rubric review — feed, the
-// why-not-closing distribution, missed-sales / great-saves queues,
-// archetypes, and voice-of-customer quotes. Same URL contract as the parent
-// page (?start/?end + cascade + ?lp) so the two navigate as one surface.
+// call on a DC-ads cohort lead with its dc_ads-rubric review — the calls
+// FEED leads the page (labeled table), then the why-not-closing
+// distribution, missed-sales / great-saves queues, archetypes, and
+// voice-of-customer quotes. Same URL contract as the DC Ads page
+// (?start/?end + cascade + ?lp) so the two navigate as one surface.
 // Data: dc_ads_call_reviews() behind getDcAdsCallIntel (lib/db/dc-ads.ts).
 // Scoring is forward-only from 2026-08-18 — see docs/sales/surfaces.md.
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Scoring started with the 0150 rubric — earlier days have no reviews, so
-// the default window opens at the rubric ship day, not the ads-page floor.
-const DC_AI_FLOOR_ET = '2026-08-18'
+// Default window floor = the ads-page floor: the 0150-rubric backfill
+// re-graded the cohort's earlier calls, so history is populated back to
+// the first lead-form campaign.
+const DC_AI_FLOOR_ET = '2026-07-08'
 
 export default async function DcAdsCallsPage({
   searchParams,

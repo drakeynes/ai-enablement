@@ -219,12 +219,12 @@ function ScorePill({ score }: { score: number }) {
 }
 
 // Outcome pill — call-type aware. Outbound calls are graded on booking;
-// revival (Digital College) calls on closing the sale on the phone.
+// revival + dc_ads (Digital College) calls on closing the sale on the phone.
 function OutcomePill({ review }: { review: SetterCallReviewFull }) {
-  const isRevival = review.call_type === 'revival'
-  const hit = isRevival ? review.closed === true : review.booked === true
-  const yes = isRevival ? 'Closed' : 'Booked'
-  const no = isRevival ? 'Not closed' : 'Not booked'
+  const isCloseRubric = review.call_type !== 'outbound'
+  const hit = isCloseRubric ? review.closed === true : review.booked === true
+  const yes = isCloseRubric ? 'Closed' : 'Booked'
+  const no = isCloseRubric ? 'Not closed' : 'Not booked'
   const tone = hit
     ? { color: 'var(--color-geg-pos)', bg: 'var(--color-geg-pos-fill)', border: 'var(--color-geg-pos-border)', label: yes }
     : { color: 'var(--color-geg-text-3)', bg: 'transparent', border: 'var(--color-geg-border)', label: no }
@@ -479,6 +479,76 @@ function ReviewBox({ detail }: { detail: SetterCallDetail }) {
             </p>
           </ReviewSection>
 
+          {/* DC ads signal set (0150) — dc_ads-rubric rows only. Pre-0150
+              reviews of DC calls have none of these until re-graded. */}
+          {review.call_type === 'dc_ads' && review.intent !== null ? (
+            <>
+              <ReviewSection title="DC signals">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'baseline' }}>
+                  <SignalStat label="Buying intent" value={review.intent} />
+                  <SignalStat label="Offer understanding" value={review.offer_understanding} />
+                  <SignalStat label="Rep execution" value={review.rep_score} />
+                  {review.archetype ? (
+                    <span
+                      className="geg-mono"
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'var(--color-geg-text-2)',
+                        border: '1px solid var(--color-geg-border)',
+                        borderRadius: 999,
+                        padding: '3px 10px',
+                      }}
+                    >
+                      {review.archetype.replace(/_/g, ' ')}
+                    </span>
+                  ) : null}
+                </div>
+                {review.rep_score_reason ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--color-geg-text-2)', margin: '10px 0 0' }}>
+                    <b style={{ fontWeight: 500 }}>Rep execution:</b> {review.rep_score_reason}
+                  </p>
+                ) : null}
+                {review.main_objection ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--color-geg-text-2)', margin: '8px 0 0' }}>
+                    <b style={{ fontWeight: 500 }}>Main objection:</b> {review.main_objection}
+                  </p>
+                ) : null}
+                {review.closed === false ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.55, margin: '8px 0 0' }}>
+                    <span
+                      className="geg-mono"
+                      style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: review.recoverable ? 'var(--color-geg-warn)' : 'var(--color-geg-text-faint)' }}
+                    >
+                      {review.recoverable ? 'Recoverable' : 'Not recoverable'}
+                    </span>
+                    {review.recoverable && review.recoverable_note ? (
+                      <span style={{ color: 'var(--color-geg-text-2)' }}> — {review.recoverable_note}</span>
+                    ) : null}
+                  </p>
+                ) : null}
+              </ReviewSection>
+
+              {review.voc_quotes.length > 0 ? (
+                <ReviewSection title="Voice of customer" count={review.voc_quotes.length}>
+                  {review.voc_quotes.map((v, i) => (
+                    <p
+                      key={i}
+                      className="geg-serif"
+                      style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--color-geg-text)', margin: '0 0 8px', paddingLeft: 12, borderLeft: '2px solid var(--color-geg-accent-border)' }}
+                    >
+                      &ldquo;{v.quote}&rdquo;{' '}
+                      <span className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)' }}>
+                        {v.topic.replace(/_/g, ' ')}
+                      </span>
+                    </p>
+                  ))}
+                </ReviewSection>
+              ) : null}
+            </>
+          ) : null}
+
           <ReviewSection
             title="Setter strengths"
             count={review.setter_strengths.length}
@@ -504,14 +574,14 @@ function ReviewBox({ detail }: { detail: SetterCallDetail }) {
           ) : null}
 
           {(() => {
-            // Outcome blocker — call-type aware. Revival (DC) calls show
-            // "Why didn't close"; outbound calls show "Why didn't book".
-            const isRevival = review.call_type === 'revival'
-            const missed = isRevival ? review.closed === false : review.booked === false
-            const reason = isRevival ? review.no_close_reason : review.no_book_reason
+            // Outcome blocker — call-type aware. Revival + dc_ads (DC) calls
+            // show "Why didn't close"; outbound calls show "Why didn't book".
+            const isCloseRubric = review.call_type !== 'outbound'
+            const missed = isCloseRubric ? review.closed === false : review.booked === false
+            const reason = isCloseRubric ? review.no_close_reason : review.no_book_reason
             if (!missed || !reason) return null
             return (
-              <ReviewSection title={isRevival ? "Why didn't close" : "Why didn't book"}>
+              <ReviewSection title={isCloseRubric ? "Why didn't close" : "Why didn't book"}>
                 <p
                   style={{
                     fontSize: 13.5,
@@ -530,6 +600,23 @@ function ReviewBox({ detail }: { detail: SetterCallDetail }) {
         </>
       )}
     </div>
+  )
+}
+
+// One 0-10 signal stat for the DC-signals row (0-3 weak / 7-10 strong tone,
+// same contract as ScorePill).
+function SignalStat({ label, value }: { label: string; value: number | null }) {
+  if (value === null) return null
+  const color =
+    value <= 3 ? 'var(--color-geg-neg)' : value >= 7 ? 'var(--color-geg-pos)' : 'var(--color-geg-text)'
+  return (
+    <span className="geg-mono" style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)' }}>
+      {label}{' '}
+      <span className="geg-numeric-serif" style={{ fontSize: 16, color, letterSpacing: 0 }}>
+        {value}
+      </span>
+      <span style={{ color: 'var(--color-geg-text-faint)' }}>/10</span>
+    </span>
   )
 }
 

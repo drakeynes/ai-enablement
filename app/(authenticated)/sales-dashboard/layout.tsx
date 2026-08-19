@@ -60,6 +60,7 @@ export default async function SalesDashboardLayout({
         }}
       >
         <MobileNavLink href="/sales-dashboard/dc-ads" label="DC Ads" />
+        <MobileNavLink href="/sales-dashboard/dc-ads/calls" label="Calls" />
         {isAdmin ? <MobileNavLink href="/sales-dashboard/dc-setup" label="DC Setup" /> : null}
       </div>
       {/* `<div>` not `<main>` — the parent (authenticated)/layout.tsx

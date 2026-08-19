@@ -32,7 +32,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export type SetterCallReviewSummary = {
   lead_score: number
   should_be_dqd: boolean
-  call_type: 'outbound' | 'revival'
+  call_type: 'outbound' | 'revival' | 'dc_ads'
   booked: boolean | null
   closed: boolean | null
   sentiment: string
@@ -171,7 +171,7 @@ export async function listSetterCalls(
         close_call_id: string
         lead_score: number
         should_be_dqd: boolean
-        call_type: 'outbound' | 'revival'
+        call_type: 'outbound' | 'revival' | 'dc_ads'
         booked: boolean | null
         closed: boolean | null
         sentiment: string
@@ -243,13 +243,25 @@ export type SetterCallReviewFull = {
   lead_score_reason: string
   should_be_dqd: boolean
   dq_reason: string | null
-  // Outcome: outbound → booked/no_book_reason; revival → closed/no_close_reason.
-  // The inactive pair is null. Branch on call_type.
-  call_type: 'outbound' | 'revival'
+  // Outcome: outbound → booked/no_book_reason; revival + dc_ads →
+  // closed/no_close_reason. The inactive pair is null. Branch on call_type.
+  call_type: 'outbound' | 'revival' | 'dc_ads'
   booked: boolean | null
   no_book_reason: string | null
   closed: boolean | null
   no_close_reason: string | null
+  // The dc_ads ad-intelligence signal set (migration 0150) — null on the
+  // other call types (and on pre-0150 rows).
+  intent: number | null
+  offer_understanding: number | null
+  rep_score: number | null
+  rep_score_reason: string | null
+  main_objection: string | null
+  why_not_closed: string | null
+  recoverable: boolean | null
+  recoverable_note: string | null
+  voc_quotes: Array<{ quote: string; topic: string }>
+  archetype: string | null
   setter_strengths: SetterCallReviewItem[]
   setter_weaknesses: SetterCallReviewItem[]
   lead_attributes: string[]
@@ -356,6 +368,9 @@ export async function getSetterCallById(
         sentiment, lead_score, lead_score_reason,
         should_be_dqd, dq_reason, call_type,
         booked, no_book_reason, closed, no_close_reason,
+        intent, offer_understanding, rep_score, rep_score_reason,
+        main_objection, why_not_closed, recoverable, recoverable_note,
+        voc_quotes, archetype,
         setter_strengths, setter_weaknesses, lead_attributes,
         setter_words, prospect_words, talk_ratio_setter,
         model, prompt_version, reviewed_at
