@@ -12,7 +12,9 @@ Slack delivery by decision):
   immaturity and small review-n are called out as grounding rules.
   (exec-v1 also emitted test_next — retired 2026-08-19, boss wanted the
   card shorter; the validator drops the key if a model still emits it.)
-  Rendered as the card under the stage row on `/sales-dashboard/dc-ads`.
+  Rendered under the stage row on `/sales-dashboard/dc-ads` as a compact
+  fixed-size slider (2026-08-19): one box, arrows page through the four
+  sections, overflow scrolls inside the panel.
 - **Rep coaching** (`rep_coaching.py` → `dc_rep_coaching`) — weekly, one
   Sonnet call per rep with reviewed dc_ads calls that week. Context: the
   rep's per-call scores/outcomes, why-not-closed tally, main objections,

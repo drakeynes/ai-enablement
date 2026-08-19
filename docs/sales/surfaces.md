@@ -233,7 +233,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   block (intent / offer understanding / rep execution, archetype, main objection, recoverable,
   VoC quotes) ·
   the **AI executive summary card** on the main page (nightly, `dc_ads_exec_summaries` — see
-  `docs/agents/dc_intel.md`) · **Rep coaching** cards on the calls subpage (weekly,
+  `docs/agents/dc_intel.md`; since 2026-08-19 a **compact fixed-size slider**: one ~560px box,
+  ‹ › arrows page through the four sections, content scrolls inside — boss: the grid version
+  was "too much going on") · **Rep coaching** cards on the calls subpage (weekly,
   `dc_rep_coaching`). Deep links: `middleware.ts` allowlists `/sales-dashboard/leads/*` +
   `/sales-dashboard/calls/*` (nav entries stay hidden — not the full-dashboard unhide); the
   embedded lead list's names now link to the per-lead page.
