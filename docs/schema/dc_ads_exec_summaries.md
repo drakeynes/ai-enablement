@@ -8,17 +8,19 @@ retrievable by Ella; LLM cost columns inline, no `agent_runs` writes.
 ## Purpose
 
 Nabeel's "Executive Intelligence" ask: the page answers what's going well /
-what's going wrong / is it traffic or sales / what changed / what to test
-next, generated nightly from **aggregates only** (the daily-table rows, the
+what's going wrong / is it traffic or sales / what changed, generated
+nightly from **aggregates only** (the daily-table rows, the
 `dc_ads_call_reviews()` aggregates, spend) — never raw transcripts.
 
 ## Columns
 
 `for_date` (date PK, the ET day summarized) · `summary` (jsonb —
-`{going_well[], going_wrong[], traffic_or_sales, changed[], test_next[]}`,
-short strings validated by the generator, ≤4 items per list) · `model` /
-`prompt_version` / `input_tokens` / `output_tokens` / `cost_usd`
-(provenance + spend) · `created_at` / `updated_at`.
+`{going_well[], going_wrong[], traffic_or_sales, changed[]}`, short strings
+validated by the generator, ≤4 items per list; **exec-v1 rows additionally
+carry `test_next[]`**, retired 2026-08-19 with prompt exec-v2 for brevity —
+the card never renders it) · `model` / `prompt_version` / `input_tokens` /
+`output_tokens` / `cost_usd` (provenance + spend) · `created_at` /
+`updated_at`.
 
 ## Populated by / read by
 

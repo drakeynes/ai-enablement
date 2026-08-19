@@ -7,10 +7,12 @@ Slack delivery by decision):
 - **Exec summary** (`exec_summary.py` → `dc_ads_exec_summaries`) — daily.
   Context: the last 8 daily-table rows, the day's + trailing-7d
   `dc_ads_call_reviews()` aggregates, spend by day. Output: going_well /
-  going_wrong / traffic_or_sales / changed / test_next — every item
-  number-anchored by prompt contract; recent-cohort immaturity and small
-  review-n are called out as grounding rules. Rendered as the card under
-  the stage row on `/sales-dashboard/dc-ads`.
+  going_wrong / traffic_or_sales / changed — every item number-anchored
+  and deliberately short (~15 words) by prompt contract; recent-cohort
+  immaturity and small review-n are called out as grounding rules.
+  (exec-v1 also emitted test_next — retired 2026-08-19, boss wanted the
+  card shorter; the validator drops the key if a model still emits it.)
+  Rendered as the card under the stage row on `/sales-dashboard/dc-ads`.
 - **Rep coaching** (`rep_coaching.py` → `dc_rep_coaching`) — weekly, one
   Sonnet call per rep with reviewed dc_ads calls that week. Context: the
   rep's per-call scores/outcomes, why-not-closed tally, main objections,

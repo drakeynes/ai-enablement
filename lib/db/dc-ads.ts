@@ -293,7 +293,6 @@ export type DcAdsExecSummary = {
     going_wrong: string[]
     traffic_or_sales: string
     changed: string[]
-    test_next: string[]
   }
   createdAt: string
 }

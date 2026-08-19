@@ -3,7 +3,7 @@
 `generate_exec_summary(for_date_et)` builds a compact aggregate context —
 the last 8 daily-table rows (the summarized day + a 7-day baseline), the
 day's and week's call-review aggregates, and spend — asks Sonnet for the
-five exec answers, validates, and upserts dc_ads_exec_summaries.
+four exec answers, validates, and upserts dc_ads_exec_summaries.
 
 The model sees ONLY aggregates. Grounding rules are explicit in the
 prompt: no claims the numbers can't support, small-n caution, and the
@@ -24,13 +24,13 @@ from shared.db import get_client
 
 logger = logging.getLogger("ai_enablement.dc_intel.exec_summary")
 
-PROMPT_VERSION = "exec-v1"
+PROMPT_VERSION = "exec-v2"
 
 _ET = ZoneInfo("America/New_York")
 _MAX_OUTPUT_TOKENS = 1500
 
-_REQUIRED_KEYS = ("going_well", "going_wrong", "traffic_or_sales", "changed", "test_next")
-_LIST_KEYS = ("going_well", "going_wrong", "changed", "test_next")
+_REQUIRED_KEYS = ("going_well", "going_wrong", "traffic_or_sales", "changed")
+_LIST_KEYS = ("going_well", "going_wrong", "changed")
 _MAX_ITEMS = 4
 
 SYSTEM_PROMPT = """\
@@ -48,22 +48,20 @@ Return a single JSON object, nothing else (no fences, no prose):
   "going_well": ["...", "..."],
   "going_wrong": ["...", "..."],
   "traffic_or_sales": "...",
-  "changed": ["...", "..."],
-  "test_next": ["...", "..."]
+  "changed": ["...", "..."]
 }
 
 Rules:
-- going_well / going_wrong: 1-4 items each, one sentence each, every item
-  anchored to a number in the context (quote the number). No generic
-  filler — if little happened, say less.
-- traffic_or_sales: 2-3 sentences answering "is the problem traffic or
-  sales right now?" — citing the specific numbers that drove the verdict
-  (e.g. lead-quality average vs rep-execution average, why-not-closed mix).
-  If the data is too thin to call, say exactly that.
+- going_well / going_wrong: 1-4 items each, one SHORT sentence each (aim
+  under ~15 words), every item anchored to a number in the context (quote
+  the number). No generic filler — if little happened, say less.
+- traffic_or_sales: 1-2 tight sentences answering "is the problem traffic
+  or sales right now?" — citing the specific numbers that drove the
+  verdict (e.g. lead-quality average vs rep-execution average,
+  why-not-closed mix). If the data is too thin to call, say exactly that.
 - changed: 0-3 items — real day-over-baseline shifts (rate or mix changes),
-  each with the before/after numbers. Empty list when nothing moved.
-- test_next: 1-3 concrete, testable suggestions that follow from the data
-  (ad angle, LP copy, dial timing, coaching focus). No platitudes.
+  each with the before/after numbers, one short sentence each. Empty list
+  when nothing moved.
 - Recent cohort days are IMMATURE by design (stages keep climbing for
   days) — never call a fresh day's low downstream numbers a decline.
 - Review coverage may be small (scoring started 2026-08-18). With n under
@@ -117,25 +115,44 @@ def generate_exec_summary(
     day_start, day_end = _et_day_bounds_utc(day)
     week_start, _ = _et_day_bounds_utc(day - timedelta(days=7))
 
-    daily = db.rpc("dc_ads_daily", {"p_end_et": for_date_et, "p_days": 8}).execute().data or []
+    daily = (
+        db.rpc("dc_ads_daily", {"p_end_et": for_date_et, "p_days": 8}).execute().data
+        or []
+    )
     # Strip the wide speed columns — the exec context wants the stage story.
     daily_slim = [
         {
             k: r.get(k)
             for k in (
-                "etDate", "optIns", "qualified", "sms", "smsMql", "connected",
-                "hvc", "units", "closed", "cashUsd", "dials",
-                "aiQ", "aiQN", "aiQQual", "aiQQualN",
+                "etDate",
+                "optIns",
+                "qualified",
+                "sms",
+                "smsMql",
+                "connected",
+                "hvc",
+                "units",
+                "closed",
+                "cashUsd",
+                "dials",
+                "aiQ",
+                "aiQN",
+                "aiQQual",
+                "aiQQualN",
             )
         }
         for r in daily
     ]
-    intel_day = db.rpc(
-        "dc_ads_call_reviews", {"p_start": day_start, "p_end": day_end}
-    ).execute().data
-    intel_week = db.rpc(
-        "dc_ads_call_reviews", {"p_start": week_start, "p_end": day_end}
-    ).execute().data
+    intel_day = (
+        db.rpc("dc_ads_call_reviews", {"p_start": day_start, "p_end": day_end})
+        .execute()
+        .data
+    )
+    intel_week = (
+        db.rpc("dc_ads_call_reviews", {"p_start": week_start, "p_end": day_end})
+        .execute()
+        .data
+    )
 
     spend_rows = (
         db.table("cortana_campaign_daily")
@@ -176,9 +193,13 @@ def generate_exec_summary(
         "output_tokens": result.output_tokens,
         "cost_usd": float(result.cost_usd),
     }
-    resp = db.table("dc_ads_exec_summaries").upsert(row, on_conflict="for_date").execute()
+    resp = (
+        db.table("dc_ads_exec_summaries").upsert(row, on_conflict="for_date").execute()
+    )
     logger.info(
-        "dc_intel.exec_summary.persisted for_date=%s cost=$%s", for_date_et, row["cost_usd"]
+        "dc_intel.exec_summary.persisted for_date=%s cost=$%s",
+        for_date_et,
+        row["cost_usd"],
     )
     return resp.data[0] if resp.data else row
 
@@ -196,11 +217,18 @@ def _parse_and_validate(text: str, for_date_et: str) -> dict[str, Any]:
         raise TypeError(f"exec summary not an object for {for_date_et}")
     missing = set(_REQUIRED_KEYS) - set(parsed)
     if missing:
-        raise RuntimeError(f"exec summary missing keys for {for_date_et}: {sorted(missing)}")
+        raise RuntimeError(
+            f"exec summary missing keys for {for_date_et}: {sorted(missing)}"
+        )
     for key in _LIST_KEYS:
         if not isinstance(parsed[key], list):
             raise TypeError(f"exec summary {key} not a list for {for_date_et}")
-        parsed[key] = [str(v).strip() for v in parsed[key][:_MAX_ITEMS] if str(v).strip()]
-    if not isinstance(parsed["traffic_or_sales"], str) or not parsed["traffic_or_sales"].strip():
+        parsed[key] = [
+            str(v).strip() for v in parsed[key][:_MAX_ITEMS] if str(v).strip()
+        ]
+    if (
+        not isinstance(parsed["traffic_or_sales"], str)
+        or not parsed["traffic_or_sales"].strip()
+    ):
         raise RuntimeError(f"exec summary traffic_or_sales empty for {for_date_et}")
     return {k: parsed[k] for k in _REQUIRED_KEYS}

@@ -1,10 +1,11 @@
 // DC Ads — the daily AI executive summary card (0152).
 //
 // Server-safe pure render of the newest dc_ads_exec_summaries row: what's
-// going well / wrong, the traffic-vs-sales verdict, what changed, what to
-// test next. Generated nightly by api/dc_exec_summary_cron.py from
-// aggregates only. Renders nothing until the first summary lands
-// (dashboard-only by decision — this never posts to Slack).
+// going well / wrong, the traffic-vs-sales verdict, what changed.
+// Generated nightly by api/dc_exec_summary_cron.py from aggregates only.
+// Renders nothing until the first summary lands (dashboard-only by
+// decision — this never posts to Slack). Older rows (exec-v1) carry an
+// extra test_next[] key in the jsonb; it is deliberately not rendered.
 
 import type { DcAdsExecSummary } from '@/lib/db/dc-ads'
 
@@ -67,11 +68,8 @@ export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }
           <div className="geg-serif" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--color-geg-text-2)' }}>
             {s.traffic_or_sales}
           </div>
-          <div style={{ marginTop: 10 }}>
-            <Bullets title="What changed" items={s.changed} />
-          </div>
         </div>
-        <Bullets title="Test next" items={s.test_next} />
+        <Bullets title="What changed" items={s.changed} />
       </div>
       <div className="geg-mono" style={{ marginTop: 12, fontSize: 8.5, letterSpacing: '0.05em', color: 'var(--color-geg-text-faint)', lineHeight: 1.6 }}>
         Generated nightly from the daily table + AI call-review aggregates (never raw transcripts).

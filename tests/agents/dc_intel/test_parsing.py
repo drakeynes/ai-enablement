@@ -14,7 +14,6 @@ _EXEC_OK = {
     "going_wrong": ["HVC→close fell to 1/16."],
     "traffic_or_sales": "Sales-side: lead quality avg 6.1 vs rep execution 4.2.",
     "changed": [],
-    "test_next": ["Test a payday-timed callback block."],
 }
 
 
@@ -25,9 +24,17 @@ def test_exec_accepts_valid_payload():
 
 
 def test_exec_strips_fences_and_caps_items():
-    payload = {**_EXEC_OK, "test_next": [f"idea {i}" for i in range(9)]}
+    payload = {**_EXEC_OK, "going_well": [f"win {i}" for i in range(9)]}
     parsed = _parse_and_validate(f"```json\n{json.dumps(payload)}\n```", "2026-08-18")
-    assert len(parsed["test_next"]) == 4
+    assert len(parsed["going_well"]) == 4
+
+
+def test_exec_drops_retired_test_next_key():
+    # exec-v1 emitted test_next; exec-v2 retired it. A model that still
+    # emits it must not leak it into the stored summary.
+    payload = {**_EXEC_OK, "test_next": ["Test a payday-timed callback block."]}
+    parsed = _parse_and_validate(json.dumps(payload), "2026-08-18")
+    assert "test_next" not in parsed
 
 
 def test_exec_rejects_missing_keys():
