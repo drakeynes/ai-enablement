@@ -105,6 +105,9 @@ const QUAL_LABEL: Record<DcAdsLeadRow['qualState'], string> = {
   partial: 'Partial',
 }
 
+// Tier sort rank (0154): A first, un-tiered last.
+const TIER_RANK: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
+
 const SCROLL_MAX_HEIGHT = 480
 
 export function DcAdsLeadsSection({
@@ -126,6 +129,9 @@ export function DcAdsLeadsSection({
   onToggleQual: (q: QualKey) => void
 }) {
   const [query, setQuery] = useState('')
+  // Sort by tier (0154): A→D then un-tiered, newest-first within a tier —
+  // the dial-priority view. Off = the default newest-first list.
+  const [tierSort, setTierSort] = useState(false)
 
   const withDisposition = useMemo(
     () => rows.map((r) => ({ ...r, disposition: dispositionOf(r) })),
@@ -135,7 +141,7 @@ export function DcAdsLeadsSection({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     const qDigits = q.replace(/[^0-9]/g, '')
-    return withDisposition.filter((r) => {
+    const filtered = withDisposition.filter((r) => {
       if (!matchesToggles(r, dispSel, qualSel)) return false
       if (!q) return true
       if (r.name.toLowerCase().includes(q)) return true
@@ -144,7 +150,12 @@ export function DcAdsLeadsSection({
         return true
       return false
     })
-  }, [withDisposition, query, dispSel, qualSel])
+    if (!tierSort) return filtered
+    // Stable sort: rows arrive newest-first, so equal tiers keep that order.
+    return [...filtered].sort(
+      (a, b) => (TIER_RANK[a.tier ?? ''] ?? 4) - (TIER_RANK[b.tier ?? ''] ?? 4),
+    )
+  }, [withDisposition, query, dispSel, qualSel, tierSort])
 
   const counts = useMemo(() => {
     const c: Record<Disposition, number> = { closed: 0, hvc: 0, connected: 0, sms: 0, optin: 0 }
@@ -210,14 +221,20 @@ export function DcAdsLeadsSection({
             />
           )
         })}
+        <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--color-geg-border)' }} />
+        <ToggleButton
+          label="Sort · Tier"
+          active={tierSort}
+          onClick={() => setTierSort((s) => !s)}
+        />
       </div>
 
       {/* Mobile (2026-08-15): the phone shows Lead / Qualified / Disposition
-          only (the other five columns are desktop-only, `hidden md:block`) so
+          only (the other six columns are desktop-only, `hidden md:block`) so
           the list fits the screen with no sideways scroll; ≥md keeps the full
-          eight columns inside the horizontal scroller. */}
+          nine columns inside the horizontal scroller. */}
       <div style={{ overflowX: 'auto' }}>
-      <div className="md:min-w-[860px]">
+      <div className="md:min-w-[900px]">
       {/* Header — outside the vertical scroll box so it stays pinned. */}
       <div
         className={GRID_COLS}
@@ -236,6 +253,7 @@ export function DcAdsLeadsSection({
         <ColH label="Time to dial" hideM />
         <ColH label="Connected" hideM />
         <ColH label="Qualified" />
+        <ColH label="Tier" hideM />
         <ColH label="Disposition" />
       </div>
 
@@ -305,6 +323,9 @@ export function DcAdsLeadsSection({
               >
                 {QUAL_LABEL[r.qualState]}
               </span>
+              <span className="hidden md:block" style={{ textAlign: 'right' }}>
+                <TierBadge tier={r.tier} />
+              </span>
               <span style={{ textAlign: 'right' }}>
                 <DispositionBadge d={r.disposition} />
               </span>
@@ -327,7 +348,12 @@ export function DcAdsLeadsSection({
         <b>Connected</b> = a <b>call ≥90s only</b> — no form or text evidence counts ·{' '}
         <b>Qualified</b>: Yes = their Typeform answered &ldquo;Yes I can pay for the AI tools&rdquo;;
         No = they answered the question but not with that; <i>Partial</i> = they never answered it
-        (no completed survey) · <b>HVC</b> = connected <i>and</i> (qualified or
+        (no completed survey) · <b>Tier</b> = the two Typeform answers combined (can-pay × AI
+        experience): <b>A</b> = can pay + has used AI beyond dabbling · <b>B</b> = can pay +
+        ChatGPT dabbler · <b>C</b> = can&apos;t pay + experienced · <b>D</b> = can&apos;t pay +
+        dabbler · — = the survey never produced both answers. Historical close rates run ~8% (A)
+        down to ~1% (D) — <b>Sort · Tier</b> puts the A leads first, newest first within a tier ·{' '}
+        <b>HVC</b> = connected <i>and</i> (qualified or
         texted us) · <b>Closed</b> = DC close with a plan · Opt-in = none of those yet.
       </FineNote>
     </div>
@@ -336,10 +362,10 @@ export function DcAdsLeadsSection({
 
 // Responsive grid template (mobile 2026-08-15): three columns on a phone
 // (Lead / Qualified / Disposition — the hidden cells don't occupy tracks),
-// the full eight from md up. Template lives in classes because inline styles
-// can't carry media queries.
+// the full nine (Tier added 0154) from md up. Template lives in classes
+// because inline styles can't carry media queries.
 const GRID_COLS =
-  'grid grid-cols-[minmax(0,1.7fr)_0.6fr_0.9fr] md:grid-cols-[minmax(180px,1.6fr)_0.6fr_minmax(110px,1fr)_0.5fr_0.65fr_0.6fr_0.6fr_0.8fr]'
+  'grid grid-cols-[minmax(0,1.7fr)_0.6fr_0.9fr] md:grid-cols-[minmax(180px,1.6fr)_0.6fr_minmax(110px,1fr)_0.5fr_0.65fr_0.6fr_0.6fr_0.4fr_0.8fr]'
 
 function ToggleButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -362,6 +388,34 @@ function ToggleButton({ label, active, onClick }: { label: string; active: boole
     >
       {label}
     </button>
+  )
+}
+
+// Typeform lead tier (0154): A stands out (dial these first), D reads muted,
+// un-tiered is a plain dash — the survey never produced both answers.
+function TierBadge({ tier }: { tier: DcAdsLeadRow['tier'] }) {
+  if (!tier) {
+    return (
+      <span className="geg-mono" style={{ fontSize: 10, color: 'var(--color-geg-text-faint)' }}>
+        —
+      </span>
+    )
+  }
+  const strong = tier === 'A'
+  return (
+    <span
+      className="geg-mono"
+      style={{
+        fontSize: 9.5,
+        letterSpacing: '0.07em',
+        padding: '2px 7px',
+        borderRadius: 4,
+        border: `1px solid ${strong ? ACCENT : 'var(--color-geg-border)'}`,
+        color: strong ? ACCENT : tier === 'D' ? 'var(--color-geg-text-faint)' : 'var(--color-geg-text-2)',
+      }}
+    >
+      {tier}
+    </span>
   )
 }
 

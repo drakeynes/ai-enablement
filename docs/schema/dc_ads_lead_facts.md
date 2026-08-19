@@ -175,6 +175,21 @@ and window averages. ACTIVITY-scoped, unlike the cohort tables. Everything
 reads `call_type='dc_ads'` rows only — pre-0150 book-rubric reviews never
 surface (forward-only decision).
 
+**0154** adds `tf_experience` — the lead's normalized "What is your
+experience level with AI?" answer (`dabbler` | `intermediate` | `pro`;
+null = not answered / no matched response), stamped in the same
+tf_resp/tf_match pass as `tf_qualified`. The answer is recognized by its
+distinctive choice labels (identical copy on every DC form to date —
+`%dabbled%` / `%used it a good amount%` / `%experienced ai pro%`), so new
+same-copy forms need no registry config and unknown copy falls to null.
+`dc_ads_lead_roster()` derives **`tier`** from it beside qualState:
+**A** = qualified + experienced (intermediate|pro), **B** = qualified +
+dabbler, **C** = unqualified + experienced, **D** = unqualified + dabbler,
+null unless BOTH answers are present. Basis (2026-08-19 cohort analysis,
+1,130 matched leads): close rates A ≈ 8% → D ≈ 0.8%, a 10× spread — the
+funnel's only pre-call quality score. Surfaced as the lead list's Tier
+column + its "Sort · Tier" toggle.
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

@@ -1097,6 +1097,11 @@ export type DcAdsLeadRow = {
   // qualify answer; 'unqualified' = answered the question, missed; 'partial'
   // = never answered it (no completed survey, or skipped the question).
   qualState: 'qualified' | 'unqualified' | 'partial'
+  // Typeform lead tier (0154, boss 2026-08-19): can-pay × AI-experience —
+  // A = pay+experienced, B = pay+dabbler, C = no-pay+experienced, D =
+  // no-pay+dabbler; null unless both answers are present. Derived in the
+  // roster RPC beside qualState. Historical close rates A≈8% … D≈1%.
+  tier: 'A' | 'B' | 'C' | 'D' | null
   connected: boolean
   hvc: boolean
   closed: boolean

@@ -298,7 +298,12 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   **Connected** = Yes/— (call ≥90s), and **Qualified is 3-state** — Yes ("Yes I can pay for the
   AI tools") / No (answered the question, missed) / Partial (never answered it — no completed
   survey; true Typeform partials are anonymous and unlinkable, verified live 2026-08-15, so
-  Partial = "didn't finish the survey" incl. never-started). "Marketing qualified" = Qualified
+  Partial = "didn't finish the survey" incl. never-started). **Tier** (0154, boss 2026-08-19,
+  desktop-only column) = can-pay × AI-experience from the lead's own Typeform — A = pay +
+  experienced / B = pay + dabbler / C = no-pay + experienced / D = no-pay + dabbler, — unless
+  both answered; historical close rates A ≈ 8% → D ≈ 0.8%, so the **Sort · Tier** toggle
+  (beside the qual toggles) reorders the list A-first as the dial-priority view (default stays
+  newest-first; sort is display-only — the speed boxes ignore it). "Marketing qualified" = Qualified
   (boss: same thing — Close's `marketing_qualified` overlaps `tf_qualified` 460/462). **Search +
   toggles filter fully client-side — they never navigate.** Toggles are CUMULATIVE (Nabeel
   2026-08-14): each shows every lead that reached that stage, so toggle counts equal the stage
