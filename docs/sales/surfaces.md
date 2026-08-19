@@ -219,7 +219,8 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   too — the dashboard reads `call_type='dc_ads'` rows only, so wrong-rubric grades never
   surface. Surfaces: **AI Q column** on the
   daily + ad tables (avg lead-quality /10, lead-level newest-review-wins; sub-line = the
-  qualified-only avg + n) · **AI Rep column** on the by-rep table (call-level avg execution) ·
+  qualified-only avg — the n count was dropped 2026-08-19 by boss request) · **AI Rep column**
+  on the by-rep table (call-level avg execution) ·
   the **Connected Calls page** (`/dc-ads/calls` — its OWN sidebar entry + mobile-strip link since
   the boss's same-day feedback; route stays nested under /dc-ads for the middleware allowlist;
   same URL contract as DC Ads): the **feed leads the page** as a labeled table (Time / Lead /

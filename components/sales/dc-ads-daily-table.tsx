@@ -40,15 +40,16 @@ function fmtCount(value: number): string {
 
 // AI lead-quality cell (0151): avg /10 over the cohort's dc_ads-reviewed
 // leads; '—' until the 0150 rubric has graded any (forward-only — old-rubric
-// reviews never show). Sub-line = the qualified-only avg + how many leads
-// the average stands on (small n = read with care).
+// reviews never show). Sub-line = the qualified-only avg (only rendered
+// once any leads are reviewed; the review count stays out of the cell by
+// boss request 2026-08-19).
 export function aiQTop(aiQ: number | null): string {
   return aiQ !== null ? aiQ.toFixed(1) : '—'
 }
 
 export function aiQSub(aiQQual: number | null, n: number): string | undefined {
   if (n === 0) return undefined
-  return `Q ${aiQQual !== null ? aiQQual.toFixed(1) : '—'} · n ${n}`
+  return `Q ${aiQQual !== null ? aiQQual.toFixed(1) : '—'}`
 }
 
 // Cost-per sub-line: the day's spend ÷ the count. '—' when the count is 0
@@ -189,9 +190,8 @@ export function DcAdsDailyTable({
         day with the matching toggles lit, so the number turns into names.{' '}
         <b>AI Q</b> = the day&apos;s average AI lead-quality score (0–10) from the call reviews —
         each reviewed lead counts once (its newest reviewed call); the sub-line is the same average
-        over <b>qualified</b> leads only, with <b>n</b> = how many reviewed leads the average stands
-        on (only connected calls get reviews, and scoring started 2026-08-18 — a dash means no
-        reviewed leads that day, not zero quality).{' '}
+        over <b>qualified</b> leads only (only connected calls get reviews, and scoring started
+        2026-08-18 — a dash means no reviewed leads that day, not zero quality).{' '}
         <b>D0 / D3 / D7 U</b> = units closed the same day / under 3 days / under 7 days after the
         opt-in (cumulative); a cell stays a dash until its window has FULLY elapsed — a DN number
         only ever appears final (early closes show in the stage columns meanwhile); the

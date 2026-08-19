@@ -246,8 +246,8 @@ export function DcAdsAdTable({
         ad&apos;s speed-to-lead set (12p–12a ET clock). D0/D3/D7 = units closed within 0/3/7 days of
         each lead&apos;s own opt-in. <b>AI Q</b> = the ad&apos;s average AI lead-quality score (0–10)
         from the call reviews, one count per reviewed lead (newest reviewed call wins); sub-line =
-        the qualified-only average and <b>n</b> reviewed leads — only connected calls get reviews
-        (scored from 2026-08-18), so read small-n cells with care. The three pickers narrow this list only (the page filter above
+        the qualified-only average — only connected calls get reviews (scored from 2026-08-18), so
+        read cells over few reviews with care. The three pickers narrow this list only (the page filter above
         is untouched): tick any mix — within a picker selections add together, across pickers they
         combine, and higher levels narrow what the lower ones offer. Each row&apos;s sub-line says
         which campaign · ad set the ad lives in (hover for the full path). Follows the date picker
