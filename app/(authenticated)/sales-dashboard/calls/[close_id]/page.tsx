@@ -25,24 +25,20 @@ export const dynamic = 'force-dynamic'
 
 export default async function SetterCallDetailPage({
   params,
-  searchParams,
 }: {
   params: { close_id: string }
+  // ?lead= is still accepted on the URL (older links carry it) but no longer
+  // read — the back link goes to Connected Calls (boss 2026-08-18; the lead
+  // is one click away via the feed's lead column or the Data box).
   searchParams?: { lead?: string | string[] }
 }) {
   const id = decodeURIComponent(params.close_id)
   const detail = await getSetterCallById(id)
   if (!detail) notFound()
 
-  // Return to the lead this call was opened from (carried as ?lead=), falling
-  // back to the call's own lead, then the leads roster.
-  const fromLead = (Array.isArray(searchParams?.lead) ? searchParams?.lead[0] : searchParams?.lead) ?? null
-  const leadId = fromLead || detail.prospect_lead_id || null
-  const backHref = leadId ? `/sales-dashboard/leads/${encodeURIComponent(leadId)}` : '/sales-dashboard/leads'
-
   return (
     <div style={{ padding: '4px 8px 28px' }}>
-      <BackLink href={backHref} hasLead={!!leadId} />
+      <BackLink />
       <HeaderBlock detail={detail} />
 
       <div
@@ -71,10 +67,10 @@ export default async function SetterCallDetailPage({
 // Header — eyebrow + title + pill row
 // ----------------------------------------------------------------------
 
-function BackLink({ href, hasLead }: { href: string; hasLead: boolean }) {
+function BackLink() {
   return (
     <Link
-      href={href}
+      href="/sales-dashboard/dc-ads/calls"
       className="geg-mono"
       style={{
         display: 'inline-block',
@@ -86,7 +82,7 @@ function BackLink({ href, hasLead }: { href: string; hasLead: boolean }) {
         textDecoration: 'none',
       }}
     >
-      {hasLead ? '← Back to lead' : '← Back to leads'}
+      ← Back to connected calls
     </Link>
   )
 }

@@ -140,6 +140,8 @@ function CallLine({ c }: { c: DcAdsReviewedCall }) {
 
 type FeedFilter = 'all' | 'closed' | 'lost' | 'recoverable' | 'missed' | 'save'
 
+// Sticky inside the feed's fixed-height scroll box — solid background so
+// rows never bleed through while scrolling.
 const TH_STYLE: React.CSSProperties = {
   padding: '7px 10px',
   fontSize: 9,
@@ -149,6 +151,10 @@ const TH_STYLE: React.CSSProperties = {
   textAlign: 'left',
   whiteSpace: 'nowrap',
   borderBottom: '1px solid var(--color-geg-border)',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
+  background: 'var(--color-geg-bg)',
 }
 
 function Td({
@@ -271,8 +277,12 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
               padding: '4px 8px',
               borderRadius: 5,
               border: '1px solid var(--color-geg-border-strong)',
-              background: 'transparent',
-              color: 'var(--color-geg-text-2)',
+              // Solid dark background + colorScheme so the NATIVE option
+              // popup renders dark too (transparent left it white — boss
+              // couldn't read the names).
+              background: 'var(--color-geg-bg-elev)',
+              color: 'var(--color-geg-text)',
+              colorScheme: 'dark',
               fontSize: 10,
             }}
           >
@@ -303,7 +313,9 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
             No calls match.
           </span>
         ) : (
-          <div style={{ overflowX: 'auto', border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
+          // Fixed-height scroll box (boss 2026-08-18) — the backfilled
+          // history makes this hundreds of rows; header stays pinned.
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 540, border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
             <table className="geg-mono" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
               <thead>
                 <tr>
@@ -405,6 +417,23 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
             </div>
           </div>
         )}
+        {/* Archetypes live inside this box (boss 2026-08-18) — who the
+            leads ARE sits next to why they don't close. */}
+        {intel.archetypes.length > 0 ? (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-geg-border)' }}>
+            <div style={sectionTitle}>Lead archetypes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+              {intel.archetypes.map((a) => (
+                <span key={a.archetype} className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-2)' }}>
+                  <b>{ARCHETYPE_LABELS[a.archetype] ?? a.archetype}</b> {a.n}
+                  <span style={{ color: 'var(--color-geg-text-faint)' }}>
+                    {' '}· {a.n > 0 ? Math.round((a.closes / a.n) * 100) : 0}% closed
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* ------------------------------------------------- flag queues */}
@@ -435,21 +464,6 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
           ) : (
             intel.saves.map((c) => <CallLine key={c.callId} c={c} />)
           )}
-        </div>
-      </div>
-
-      {/* -------------------------------------------------- archetypes */}
-      <div style={card}>
-        <div style={sectionTitle}>Lead archetypes</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-          {intel.archetypes.map((a) => (
-            <span key={a.archetype} className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-2)' }}>
-              <b>{ARCHETYPE_LABELS[a.archetype] ?? a.archetype}</b> {a.n}
-              <span style={{ color: 'var(--color-geg-text-faint)' }}>
-                {' '}· {a.n > 0 ? Math.round((a.closes / a.n) * 100) : 0}% closed
-              </span>
-            </span>
-          ))}
         </div>
       </div>
 
