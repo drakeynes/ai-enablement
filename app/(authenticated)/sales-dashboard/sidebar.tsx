@@ -43,11 +43,11 @@ const NAV: NavItem[] = [
   // ad spend in front). Outbound's shape, scoped only to lead-form campaigns —
   // no outbound leads here, no ad leads there.
   { href: '/sales-dashboard/dc-ads', label: 'DC Ads' },
-  // Connected Calls = the AI call-intelligence surface (2026-08-18, boss:
-  // its own sidebar page): every reviewed connected call on a DC-ads cohort
+  // DC Calls = the AI call-intelligence surface (2026-08-18, boss: its own
+  // sidebar page): every reviewed connected call on a DC-ads cohort
   // lead + the intel blocks. Nested under /dc-ads so the middleware
   // allowlist covers it, but a TOP-LEVEL nav entry by design.
-  { href: '/sales-dashboard/dc-ads/calls', label: 'Connected Calls' },
+  { href: '/sales-dashboard/dc-ads/calls', label: 'DC Calls' },
   // Leads = the roster of every lead opted-in in the window (new + re-opt-in),
   // with type/stage filters set by the funnel drill or the filter bar.
   { href: '/sales-dashboard/leads', label: 'Leads', hidden: true },

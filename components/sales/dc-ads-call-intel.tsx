@@ -206,15 +206,16 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
   }, [intel.calls, feedFilter, repFilter, q])
 
   const lostReasons = Object.entries(intel.whyNotClosed).sort((a, b) => b[1] - a[1])
-  const vocByTopic = useMemo(() => {
-    const m = new Map<string, DcAdsVocQuote[]>()
-    for (const v of intel.voc) {
-      const list = m.get(v.topic)
-      if (list) list.push(v)
-      else m.set(v.topic, [v])
-    }
-    return Array.from(m.entries()).sort((a, b) => b[1].length - a[1].length)
-  }, [intel.voc])
+  // Top quotes only (boss 2026-08-18 — the full list was verbose): ranked by
+  // the source call's lead-quality + intent, so the box illustrates what the
+  // BEST prospects say, capped at 8.
+  const topVoc = useMemo(() => {
+    const rankByCall = new Map(intel.calls.map((c) => [c.callId, c.leadScore + c.intent]))
+    return intel.voc
+      .map((v): DcAdsVocQuote & { rank: number } => ({ ...v, rank: rankByCall.get(v.callId) ?? 0 }))
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, 8)
+  }, [intel.voc, intel.calls])
 
   if (intel.avg.n === 0) {
     return (
@@ -468,24 +469,22 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
       </div>
 
       {/* --------------------------------------------- voice of customer */}
-      {intel.voc.length > 0 ? (
+      {topVoc.length > 0 ? (
         <div style={card}>
-          <div style={sectionTitle}>Voice of customer — verbatim quotes for marketing</div>
-          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
-            {vocByTopic.map(([topic, quotes]) => (
-              <div key={topic}>
-                <div className="geg-mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)', marginBottom: 4 }}>
-                  {TOPIC_LABELS[topic] ?? topic} · {quotes.length}
-                </div>
-                {quotes.slice(0, 8).map((v, i) => (
-                  <div key={`${v.callId}-${i}`} className="geg-serif" style={{ fontSize: 12.5, lineHeight: 1.55, padding: '4px 0', color: 'var(--color-geg-text-2)' }}>
-                    &ldquo;{v.quote}&rdquo;{' '}
-                    <span className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)' }}>— {v.leadName}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
+          <div style={sectionTitle}>
+            Voice of customer · top quotes
+            <span style={{ textTransform: 'none', letterSpacing: '0.04em' }}>
+              {' '}— from the highest-quality prospects · {intel.voc.length.toLocaleString('en-US')} collected in window
+            </span>
           </div>
+          {topVoc.map((v, i) => (
+            <div key={`${v.callId}-${i}`} className="geg-serif" style={{ fontSize: 12.5, lineHeight: 1.55, padding: '4px 0', color: 'var(--color-geg-text-2)' }}>
+              &ldquo;{v.quote}&rdquo;{' '}
+              <span className="geg-mono" style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-geg-text-faint)' }}>
+                {TOPIC_LABELS[v.topic] ?? v.topic} — {v.leadName}
+              </span>
+            </div>
+          ))}
         </div>
       ) : null}
 

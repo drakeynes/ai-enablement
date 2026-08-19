@@ -71,7 +71,7 @@ export default async function DcAdsCallsPage({
     <div>
       <HeaderBand
         eyebrow="SALES · DIGITAL COLLEGE"
-        title="Connected Calls."
+        title="DC Calls."
         backlink={{ href: '/sales-dashboard/dc-ads', label: 'Back to DC Ads' }}
         actions={<PersonPill label="EST · Nabeel" />}
       />
