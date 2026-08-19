@@ -295,6 +295,22 @@ export default async function DcAdsPage({
         endEtDate={endEt}
       />
 
+      {/* Speed-to-lead boxes + the embedded lead roster, one client wrapper
+          (boss 2026-08-15): the stacked toggles filter the roster AND
+          recompute every speed box over the same subset. All numbers come
+          from the per-lead roster rows (12p–12a ET clock, same 24h cap —
+          math server-side in lib/db/dc-ads.ts, aggregation client-side).
+          Sits directly under the tables (boss 2026-08-19) — their stage
+          counts drill into this section, so the jump stays short. */}
+      <DcAdsSpeedLeadsSection
+        rows={leadRoster}
+        lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
+        spendUsd={spend.spendUsd}
+        clockLabel={DC_CLOCK_LABEL}
+        initialDispSel={initialDispSel}
+        initialQualSel={initialQualSel}
+      />
+
       {/* Ads + Landing page + Videos — the Hub's summary section shaped to
           the DC funnel; follows the cascade + landing-page dropdown. */}
       <DcAdsLpSummarySection summary={adsLp} />
@@ -309,20 +325,6 @@ export default async function DcAdsPage({
       {/* Roster — one card per human on the team (managed in DC Setup),
           DC-cohort activity only. Below the by-rep table per boss item 8. */}
       <DcAdsRosterSection team={team} reps={byRep.reps} />
-
-      {/* Speed-to-lead boxes + the embedded lead roster, one client wrapper
-          (boss 2026-08-15): the stacked toggles filter the roster AND
-          recompute every speed box over the same subset. All numbers come
-          from the per-lead roster rows (12p–12a ET clock, same 24h cap —
-          math server-side in lib/db/dc-ads.ts, aggregation client-side). */}
-      <DcAdsSpeedLeadsSection
-        rows={leadRoster}
-        lpLabels={Object.fromEntries(hierarchy.landingPages.map((p) => [p.slug, p.label]))}
-        spendUsd={spend.spendUsd}
-        clockLabel={DC_CLOCK_LABEL}
-        initialDispSel={initialDispSel}
-        initialQualSel={initialQualSel}
-      />
 
       <DcAdsCalledSection called={called} />
 

@@ -289,7 +289,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   Closes / Units / Cash from the by-rep RPC; confirmed members only — unlinked activity is not
   rendered.
 - **Leads roster** (added 2026-08-14, migration 0137) — the Leads page's list scoped to DC ad
-  leads, embedded right under the speed-to-lead boxes: one row per cohort lead (name / phone /
+  leads, embedded right under the speed-to-lead boxes (the whole speed+leads block sits directly
+  beneath the daily/ads tables since 2026-08-19 — their stage-count drills land here, so the
+  jump is short; LP summary / by-rep / roster follow it): one row per cohort lead (name / phone /
   email / opt-in day / landing page / dials / time to dial / connected / qualified /
   disposition), all inside a fixed-height scrollable box. Since 0144 (boss batch 2026-08-15):
   **Time to dial** = opt-in → first outbound call on the DC 12p–12a ET clock (— = never dialed),
