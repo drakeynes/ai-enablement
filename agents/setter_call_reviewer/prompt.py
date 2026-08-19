@@ -42,9 +42,11 @@ Drake's hard rules (carried from v1, 2026-05-27):
 
 v2 (2026-06-30): split the outcome by call_type (book vs close).
 v3 (2026-08-18): the dc_ads rubric + ad-intelligence signals.
+v3.1 (2026-08-18): archetype tightened - a job is not a business (an
+  employed lead exploring a side venture is never existing_business_owner).
 """
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v3.1"
 
 # ---------------------------------------------------------------------------
 # Shared scaffolding. {intro} and {outcome_block} are spliced per call type;
@@ -329,8 +331,13 @@ _DC_ADS_EXTRA_BLOCK = """
                               history of chasing offers
     skeptic                   engaged but leads with distrust of the
                               promise/company
-    existing_business_owner   has a real operating business; evaluates
-                              DC as a tool for it
+    existing_business_owner   CURRENTLY OPERATES a real business (revenue
+                              or an established operation); evaluates DC
+                              as a tool for it. A JOB IS NOT A BUSINESS —
+                              an employee exploring a side venture is an
+                              entrepreneur/learner/seeker, never this. If
+                              you'd tag their business stage:ideation or
+                              revenue:pre_revenue, this archetype is wrong.
     other                     none of the above fits"""
 
 _DC_ADS_WEAKNESS_EXAMPLES = (
