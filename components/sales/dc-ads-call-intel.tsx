@@ -391,50 +391,63 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
         <ScoreChip label="Rep execution" value={intel.avg.repScore} />
       </div>
 
-      {/* -------------------------------- why aren't DC leads closing? */}
+      {/* ---------------- why aren't DC leads closing? + archetypes ----
+          One box, two halves side by side (boss 2026-08-18 round 4: the
+          reasons only used half the width — archetypes fill the other
+          half as a matching vertical list). Stacks on narrow screens. */}
       <div style={card}>
-        <div style={sectionTitle}>Why aren&apos;t DC leads closing?</div>
-        {lostReasons.length === 0 ? (
-          <span className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-faint)' }}>
-            No lost reviewed calls in the window.
-          </span>
-        ) : (
-          <div style={{ maxWidth: 480 }}>
-            {lostReasons.map(([reason, n]) => (
-              <div
-                key={reason}
-                className="geg-mono"
-                style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--color-geg-border)', fontSize: 11 }}
-              >
-                <span style={{ flex: 1, color: 'var(--color-geg-text-2)' }}>{WHY_LABELS[reason] ?? reason}</span>
-                <span className="geg-numeric-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)' }}>
-                  {intel.lostTotal > 0 ? `${Math.round((n / intel.lostTotal) * 100)}%` : '—'}
-                </span>
-                <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 34, textAlign: 'right' }}>{n}</span>
+        <div style={{ display: 'grid', gap: 28, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+          <div>
+            <div style={sectionTitle}>Why aren&apos;t DC leads closing?</div>
+            {lostReasons.length === 0 ? (
+              <span className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-faint)' }}>
+                No lost reviewed calls in the window.
+              </span>
+            ) : (
+              <div>
+                {lostReasons.map(([reason, n]) => (
+                  <div
+                    key={reason}
+                    className="geg-mono"
+                    style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--color-geg-border)', fontSize: 11 }}
+                  >
+                    <span style={{ flex: 1, color: 'var(--color-geg-text-2)' }}>{WHY_LABELS[reason] ?? reason}</span>
+                    <span className="geg-numeric-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)' }}>
+                      {intel.lostTotal > 0 ? `${Math.round((n / intel.lostTotal) * 100)}%` : '—'}
+                    </span>
+                    <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 34, textAlign: 'right' }}>{n}</span>
+                  </div>
+                ))}
+                <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginTop: 6 }}>
+                  % of {intel.lostTotal} lost reviewed calls — primary reason per call, judged by the AI review.
+                </div>
               </div>
-            ))}
-            <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginTop: 6 }}>
-              % of {intel.lostTotal} lost reviewed calls — primary reason per call, judged by the AI review.
-            </div>
+            )}
           </div>
-        )}
-        {/* Archetypes live inside this box (boss 2026-08-18) — who the
-            leads ARE sits next to why they don't close. */}
-        {intel.archetypes.length > 0 ? (
-          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-geg-border)' }}>
-            <div style={sectionTitle}>Lead archetypes</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          {intel.archetypes.length > 0 ? (
+            <div>
+              <div style={sectionTitle}>Lead archetypes</div>
               {intel.archetypes.map((a) => (
-                <span key={a.archetype} className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-2)' }}>
-                  <b>{ARCHETYPE_LABELS[a.archetype] ?? a.archetype}</b> {a.n}
-                  <span style={{ color: 'var(--color-geg-text-faint)' }}>
-                    {' '}· {a.n > 0 ? Math.round((a.closes / a.n) * 100) : 0}% closed
+                <div
+                  key={a.archetype}
+                  className="geg-mono"
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--color-geg-border)', fontSize: 11 }}
+                >
+                  <span style={{ flex: 1, color: 'var(--color-geg-text-2)' }}>{ARCHETYPE_LABELS[a.archetype] ?? a.archetype}</span>
+                  <span className="geg-numeric-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)' }}>
+                    {a.n}
                   </span>
-                </span>
+                  <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 64, textAlign: 'right' }}>
+                    {a.n > 0 ? Math.round((a.closes / a.n) * 100) : 0}% closed
+                  </span>
+                </div>
               ))}
+              <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginTop: 6 }}>
+                Who the window&apos;s reviewed leads are, and how each type converts.
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       {/* ------------------------------------------------- flag queues */}
@@ -450,7 +463,10 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
           {intel.missed.length === 0 ? (
             <span className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-faint)' }}>None in the window.</span>
           ) : (
-            intel.missed.map((c) => <CallLine key={c.callId} c={c} />)
+            // Scroll box (boss round 4) — these stack up over a long window.
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {intel.missed.map((c) => <CallLine key={c.callId} c={c} />)}
+            </div>
           )}
         </div>
         <div style={card}>
@@ -463,7 +479,9 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
           {intel.saves.length === 0 ? (
             <span className="geg-mono" style={{ fontSize: 10.5, color: 'var(--color-geg-text-faint)' }}>None in the window.</span>
           ) : (
-            intel.saves.map((c) => <CallLine key={c.callId} c={c} />)
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {intel.saves.map((c) => <CallLine key={c.callId} c={c} />)}
+            </div>
           )}
         </div>
       </div>
