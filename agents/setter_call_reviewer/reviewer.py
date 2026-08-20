@@ -90,6 +90,7 @@ _DC_ADS_EXTRA_KEYS = frozenset(
         "rep_score_reason",
         "main_objection",
         "why_not_closed",
+        "rep_gap",
         "recoverable",
         "recoverable_note",
         "voc_quotes",
@@ -110,6 +111,19 @@ _WHY_NOT_CLOSED_VOCAB = frozenset(
         "skepticism",
         "cant_pay_today",
         "spouse_partner",
+        "other",
+    }
+)
+# rep_gap (0155, prompt v4): the specific gap inside a rep_execution loss.
+_REP_GAP_VOCAB = frozenset(
+    {
+        "no_close_attempt",
+        "gave_up_at_objection",
+        "no_urgency",
+        "weak_discovery",
+        "offer_not_explained",
+        "talked_over_lead",
+        "deferred_to_followup",
         "other",
     }
 )
@@ -192,7 +206,10 @@ def review_call(
 
     logger.info(
         "setter_review.sonnet_request close_call_id=%s call_type=%s transcript_chars=%d words=%d",
-        close_call_id, call_type, len(transcript_text), len(words),
+        close_call_id,
+        call_type,
+        len(transcript_text),
+        len(words),
     )
 
     result = complete(
@@ -294,7 +311,8 @@ def _maybe_post_to_slack(
         # resolution that went sideways.
         logger.warning(
             "setter_review.slack_context_failed close_call_id=%s err=%s",
-            close_call_id, exc,
+            close_call_id,
+            exc,
         )
 
 
@@ -384,13 +402,21 @@ def _load_slack_context(db: Any, close_call_id: str) -> dict[str, Any]:
 
             u = CloseClient.from_env().get_user(call["user_id"])
             nm = " ".join(
-                p for p in [(u.get("first_name") or "").strip(), (u.get("last_name") or "").strip()] if p
+                p
+                for p in [
+                    (u.get("first_name") or "").strip(),
+                    (u.get("last_name") or "").strip(),
+                ]
+                if p
             ).strip()
             setter_name = nm or None
-        except Exception as exc:  # noqa: BLE001 — display fallback, never fail the review
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — display fallback, never fail the review
             logger.warning(
                 "setter_review.close_name_fallback_failed user_id=%s err=%s",
-                call.get("user_id"), exc,
+                call.get("user_id"),
+                exc,
             )
 
     prospect_name: str | None = None
@@ -532,17 +558,13 @@ def _parse_and_validate(
         # The model violated the "always provide reason when true" rule.
         # We could let the DB CHECK fail, but a clearer error here helps
         # the caller decide (retry vs. give up).
-        raise ReviewError(
-            f"should_be_dqd=true but no dq_reason for {close_call_id}"
-        )
+        raise ReviewError(f"should_be_dqd=true but no dq_reason for {close_call_id}")
     if not isinstance(parsed[bool_key], bool):
         raise ReviewError(
             f"{bool_key} not bool for {close_call_id}: {parsed[bool_key]!r}"
         )
     if parsed[bool_key] is False and not parsed.get(reason_key):
-        raise ReviewError(
-            f"{bool_key}=false but no {reason_key} for {close_call_id}"
-        )
+        raise ReviewError(f"{bool_key}=false but no {reason_key} for {close_call_id}")
     for arr_key in ("setter_strengths", "setter_weaknesses"):
         if not isinstance(parsed[arr_key], list):
             raise ReviewError(
@@ -555,7 +577,9 @@ def _parse_and_validate(
         if len(parsed[arr_key]) > 2:
             logger.warning(
                 "setter_review.over_cap close_call_id=%s key=%s len=%d (truncating to 2)",
-                close_call_id, arr_key, len(parsed[arr_key]),
+                close_call_id,
+                arr_key,
+                len(parsed[arr_key]),
             )
             parsed[arr_key] = parsed[arr_key][:2]
     if not isinstance(parsed["lead_attributes"], list):
@@ -602,22 +626,37 @@ def _validate_dc_ads_signals(parsed: dict[str, Any], close_call_id: str) -> None
     if parsed.get("closed") is False:
         wnc = parsed.get("why_not_closed")
         if not wnc:
-            raise ReviewError(
-                f"closed=false but no why_not_closed for {close_call_id}"
-            )
+            raise ReviewError(f"closed=false but no why_not_closed for {close_call_id}")
         if wnc not in _WHY_NOT_CLOSED_VOCAB:
             logger.warning(
                 "setter_review.off_vocab close_call_id=%s key=why_not_closed value=%r (coercing to other)",
-                close_call_id, wnc,
+                close_call_id,
+                wnc,
             )
             parsed["why_not_closed"] = "other"
     else:
         parsed["why_not_closed"] = None
 
+    # rep_gap (0155, v4): required exactly when the loss was rep_execution
+    # (read POST-coercion), forced null on every other outcome. Missing or
+    # off-vocab coerces to 'other' — same trade as the parent vocab: never
+    # fail a whole review over one label.
+    if parsed.get("why_not_closed") == "rep_execution":
+        if parsed.get("rep_gap") not in _REP_GAP_VOCAB:
+            logger.warning(
+                "setter_review.off_vocab close_call_id=%s key=rep_gap value=%r (coercing to other)",
+                close_call_id,
+                parsed.get("rep_gap"),
+            )
+            parsed["rep_gap"] = "other"
+    else:
+        parsed["rep_gap"] = None
+
     if parsed.get("archetype") not in _ARCHETYPE_VOCAB:
         logger.warning(
             "setter_review.off_vocab close_call_id=%s key=archetype value=%r (coercing to other)",
-            close_call_id, parsed.get("archetype"),
+            close_call_id,
+            parsed.get("archetype"),
         )
         parsed["archetype"] = "other"
 
@@ -631,7 +670,8 @@ def _validate_dc_ads_signals(parsed: dict[str, Any], close_call_id: str) -> None
         if not isinstance(item, dict) or not (item.get("quote") or "").strip():
             logger.warning(
                 "setter_review.voc_quote_dropped close_call_id=%s item=%r",
-                close_call_id, item,
+                close_call_id,
+                item,
             )
             continue
         topic = item.get("topic")
@@ -641,7 +681,9 @@ def _validate_dc_ads_signals(parsed: dict[str, Any], close_call_id: str) -> None
     if len(quotes) > _MAX_VOC_QUOTES:
         logger.warning(
             "setter_review.over_cap close_call_id=%s key=voc_quotes len=%d (truncating to %d)",
-            close_call_id, len(quotes), _MAX_VOC_QUOTES,
+            close_call_id,
+            len(quotes),
+            _MAX_VOC_QUOTES,
         )
     parsed["voc_quotes"] = cleaned
 
@@ -672,7 +714,11 @@ def _upsert(db: Any, row: dict[str, Any]) -> dict[str, Any]:
     )
     logger.info(
         "setter_review.persisted close_call_id=%s call_type=%s score=%s dq=%s outcome=%s cost=$%s",
-        row["close_call_id"], row.get("call_type"), row["lead_score"],
-        row["should_be_dqd"], outcome, row["sonnet_cost_usd"],
+        row["close_call_id"],
+        row.get("call_type"),
+        row["lead_score"],
+        row["should_be_dqd"],
+        outcome,
+        row["sonnet_cost_usd"],
     )
     return resp.data[0]

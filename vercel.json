@@ -223,6 +223,7 @@
     { "path": "/api/outbound_facts_refresh_cron", "schedule": "*/15 * * * *" },
     { "path": "/api/ghl_sync_cron", "schedule": "*/15 * * * *" },
     { "path": "/api/dc_exec_summary_cron", "schedule": "15 8 * * *" },
-    { "path": "/api/dc_rep_coaching_cron", "schedule": "45 8 * * 1" }
+    { "path": "/api/dc_rep_coaching_cron", "schedule": "45 8 * * 1" },
+    { "path": "/api/dc_reviews_backfill_cron", "schedule": "*/5 * * * *" }
   ]
 }

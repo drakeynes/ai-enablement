@@ -225,9 +225,16 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   the boss's same-day feedback; route stays nested under /dc-ads for the middleware allowlist;
   same URL contract as DC Ads): the **feed leads the page** as a labeled table (Time / Lead /
   Rep / Dur / the four 0-10 scores / Outcome-with-reason / flags; filters: outcome, recoverable,
-  flags, rep, search; 500 newest, true totals), then window averages, the "Why aren't DC leads
-  closing?" % table, 🔴 missed-sales / 🟢 great-saves queues (SQL-derived thresholds,
-  `dc_ads_call_reviews()`), archetype × close-rate, and verbatim VoC quotes grouped by topic —
+  flags, rep, search; 500 newest, true totals; since 0155 each Lead cell carries an
+  **at-a-glance sub-line** — archetype + the review's own no-close sentence, hover for the full
+  text + follow-up note — Nabeel: the AI read without a click), then window averages, the "Why
+  aren't DC leads closing?" % table (since 0155 its **Rep execution row expands into the
+  rep_gap sub-dataset** — the specific gaps as % of rep-execution losses; "not yet re-graded"
+  = pre-v4 rows, clears as the backfill drains), 🔴 missed-sales / 🟢 great-saves queues
+  (SQL-derived thresholds, `dc_ads_call_reviews()`), archetype × close-rate (**LEAD-level since
+  0155**: each lead once via its newest review, closed = the lead's eventual facts close — the
+  old call-level AI on-call-close read "1%" while ~14% of reviewed leads actually bought;
+  on-call closes survive in the footnote), and verbatim VoC quotes grouped by topic —
   every lead links to its lifecycle page, every call to its full review. The per-call review
   page (`/sales-dashboard/calls/[id]`) is dc_ads-aware: Closed/Not-closed pill + a DC-signals
   block (intent / offer understanding / rep execution, archetype, main objection, recoverable,

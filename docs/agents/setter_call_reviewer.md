@@ -28,7 +28,12 @@ post_to_slack=True)`, `find_pending_reviews()`.
 2. `dc_ads` — lead is in `dc_ads_lead_facts` (the DC paid-ads cohort) →
    close-on-phone rubric + the 0150 ad-intelligence signals: intent /
    offer-understanding / rep-score (all 0–10), main objection,
-   why-not-closed vocabulary, recoverable, verbatim VoC quotes, archetype.
+   why-not-closed vocabulary, recoverable, verbatim VoC quotes, archetype;
+   since prompt v4 (0155, 2026-08-19) also `rep_gap` — the rep's PRIMARY
+   specific gap, required exactly when why_not_closed = rep_execution
+   (fixed vocab: no_close_attempt · gave_up_at_objection · no_urgency ·
+   weak_discovery · offer_not_explained · talked_over_lead ·
+   deferred_to_followup · other; missing/off-vocab coerces to other).
 3. `outbound` — default fail-safe → book-a-closer rubric
    (`booked`/`no_book_reason`).
 

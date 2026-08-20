@@ -59,13 +59,17 @@ def test_outbound_accepts_booked_pair():
 
 def test_outbound_rejects_booked_false_without_reason():
     with pytest.raises(ReviewError, match="no_book_reason"):
-        _parse_and_validate(_payload(booked=False, no_book_reason=None), "c2", "outbound")
+        _parse_and_validate(
+            _payload(booked=False, no_book_reason=None), "c2", "outbound"
+        )
 
 
 def test_outbound_rejects_revival_outcome_keys():
     # A revival-shaped payload is missing booked/no_book_reason → rejected.
     with pytest.raises(ReviewError, match="missing keys"):
-        _parse_and_validate(_payload(closed=True, no_close_reason=None), "c3", "outbound")
+        _parse_and_validate(
+            _payload(closed=True, no_close_reason=None), "c3", "outbound"
+        )
 
 
 # --- revival rubric --------------------------------------------------------
@@ -83,7 +87,9 @@ def test_revival_accepts_closed_pair():
 
 def test_revival_rejects_closed_false_without_reason():
     with pytest.raises(ReviewError, match="no_close_reason"):
-        _parse_and_validate(_payload(closed=False, no_close_reason=None), "c5", "revival")
+        _parse_and_validate(
+            _payload(closed=False, no_close_reason=None), "c5", "revival"
+        )
 
 
 def test_revival_rejects_booked_outcome_keys():
@@ -101,9 +107,12 @@ _DC_SIGNALS = {
     "rep_score_reason": "Clean pitch, soft close ask.",
     "main_objection": "thinks $300 is too much right now",
     "why_not_closed": "cant_pay_today",
+    "rep_gap": None,
     "recoverable": True,
     "recoverable_note": "Call back Friday after payday.",
-    "voc_quotes": [{"quote": "I just want something that finally works", "topic": "goal"}],
+    "voc_quotes": [
+        {"quote": "I just want something that finally works", "topic": "goal"}
+    ],
     "archetype": "curious_ai_learner",
 }
 
@@ -163,6 +172,46 @@ def test_dc_ads_rejects_closed_false_without_why():
         _parse_and_validate(_dc_payload(why_not_closed=None), "d6", "dc_ads")
 
 
+# --- rep_gap (0155, prompt v4) ----------------------------------------------
+
+
+def test_dc_ads_keeps_rep_gap_on_rep_execution():
+    parsed = _parse_and_validate(
+        _dc_payload(why_not_closed="rep_execution", rep_gap="no_close_attempt"),
+        "g1",
+        "dc_ads",
+    )
+    assert parsed["rep_gap"] == "no_close_attempt"
+
+
+def test_dc_ads_coerces_missing_or_off_vocab_rep_gap_to_other():
+    parsed = _parse_and_validate(
+        _dc_payload(why_not_closed="rep_execution", rep_gap=None), "g2", "dc_ads"
+    )
+    assert parsed["rep_gap"] == "other"
+    parsed = _parse_and_validate(
+        _dc_payload(why_not_closed="rep_execution", rep_gap="sneezed"), "g3", "dc_ads"
+    )
+    assert parsed["rep_gap"] == "other"
+
+
+def test_dc_ads_nulls_rep_gap_off_rep_execution():
+    parsed = _parse_and_validate(
+        _dc_payload(why_not_closed="cant_pay_today", rep_gap="no_urgency"),
+        "g4",
+        "dc_ads",
+    )
+    assert parsed["rep_gap"] is None
+    parsed = _parse_and_validate(
+        _dc_payload(
+            closed=True, no_close_reason=None, why_not_closed=None, rep_gap="no_urgency"
+        ),
+        "g5",
+        "dc_ads",
+    )
+    assert parsed["rep_gap"] is None
+
+
 def test_dc_ads_rejects_recoverable_without_note():
     with pytest.raises(ReviewError, match="recoverable_note"):
         _parse_and_validate(_dc_payload(recoverable_note=None), "d7", "dc_ads")
@@ -213,12 +262,15 @@ def test_dc_ads_prompt_carries_signal_contract():
         '"offer_understanding"',
         '"rep_score"',
         '"why_not_closed"',
+        '"rep_gap"',
         '"recoverable"',
         '"voc_quotes"',
         '"archetype"',
         "didnt_understand_offer",
         "price_platform_objection",
         "broke_opportunity_seeker",
+        "gave_up_at_objection",
+        "deferred_to_followup",
     ):
         assert needle in DC_ADS_SYSTEM_PROMPT, needle
     # The base rubrics must NOT leak the dc_ads signal vocabulary.

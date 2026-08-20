@@ -44,9 +44,12 @@ v2 (2026-06-30): split the outcome by call_type (book vs close).
 v3 (2026-08-18): the dc_ads rubric + ad-intelligence signals.
 v3.1 (2026-08-18): archetype tightened - a job is not a business (an
   employed lead exploring a side venture is never existing_business_owner).
+v4 (2026-08-19): rep_gap — when why_not_closed is rep_execution, name the
+  rep's PRIMARY specific gap (fixed vocabulary; Nabeel wants the 73%
+  rep-execution bucket split into its own dataset).
 """
 
-PROMPT_VERSION = "v3.1"
+PROMPT_VERSION = "v4"
 
 # ---------------------------------------------------------------------------
 # Shared scaffolding. {intro} and {outcome_block} are spliced per call type;
@@ -234,6 +237,7 @@ _DC_ADS_EXTRA_EXAMPLE = """
   "rep_score_reason": "...",
   "main_objection": "...",
   "why_not_closed": null,
+  "rep_gap": null,
   "recoverable": true,
   "recoverable_note": "...",
   "voc_quotes": [
@@ -304,6 +308,21 @@ _DC_ADS_EXTRA_BLOCK = """
     spouse_partner           deferring the decision to a spouse/partner
     other                    none of the above fits (rare — pick the
                              closest category first)
+
+- rep_gap: null UNLESS why_not_closed is rep_execution. When it is,
+  EXACTLY one of these — the rep's PRIMARY specific gap on this call:
+    no_close_attempt      never actually asked for the sale
+    gave_up_at_objection  a handleable objection ended the call — the
+                          rep folded instead of answering it
+    no_urgency            built no reason to buy today; let the call
+                          drift to "think about it"
+    weak_discovery        never uncovered the prospect's goal or pain;
+                          pitched blind
+    offer_not_explained   left the prospect confused about what Digital
+                          College is, costs, or includes
+    talked_over_lead      monologued or steamrolled; didn't listen
+    deferred_to_followup  punted to a future call instead of closing now
+    other                 none of the above fits (rare)
 
 - recoverable: boolean. With a follow-up (call-back, payday timing,
   spouse conversation), could this lead still REALISTICALLY close?

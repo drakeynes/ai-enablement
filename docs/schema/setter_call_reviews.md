@@ -57,7 +57,12 @@ never leave stale values.
   why_applied/other — VERBATIM prospect quotes for marketing mining, ≤4),
   `archetype` (`high_intent_entrepreneur` · `curious_ai_learner` ·
   `broke_opportunity_seeker` · `skeptic` · `existing_business_owner` ·
-  `other`).
+  `other`), `rep_gap` (0155, prompt v4 — the rep's PRIMARY specific gap,
+  set exactly when `why_not_closed = 'rep_execution'`: `no_close_attempt`
+  · `gave_up_at_objection` · `no_urgency` · `weak_discovery` ·
+  `offer_not_explained` · `talked_over_lead` · `deferred_to_followup` ·
+  `other`; null on every other outcome and on pre-v4 rows until the
+  backfill re-grades them).
 
 Vocabularies are fixed lists mirrored in DB CHECKs; the reviewer **coerces**
 off-vocab model output to `'other'` (logged) rather than failing the review.
