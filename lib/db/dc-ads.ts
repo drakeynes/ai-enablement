@@ -237,8 +237,15 @@ export type DcAdsReviewedCall = {
   repScore: number
   closed: boolean
   whyNotClosed: string | null
+  // The rep's primary gap when whyNotClosed = rep_execution (0155, prompt
+  // v4); null otherwise and on pre-v4 rows the backfill hasn't re-graded.
+  repGap: string | null
   mainObjection: string | null
   recoverable: boolean
+  recoverableNote: string | null
+  // The AI's 1-2 sentences on the actual blocker (null when closed) — the
+  // feed's at-a-glance sub-line (0155).
+  noCloseReason: string | null
   archetype: string
   dq: boolean
   missed: boolean
@@ -246,6 +253,8 @@ export type DcAdsReviewedCall = {
 }
 
 export type DcAdsVocQuote = { quote: string; topic: string; leadName: string; callId: string }
+// LEAD-level since 0155: n = leads (newest review names the archetype),
+// closes = the lead's EVENTUAL DC close from the facts.
 export type DcAdsArchetypeAgg = { archetype: string; n: number; closes: number }
 
 export type DcAdsCallIntel = {
@@ -257,7 +266,13 @@ export type DcAdsCallIntel = {
   savesTotal: number
   whyNotClosed: Record<string, number>
   lostTotal: number
+  // rep_execution sub-dataset (0155): gap → count over the window's lost
+  // rep_execution calls; 'unclassified' = pre-v4 rows awaiting backfill.
+  repGaps: Record<string, number>
   archetypes: DcAdsArchetypeAgg[]
+  // AI-judged closed-on-the-call count (the archetypes' old numerator) —
+  // kept for the footnote.
+  onCallCloses: number
   voc: DcAdsVocQuote[]
   avg: {
     leadScore: number | null

@@ -190,6 +190,16 @@ null unless BOTH answers are present. Basis (2026-08-19 cohort analysis,
 funnel's only pre-call quality score. Surfaced as the lead list's Tier
 column + its "Sort · Tier" toggle.
 
+**0155** (no facts columns) — DC calls intel v4: `dc_ads_call_reviews()`
+archetypes go LEAD-level (each lead once via its newest review; closes =
+the lead's eventual `closed` from THIS table — the old call-level
+AI-judged on-call close undercounted ~10×; on-call closes survive as
+`onCallCloses`); per-call payload gains `noCloseReason` /
+`recoverableNote` / `repGap` (the feed's at-a-glance sub-line); new
+`repGaps` = the rep_execution sub-dataset over lost calls
+(`setter_call_reviews.rep_gap`, prompt v4). `dc_ads_backfill_candidates()`
+repointed at dc_ads rep_execution reviews lacking `rep_gap`.
+
 ## Populated by / read by
 
 - **Writes:** `refresh_dc_ads_facts()` called by

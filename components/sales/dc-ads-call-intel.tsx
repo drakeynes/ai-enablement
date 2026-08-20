@@ -35,6 +35,20 @@ const ARCHETYPE_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
+// rep_execution sub-dataset (0155, prompt v4): the specific gap that lost
+// the call. 'unclassified' = pre-v4 reviews the backfill hasn't re-graded.
+const GAP_LABELS: Record<string, string> = {
+  no_close_attempt: 'Never asked for the sale',
+  gave_up_at_objection: 'Gave up at first objection',
+  no_urgency: 'Built no urgency',
+  weak_discovery: 'Weak discovery',
+  offer_not_explained: "Didn't explain the offer",
+  talked_over_lead: 'Talked over the lead',
+  deferred_to_followup: 'Punted to a follow-up',
+  other: 'Other',
+  unclassified: 'Not yet re-graded',
+}
+
 const TOPIC_LABELS: Record<string, string> = {
   goal: 'Goals',
   fear: 'Fears',
@@ -210,6 +224,10 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
   }, [intel.calls, feedFilter, repFilter, q])
 
   const lostReasons = Object.entries(intel.whyNotClosed).sort((a, b) => b[1] - a[1])
+  // Gap sub-rows, biggest first, the unclassified backlog always last.
+  const repGaps = Object.entries(intel.repGaps ?? {}).sort((a, b) =>
+    a[0] === 'unclassified' ? 1 : b[0] === 'unclassified' ? -1 : b[1] - a[1],
+  )
   // Top quotes only (boss 2026-08-18 — the full list was verbose): ranked by
   // the source call's lead-quality + intent, so the box illustrates what the
   // BEST prospects say, capped at 8.
@@ -347,6 +365,27 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
                       >
                         {c.leadName}
                       </a>
+                      {/* The AI read at a glance (0155, boss ask): archetype +
+                          the review's own sentence on the blocker — no click
+                          needed; hover holds the full text. */}
+                      <span
+                        title={[c.noCloseReason, c.recoverableNote ? `Follow-up: ${c.recoverableNote}` : null]
+                          .filter(Boolean)
+                          .join(' · ') || undefined}
+                        style={{
+                          display: 'block',
+                          fontSize: 9,
+                          letterSpacing: '0.03em',
+                          color: 'var(--color-geg-text-faint)',
+                          maxWidth: 360,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {ARCHETYPE_LABELS[c.archetype] ?? c.archetype}
+                        {c.closed ? ' · closed on this call' : c.noCloseReason ? ` · ${c.noCloseReason}` : ''}
+                      </span>
                     </Td>
                     <Td>{c.repName ?? '—'}</Td>
                     <Td right faint>{fmtDur(c.durationS)}</Td>
@@ -412,20 +451,43 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
             ) : (
               <div>
                 {lostReasons.map(([reason, n]) => (
-                  <div
-                    key={reason}
-                    className="geg-mono"
-                    style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--color-geg-border)', fontSize: 11 }}
-                  >
-                    <span style={{ flex: 1, color: 'var(--color-geg-text-2)' }}>{WHY_LABELS[reason] ?? reason}</span>
-                    <span className="geg-numeric-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)' }}>
-                      {intel.lostTotal > 0 ? `${Math.round((n / intel.lostTotal) * 100)}%` : '—'}
-                    </span>
-                    <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 34, textAlign: 'right' }}>{n}</span>
+                  <div key={reason}>
+                    <div
+                      className="geg-mono"
+                      style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--color-geg-border)', fontSize: 11 }}
+                    >
+                      <span style={{ flex: 1, color: 'var(--color-geg-text-2)' }}>{WHY_LABELS[reason] ?? reason}</span>
+                      <span className="geg-numeric-serif" style={{ fontSize: 14, color: 'var(--color-geg-text)' }}>
+                        {intel.lostTotal > 0 ? `${Math.round((n / intel.lostTotal) * 100)}%` : '—'}
+                      </span>
+                      <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 34, textAlign: 'right' }}>{n}</span>
+                    </div>
+                    {/* The rep_execution sub-dataset (0155, boss ask: "what
+                        are the gaps specifically") — % of the rep-execution
+                        losses, indented under their parent row. */}
+                    {reason === 'rep_execution' && repGaps.length > 0
+                      ? repGaps.map(([gap, gn]) => (
+                          <div
+                            key={gap}
+                            className="geg-mono"
+                            style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '4px 0 4px 16px', borderBottom: '1px dotted var(--color-geg-border)', fontSize: 10 }}
+                          >
+                            <span style={{ flex: 1, color: gap === 'unclassified' ? 'var(--color-geg-text-faint)' : 'var(--color-geg-text-3)' }}>
+                              ↳ {GAP_LABELS[gap] ?? gap}
+                            </span>
+                            <span className="geg-numeric-serif" style={{ fontSize: 12, color: 'var(--color-geg-text-2)' }}>
+                              {n > 0 ? `${Math.round((gn / n) * 100)}%` : '—'}
+                            </span>
+                            <span style={{ color: 'var(--color-geg-text-faint)', minWidth: 34, textAlign: 'right' }}>{gn}</span>
+                          </div>
+                        ))
+                      : null}
                   </div>
                 ))}
                 <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginTop: 6 }}>
-                  % of {intel.lostTotal} lost reviewed calls — primary reason per call, judged by the AI review.
+                  % of {intel.lostTotal} lost reviewed calls — primary reason per call, judged by the AI
+                  review. The indented rows split the rep-execution losses by the specific gap
+                  (&ldquo;not yet re-graded&rdquo; clears as the v4 backfill runs).
                 </div>
               </div>
             )}
@@ -449,7 +511,9 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
                 </div>
               ))}
               <div className="geg-mono" style={{ fontSize: 9, color: 'var(--color-geg-text-faint)', marginTop: 6 }}>
-                Who the window&apos;s reviewed leads are, and how each type converts.
+                Each lead counted once (its newest review names the type); closed = the lead&apos;s
+                eventual DC close, not just on reviewed calls — only {intel.onCallCloses} sale
+                {intel.onCallCloses === 1 ? '' : 's'} closed live on a reviewed call.
               </div>
             </div>
           ) : null}
