@@ -26,7 +26,9 @@ import { FineNote } from './fine-note'
 //
 // 2026-08-20 (Nabeel): COLUMN HEADERS SORT — click a metric header to order
 // the 30 days by it (highest first → lowest first → back to day order).
-// Client-side and display-only; dash cells sort last either way.
+// Day sorts too, cycling the other way (oldest first → newest first → reset)
+// since the default order is already newest-first. Client-side and
+// display-only; dash cells sort last either way.
 
 const SCROLL_MAX_HEIGHT = 480
 
@@ -121,16 +123,21 @@ function share(n: number, d: number): number | null {
 //
 // `sort` (Nabeel 2026-08-20) = the header-click sort value: what the CELL
 // shows, as a number — dashes (immature DN, zero denominators) sort as null
-// so a click never reveals an order the eye can't verify. Day has no sort:
-// day order IS the reset state (third click on any column).
+// so a click never reveals an order the eye can't verify.
+//
+// `firstDir` flips a column's click cycle to start ascending. Day uses it:
+// the table already opens newest-first, so a desc first click would repeat
+// the default and read as a dead click — instead Day's first click puts the
+// OLDEST day on top (the reverse the reader can't get any other way).
 type DailyHeader = {
   label: string
   align?: 'left'
   m?: boolean
   sort?: (r: DcAdsDailyRow, age: number) => number | null
+  firstDir?: 'asc'
 }
 const HEADERS: DailyHeader[] = [
-  { label: 'Day', align: 'left', m: true },
+  { label: 'Day', align: 'left', m: true, sort: (r) => Number(r.etDate.replaceAll('-', '')), firstDir: 'asc' },
   // Null spend renders as $0 here (boss rule) — sort it as 0 to match.
   { label: 'Spend', m: true, sort: (r) => r.spendUsd ?? 0 },
   { label: 'Opt-ins', m: true, sort: (r) => r.optIns },
@@ -201,12 +208,19 @@ export function DcAdsDailyTable({
 }) {
   // Header-click sort (Nabeel 2026-08-20): click a metric → highest day
   // first, click again → lowest first, third click → back to day order.
-  // Display-only — nothing else on the page reads the row order.
+  // Day cycles the other way (oldest first → newest first → reset) via
+  // firstDir. Display-only — nothing else on the page reads the row order.
   const [sort, setSort] = useState<{ idx: number; dir: 'desc' | 'asc' } | null>(null)
-  const onSort = (idx: number) =>
+  const onSort = (idx: number) => {
+    const first = HEADERS[idx].firstDir ?? 'desc'
     setSort((cur) =>
-      cur?.idx !== idx ? { idx, dir: 'desc' } : cur.dir === 'desc' ? { idx, dir: 'asc' } : null,
+      cur?.idx !== idx
+        ? { idx, dir: first }
+        : cur.dir === first
+          ? { idx, dir: first === 'desc' ? 'asc' : 'desc' }
+          : null,
     )
+  }
 
   const sorted = useMemo(() => {
     const key = sort ? HEADERS[sort.idx].sort : undefined
@@ -234,7 +248,8 @@ export function DcAdsDailyTable({
       <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 12 }} summary="How to read this table">
         Each row is the cohort that opted in that ET day; the Day and Spend columns stay frozen while the rest
         scrolls. <b>Column headers are clickable</b> — one click ranks the 30 days by that metric
-        (highest first), a second click flips to lowest first, a third restores day order; dash
+        (highest first), a second click flips to lowest first, a third restores day order; clicking{' '}
+        <b>Day</b> runs the other way (oldest day first, then newest first); dash
         cells always sink to the bottom. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
         small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).
@@ -276,7 +291,13 @@ export function DcAdsDailyTable({
                       i === 0 ? ' md:w-[132px]' : i === 1 ? ' md:left-[132px]' : ''
                     }`}
                     onClick={h.sort ? () => onSort(i) : undefined}
-                    title={h.sort ? 'Sort the days by this column — again for lowest first, once more for day order' : undefined}
+                    title={
+                      h.sort
+                        ? h.firstDir === 'asc'
+                          ? 'Sort oldest day first — again for newest first, once more for day order'
+                          : 'Sort the days by this column — again for lowest first, once more for day order'
+                        : undefined
+                    }
                     aria-sort={active ? (sort!.dir === 'desc' ? 'descending' : 'ascending') : undefined}
                     style={{
                       position: 'sticky',

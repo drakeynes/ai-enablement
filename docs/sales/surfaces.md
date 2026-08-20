@@ -426,8 +426,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   **Day AND Spend are sticky-left on desktop** (boss 2026-08-17; Day width-fixed at 132px so
   Spend pins beside it — md+ only, the phone's trimmed set doesn't scroll). **Column headers sort**
   (boss 2026-08-20): click any metric header to rank the 30 days by it — highest first, a second
-  click flips to lowest first, a third restores day order (Day itself isn't clickable — day order
-  is the reset state). Client-side and display-only; the sort value is what the cell shows, so
+  click flips to lowest first, a third restores day order. Day sorts too but cycles the other way
+  (oldest first → newest first → reset), since the default order is already newest-first and a
+  highest-first first click would repeat it. Client-side and display-only; the sort value is what the cell shows, so
   dash cells (immature DN windows, zero denominators) sort as null and sink to the bottom in both
   directions, and null spend sorts as the $0 it renders. Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
   called/cash/dials for other consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
