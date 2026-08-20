@@ -116,6 +116,68 @@ function scoreColor(v: number): string {
   return 'var(--color-geg-text-2)'
 }
 
+// Transcript-export download button (0156): POSTs to the export route and
+// hands the browser the returned markdown as a file. Fetch-then-blob (not a
+// plain link) because the id list rides in the body.
+function ExportButton({
+  label,
+  body,
+  disabled,
+}: {
+  label: string
+  body: { callIds?: string[] }
+  disabled?: boolean
+}) {
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch('/sales-dashboard/dc-ads/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(`export failed (${res.status})`)
+      const blob = await res.blob()
+      const name =
+        /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ??
+        'dc-call-transcripts.md'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      // Surface inline — this is a manual action with the user watching.
+      alert(e instanceof Error ? e.message : 'export failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={run}
+      disabled={disabled || busy}
+      className="geg-mono"
+      style={{
+        padding: '4px 10px',
+        borderRadius: 5,
+        border: '1px solid var(--color-geg-border-strong)',
+        background: 'var(--color-geg-bg-elev)',
+        color: disabled ? 'var(--color-geg-text-faint)' : 'var(--color-geg-accent)',
+        fontSize: 10,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        cursor: disabled || busy ? 'default' : 'pointer',
+      }}
+    >
+      {busy ? 'Exporting…' : `⬇ ${label}`}
+    </button>
+  )
+}
+
 // One compact call line — the flag queues' row shape (the feed itself is a
 // labeled table below). Rep is explicitly labeled after the boss couldn't
 // tell whose name was whose.
@@ -329,6 +391,18 @@ export function DcAdsCallIntelSection({ intel }: { intel: DcAdsCallIntel }) {
               minWidth: 140,
             }}
           />
+          {/* Transcript export (0156, Nabeel: feed the raw calls to an AI).
+              "view" = exactly the rows the feed currently lists (window +
+              facets + these filter chips + search); "all" = every reviewed
+              DC call regardless of the current view. */}
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <ExportButton
+              label={`Export view (${feed.length})`}
+              disabled={feed.length === 0}
+              body={{ callIds: feed.map((c) => c.callId) }}
+            />
+            <ExportButton label="Export all" body={{}} />
+          </span>
         </div>
 
         {feed.length === 0 ? (

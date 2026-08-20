@@ -231,7 +231,11 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   aren't DC leads closing?" % table (since 0155 its **Rep execution row expands into the
   rep_gap sub-dataset** — the specific gaps as % of rep-execution losses; "not yet re-graded"
   = pre-v4 rows, clears as the backfill drains), 🔴 missed-sales / 🟢 great-saves queues
-  (SQL-derived thresholds, `dc_ads_call_reviews()`), archetype × close-rate (**LEAD-level since
+  (SQL-derived thresholds, `dc_ads_call_reviews()`), **transcript Export buttons** (0156,
+  Nabeel: raw calls for AI Q&A — "Export view" = the feed's current list, "Export all" =
+  everything; one markdown file, review-verdict header + speaker-turn dialogue per call, built
+  by migration 0156's SQL + the /dc-ads/export route; the per-call review page gets a
+  ⬇ Transcript link; see docs/runbooks/dc_transcripts_export.md), archetype × close-rate (**LEAD-level since
   0155**: each lead once via its newest review, closed = the lead's eventual facts close — the
   old call-level AI on-call-close read "1%" while ~14% of reviewed leads actually bought;
   on-call closes survive in the footnote), and verbatim VoC quotes grouped by topic —

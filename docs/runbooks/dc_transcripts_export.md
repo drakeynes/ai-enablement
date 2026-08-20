@@ -1,6 +1,16 @@
 # DC call-transcripts export
 
-`scripts/export_dc_transcripts.py` — one markdown file with every DC Ads
+**Self-serve (0156):** the DC Calls page carries two Export buttons beside
+the feed's search box — **Export view** downloads exactly the rows the feed
+currently lists (window + facets + outcome/rep/search filters, ≤500 shown)
+and **Export all** downloads every reviewed DC call; the per-call review
+page has a **⬇ Transcript (md)** link for one call. All three hit
+`app/(authenticated)/sales-dashboard/dc-ads/export/route.ts` (dashboard
+session auth; turn text is built in SQL — migration 0156's
+`dc_transcript_turns()` — so the heavy diarized-words jsonb never leaves
+Postgres). Full export ≈ 500 calls / ~5 MB / ~10 s.
+
+**Offline sibling:** `scripts/export_dc_transcripts.py` — one markdown file with every DC Ads
 reviewed call (the DC Calls page's set: `call_type='dc_ads'` reviews),
 each section = a metadata header (ET time, lead, rep, duration, the AI
 review's outcome / rep_gap / archetype / four 0-10 scores) + the

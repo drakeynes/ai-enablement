@@ -39,6 +39,27 @@ export default async function SetterCallDetailPage({
   return (
     <div style={{ padding: '4px 8px 28px' }}>
       <BackLink />
+      {/* One-call transcript download (0156) — same markdown the DC Calls
+          Export button produces, scoped to this call. dc_ads reviews only
+          (the export route knows no other rubric). */}
+      {detail.full_review?.call_type === 'dc_ads' ? (
+        <a
+          href={`/sales-dashboard/dc-ads/export?call=${encodeURIComponent(id)}`}
+          className="geg-mono"
+          style={{
+            display: 'inline-block',
+            marginTop: 4,
+            marginLeft: 18,
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--color-geg-accent)',
+            textDecoration: 'none',
+          }}
+        >
+          ⬇ Transcript (md)
+        </a>
+      ) : null}
       <HeaderBlock detail={detail} />
 
       <div
