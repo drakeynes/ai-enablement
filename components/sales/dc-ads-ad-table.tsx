@@ -18,6 +18,10 @@ import { aiQSub, aiQTop } from './dc-ads-daily-table'
 // jump from many ads to a few without losing the rest of the page's view.
 // Small formatters duplicated from dc-ads-daily-table on purpose — the two
 // tables must be free to drift apart.
+//
+// 2026-08-20 (Nabeel): COLUMN HEADERS SORT — click a metric header to order
+// the ads by it (highest first → lowest first → back to the fetch order).
+// Applied after the pickers' narrowing; '—' cells sort last either way.
 
 const SCROLL_MAX_HEIGHT = 480
 const ACCENT = '#b48ead'
@@ -67,48 +71,64 @@ function fmtDur(sec: number | null): string {
   return `${h}h ${Math.floor((sec - h * 3600) / 60)}m`
 }
 
+// Ratio for sorting: null (sorts last) when the denominator is 0 — matches
+// the '—' the cell shows.
+function share(n: number, d: number): number | null {
+  return d > 0 ? n / d : null
+}
+
 // `m` = shown on MOBILE too (the decision set: name, spend, opt-ins, units,
 // closed, ROAS). Everything else is desktop-only — on a phone the sticky name
 // column was eating the viewport and the other 30 columns lived in a
 // two-inch scroll strip (boss 2026-08-15).
-const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
+//
+// `sort` (Nabeel 2026-08-20) = the header-click sort value: what the cell
+// shows, as a number — '—' cells sort as null (always last). Ad has no sort:
+// the fetch order IS the reset state (third click on any column).
+type AdHeader = {
+  label: string
+  align?: 'left'
+  m?: boolean
+  sort?: (r: DcAdsAdTableRow) => number | null
+}
+const HEADERS: AdHeader[] = [
   { label: 'Ad', align: 'left', m: true },
-  { label: 'Spend', m: true },
-  { label: 'Impr' },
-  { label: 'Clicks' },
-  { label: 'CTR' },
-  { label: 'CPM' },
-  { label: '$/Click' },
-  { label: 'Opt-ins', m: true },
-  { label: 'Qualified' },
-  { label: 'SMS' },
-  { label: 'SMS+MQL' },
-  { label: 'Connects' },
-  { label: 'HVC' },
+  { label: 'Spend', m: true, sort: (r) => r.spendUsd },
+  { label: 'Impr', sort: (r) => r.impressions },
+  { label: 'Clicks', sort: (r) => r.uniqueClicks },
+  { label: 'CTR', sort: (r) => r.ctr },
+  { label: 'CPM', sort: (r) => r.cpm },
+  { label: '$/Click', sort: (r) => r.cpcUnique },
+  { label: 'Opt-ins', m: true, sort: (r) => r.optIns },
+  { label: 'Qualified', sort: (r) => r.qualified },
+  { label: 'SMS', sort: (r) => r.sms },
+  { label: 'SMS+MQL', sort: (r) => r.smsMql },
+  { label: 'Connects', sort: (r) => r.connected },
+  { label: 'HVC', sort: (r) => r.hvc },
   // AI lead-quality (0151) — same semantics as the daily table's column.
-  { label: 'AI Q' },
-  { label: 'Units', m: true },
-  { label: 'Closed', m: true },
-  { label: 'Cash' },
-  { label: 'ROAS', m: true },
-  { label: 'D0 U' },
-  { label: 'D3 U' },
-  { label: 'D7 U' },
-  { label: 'Avg speed' },
-  { label: 'Median dial' },
-  { label: 'Intensity' },
-  { label: 'Conn rate' },
-  { label: 'Dialed <1m' },
-  { label: '<5m' },
-  { label: '<10m' },
-  { label: '<30m' },
-  { label: '>30m' },
-  { label: 'Never' },
-  { label: 'SMS eng' },
-  { label: 'MQL→C' },
-  { label: 'NonQ→C' },
-  { label: 'HVC→C' },
-  { label: 'Conn→C' },
+  { label: 'AI Q', sort: (r) => r.aiQ },
+  { label: 'Units', m: true, sort: (r) => r.units },
+  { label: 'Closed', m: true, sort: (r) => r.closed },
+  { label: 'Cash', sort: (r) => r.cashUsd },
+  { label: 'ROAS', m: true, sort: (r) => share(r.cashUsd, r.spendUsd ?? 0) },
+  { label: 'D0 U', sort: (r) => r.unitsD0 },
+  { label: 'D3 U', sort: (r) => r.unitsD3 },
+  { label: 'D7 U', sort: (r) => r.unitsD7 },
+  { label: 'Avg speed', sort: (r) => r.avgSpeedSec },
+  { label: 'Median dial', sort: (r) => r.medianDialSec },
+  { label: 'Intensity', sort: (r) => r.avgIntensity },
+  { label: 'Conn rate', sort: (r) => r.connectedRate },
+  { label: 'Dialed <1m', sort: (r) => share(r.under1, r.optIns) },
+  { label: '<5m', sort: (r) => share(r.under5, r.optIns) },
+  { label: '<10m', sort: (r) => share(r.under10, r.optIns) },
+  { label: '<30m', sort: (r) => share(r.under30, r.optIns) },
+  { label: '>30m', sort: (r) => share(r.over30, r.optIns) },
+  { label: 'Never', sort: (r) => share(r.neverDialed, r.optIns) },
+  { label: 'SMS eng', sort: (r) => share(r.smsEngaged, r.smsTexted) },
+  { label: 'MQL→C', sort: (r) => share(r.closed, r.qualified) },
+  { label: 'NonQ→C', sort: (r) => share(r.unqualifiedClosed, r.unqualified) },
+  { label: 'HVC→C', sort: (r) => share(r.closed, r.hvc) },
+  { label: 'Conn→C', sort: (r) => share(r.closed, r.connected) },
 ]
 
 type MsOption = { id: string; label: string; sub?: string; count?: number }
@@ -217,16 +237,33 @@ export function DcAdsAdTable({
     }
   }
 
-  const visible = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          (campaignSel.size === 0 || (r.campaignId != null && campaignSel.has(r.campaignId))) &&
-          (adsetSel.size === 0 || (r.adsetId != null && adsetSel.has(r.adsetId))) &&
-          (adSel.size === 0 || (r.adId != null && adSel.has(r.adId))),
-      ),
-    [rows, campaignSel, adsetSel, adSel],
-  )
+  // Header-click sort (Nabeel 2026-08-20): click a metric → highest ad
+  // first, click again → lowest first, third click → the fetch order.
+  // Applied after the pickers' narrowing; display-only.
+  const [sort, setSort] = useState<{ idx: number; dir: 'desc' | 'asc' } | null>(null)
+  const onSort = (idx: number) =>
+    setSort((cur) =>
+      cur?.idx !== idx ? { idx, dir: 'desc' } : cur.dir === 'desc' ? { idx, dir: 'asc' } : null,
+    )
+
+  const visible = useMemo(() => {
+    const filtered = rows.filter(
+      (r) =>
+        (campaignSel.size === 0 || (r.campaignId != null && campaignSel.has(r.campaignId))) &&
+        (adsetSel.size === 0 || (r.adsetId != null && adsetSel.has(r.adsetId))) &&
+        (adSel.size === 0 || (r.adId != null && adSel.has(r.adId))),
+    )
+    const key = sort ? HEADERS[sort.idx].sort : undefined
+    if (!key) return filtered
+    const mul = sort!.dir === 'desc' ? -1 : 1
+    return filtered.sort((a, b) => {
+      const va = key(a)
+      const vb = key(b)
+      // '—' cells sort last in BOTH directions — they carry no value.
+      if (va == null || vb == null) return va == null && vb == null ? 0 : va == null ? 1 : -1
+      return (va - vb) * mul
+    })
+  }, [rows, campaignSel, adsetSel, adSel, sort])
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -238,7 +275,10 @@ export function DcAdsAdTable({
       </div>
       <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 10 }} summary="How to read this table">
         One row per ad with activity in the selected dates (spend, opt-ins, or clicks — an ad
-        spending without opt-ins is exactly the row to notice). The <b>Non-attributed</b> row is
+        spending without opt-ins is exactly the row to notice). <b>Column headers are
+        clickable</b> — one click ranks the ads by that metric (highest first), a second click
+        flips to lowest first, a third restores the default order; dash cells always sink to the
+        bottom. The <b>Non-attributed</b> row is
         the lost-ad-tag leads: real stage and speed numbers, but no ad identity by definition — so
         no Meta-side numbers, and its spend lives inside the real ads&apos; rows. Ad-side numbers from Meta; every
         stage from Opt-ins on is the ad&apos;s own leads through the same definitions as the rest of
@@ -287,34 +327,42 @@ export function DcAdsAdTable({
         >
           <thead>
             <tr>
-              {HEADERS.map((h, i) => (
-                <th
-                  key={h.label}
-                  // Ad (i=0) is sticky-left everywhere; Spend (i=1) joins it
-                  // on md+ (boss 2026-08-17, desktop only) — the Ad column is
-                  // width-fixed at 260px so Spend can pin beside it.
-                  className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
-                    i === 0 ? ' md:w-[260px] md:min-w-[260px]' : i === 1 ? ' md:left-[260px]' : ''
-                  }`}
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
-                    background: 'var(--color-geg-bg-elev)',
-                    padding: '9px 12px',
-                    fontSize: 9.5,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    color: 'var(--color-geg-text-faint)',
-                    fontWeight: 500,
-                    textAlign: h.align ?? 'right',
-                    whiteSpace: 'nowrap',
-                    borderBottom: '1px solid var(--color-geg-border)',
-                  }}
-                >
-                  {h.label}
-                </th>
-              ))}
+              {HEADERS.map((h, i) => {
+                const active = sort?.idx === i
+                return (
+                  <th
+                    key={h.label}
+                    // Ad (i=0) is sticky-left everywhere; Spend (i=1) joins it
+                    // on md+ (boss 2026-08-17, desktop only) — the Ad column is
+                    // width-fixed at 260px so Spend can pin beside it.
+                    className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
+                      i === 0 ? ' md:w-[260px] md:min-w-[260px]' : i === 1 ? ' md:left-[260px]' : ''
+                    }`}
+                    onClick={h.sort ? () => onSort(i) : undefined}
+                    title={h.sort ? 'Sort the ads by this column — again for lowest first, once more to reset' : undefined}
+                    aria-sort={active ? (sort!.dir === 'desc' ? 'descending' : 'ascending') : undefined}
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
+                      background: 'var(--color-geg-bg-elev)',
+                      padding: '9px 12px',
+                      fontSize: 9.5,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      color: active ? 'var(--color-geg-accent)' : 'var(--color-geg-text-faint)',
+                      fontWeight: 500,
+                      textAlign: h.align ?? 'right',
+                      whiteSpace: 'nowrap',
+                      borderBottom: '1px solid var(--color-geg-border)',
+                      ...(h.sort ? { cursor: 'pointer', userSelect: 'none' } : {}),
+                    }}
+                  >
+                    {h.label}
+                    {active ? (sort!.dir === 'desc' ? ' ▾' : ' ▴') : ''}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>

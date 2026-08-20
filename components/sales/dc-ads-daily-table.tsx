@@ -1,3 +1,7 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+
 import type { DcAdsDailyRow } from '@/lib/db/dc-ads'
 
 import { FineNote } from './fine-note'
@@ -19,6 +23,10 @@ import { FineNote } from './fine-note'
 // 12p–12a ET clock as the speed boxes — computed in lib/db/dc-ads.ts).
 // A real <table> (not a CSS grid): position:sticky on th/td needs a single
 // scrollport, and the old two-tier grid scroller couldn't freeze a column.
+//
+// 2026-08-20 (Nabeel): COLUMN HEADERS SORT — click a metric header to order
+// the 30 days by it (highest first → lowest first → back to day order).
+// Client-side and display-only; dash cells sort last either way.
 
 const SCROLL_MAX_HEIGHT = 480
 
@@ -101,59 +109,77 @@ function ageDays(etDate: string, todayEt: string): number {
   return Math.round((toUtc(todayEt) - toUtc(etDate)) / 86_400_000)
 }
 
+// Ratio for sorting: null (sorts last) when the denominator is 0 — matches
+// the '—' the cell shows.
+function share(n: number, d: number): number | null {
+  return d > 0 ? n / d : null
+}
+
 // `m` = shown on MOBILE too (Day, Spend, Opt-ins, Units, Closed, ROAS); the
 // other ~26 columns are desktop-only — the sticky Day column plus a sliver
 // of scrolling was unusable on a phone (boss 2026-08-15).
-const HEADERS: { label: string; align?: 'left'; m?: boolean }[] = [
+//
+// `sort` (Nabeel 2026-08-20) = the header-click sort value: what the CELL
+// shows, as a number — dashes (immature DN, zero denominators) sort as null
+// so a click never reveals an order the eye can't verify. Day has no sort:
+// day order IS the reset state (third click on any column).
+type DailyHeader = {
+  label: string
+  align?: 'left'
+  m?: boolean
+  sort?: (r: DcAdsDailyRow, age: number) => number | null
+}
+const HEADERS: DailyHeader[] = [
   { label: 'Day', align: 'left', m: true },
-  { label: 'Spend', m: true },
-  { label: 'Opt-ins', m: true },
-  { label: 'Qualified' },
-  { label: 'SMS' },
-  { label: 'SMS+MQL' },
-  { label: 'Connects' },
-  { label: 'HVC' },
+  // Null spend renders as $0 here (boss rule) — sort it as 0 to match.
+  { label: 'Spend', m: true, sort: (r) => r.spendUsd ?? 0 },
+  { label: 'Opt-ins', m: true, sort: (r) => r.optIns },
+  { label: 'Qualified', sort: (r) => r.qualified },
+  { label: 'SMS', sort: (r) => r.sms },
+  { label: 'SMS+MQL', sort: (r) => r.smsMql },
+  { label: 'Connects', sort: (r) => r.connected },
+  { label: 'HVC', sort: (r) => r.hvc },
   // AI lead-quality (0151): the day's avg dc_ads-rubric review score over
   // reviewed cohort leads — sub-line carries the qualified-only avg + n.
-  { label: 'AI Q' },
-  { label: 'Units', m: true },
-  { label: 'Closed', m: true },
-  { label: 'D0 U' },
-  { label: 'D3 U' },
-  { label: 'D7 U' },
-  { label: 'D0 ROAS' },
-  { label: 'D3 ROAS' },
-  { label: 'D7 ROAS' },
-  { label: 'ROAS', m: true },
-  { label: 'Avg speed' },
-  { label: 'Median dial' },
-  { label: 'Intensity' },
-  { label: 'Conn rate' },
-  { label: 'Dialed <1m' },
-  { label: '<5m' },
-  { label: '<10m' },
-  { label: '<30m' },
-  { label: '>30m' },
-  { label: 'Never' },
-  { label: 'SMS eng' },
-  { label: 'MQL→C' },
-  { label: 'NonQ→C' },
-  { label: 'HVC→C' },
-  { label: 'Conn→C' },
+  { label: 'AI Q', sort: (r) => r.aiQ },
+  { label: 'Units', m: true, sort: (r) => r.units },
+  { label: 'Closed', m: true, sort: (r) => r.closed },
+  { label: 'D0 U', sort: (r, age) => (age >= 1 ? r.unitsD0 : null) },
+  { label: 'D3 U', sort: (r, age) => (age >= 3 ? r.unitsD3 : null) },
+  { label: 'D7 U', sort: (r, age) => (age >= 7 ? r.unitsD7 : null) },
+  { label: 'D0 ROAS', sort: (r, age) => (age >= 1 ? share(r.unitsD0 * 300, r.spendUsd ?? 0) : null) },
+  { label: 'D3 ROAS', sort: (r, age) => (age >= 3 ? share(r.unitsD3 * 300, r.spendUsd ?? 0) : null) },
+  { label: 'D7 ROAS', sort: (r, age) => (age >= 7 ? share(r.unitsD7 * 300, r.spendUsd ?? 0) : null) },
+  { label: 'ROAS', m: true, sort: (r) => share(r.cashUsd, r.spendUsd ?? 0) },
+  { label: 'Avg speed', sort: (r) => r.avgSpeedSec },
+  { label: 'Median dial', sort: (r) => r.medianDialSec },
+  { label: 'Intensity', sort: (r) => r.avgIntensity },
+  { label: 'Conn rate', sort: (r) => r.connectedRate },
+  { label: 'Dialed <1m', sort: (r) => share(r.under1, r.optIns) },
+  { label: '<5m', sort: (r) => share(r.under5, r.optIns) },
+  { label: '<10m', sort: (r) => share(r.under10, r.optIns) },
+  { label: '<30m', sort: (r) => share(r.under30, r.optIns) },
+  { label: '>30m', sort: (r) => share(r.over30, r.optIns) },
+  { label: 'Never', sort: (r) => share(r.neverDialed, r.optIns) },
+  { label: 'SMS eng', sort: (r) => share(r.smsEngaged, r.smsTexted) },
+  { label: 'MQL→C', sort: (r) => share(r.closed, r.qualified) },
+  { label: 'NonQ→C', sort: (r) => share(r.unqualifiedClosed, r.unqualified) },
+  { label: 'HVC→C', sort: (r) => share(r.closed, r.hvc) },
+  { label: 'Conn→C', sort: (r) => share(r.closed, r.connected) },
   // Qualified-only speed block (boss 2026-08-17): the same speed set over
   // that day's tf-qualified leads only — % denominators are the day's
   // Qualified count. Desktop-only like the rest of the speed columns.
-  { label: 'Q avg speed' },
-  { label: 'Q median' },
-  { label: 'Q intensity' },
-  { label: 'Q conn rate' },
-  { label: 'Q <1m' },
-  { label: 'Q <5m' },
-  { label: 'Q <10m' },
-  { label: 'Q <30m' },
-  { label: 'Q >30m' },
-  { label: 'Q never' },
-  { label: 'Q SMS eng' },
+  { label: 'Q avg speed', sort: (r) => r.qspeed.avgSpeedSec },
+  { label: 'Q median', sort: (r) => r.qspeed.medianDialSec },
+  { label: 'Q intensity', sort: (r) => r.qspeed.avgIntensity },
+  { label: 'Q conn rate', sort: (r) => r.qspeed.connectedRate },
+  { label: 'Q <1m', sort: (r) => share(r.qspeed.under1, r.qualified) },
+  { label: 'Q <5m', sort: (r) => share(r.qspeed.under5, r.qualified) },
+  { label: 'Q <10m', sort: (r) => share(r.qspeed.under10, r.qualified) },
+  { label: 'Q <30m', sort: (r) => share(r.qspeed.under30, r.qualified) },
+  { label: 'Q >30m', sort: (r) => share(r.qspeed.over30, r.qualified) },
+  { label: 'Q never', sort: (r) => share(r.qspeed.neverDialed, r.qualified) },
+  { label: 'Q SMS eng', sort: (r) => share(r.qspeed.smsEngaged, r.qspeed.smsTexted) },
 ]
 
 // Build one stage-drill href: the day as the window + the current facets +
@@ -173,6 +199,30 @@ export function DcAdsDailyTable({
   todayEt: string
   facetQuery: string
 }) {
+  // Header-click sort (Nabeel 2026-08-20): click a metric → highest day
+  // first, click again → lowest first, third click → back to day order.
+  // Display-only — nothing else on the page reads the row order.
+  const [sort, setSort] = useState<{ idx: number; dir: 'desc' | 'asc' } | null>(null)
+  const onSort = (idx: number) =>
+    setSort((cur) =>
+      cur?.idx !== idx ? { idx, dir: 'desc' } : cur.dir === 'desc' ? { idx, dir: 'asc' } : null,
+    )
+
+  const sorted = useMemo(() => {
+    const key = sort ? HEADERS[sort.idx].sort : undefined
+    if (!key) return rows
+    const mul = sort!.dir === 'desc' ? -1 : 1
+    return rows
+      .slice()
+      .sort((a, b) => {
+        const va = key(a, ageDays(a.etDate, todayEt))
+        const vb = key(b, ageDays(b.etDate, todayEt))
+        // Dash cells sort last in BOTH directions — they carry no value.
+        if (va == null || vb == null) return va == null && vb == null ? 0 : va == null ? 1 : -1
+        return (va - vb) * mul
+      })
+  }, [rows, sort, todayEt])
+
   return (
     <div style={{ marginTop: 24 }}>
       <div
@@ -183,7 +233,9 @@ export function DcAdsDailyTable({
       </div>
       <FineNote style={{ letterSpacing: '0.04em', lineHeight: 1.6, marginBottom: 12 }} summary="How to read this table">
         Each row is the cohort that opted in that ET day; the Day and Spend columns stay frozen while the rest
-        scrolls. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
+        scrolls. <b>Column headers are clickable</b> — one click ranks the 30 days by that metric
+        (highest first), a second click flips to lowest first, a third restores day order; dash
+        cells always sink to the bottom. Spend and opt-ins are fixed once the day ends; every stage column keeps climbing as
         that day&apos;s leads text back, connect, and close — recent days always look lighter. The
         small figure under each stage count is that day&apos;s <b>cost per</b> (spend ÷ count).
         <b> Stage counts are clickable</b> — a click jumps to the lead list below, scoped to that
@@ -212,38 +264,46 @@ export function DcAdsDailyTable({
         >
           <thead>
             <tr>
-              {HEADERS.map((h, i) => (
-                <th
-                  key={h.label}
-                  // Day (i=0) is sticky-left everywhere; Spend (i=1) joins it
-                  // on md+ (boss 2026-08-15, desktop only) — pinned at the Day
-                  // column's fixed 132px width.
-                  className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
-                    i === 0 ? ' md:w-[132px]' : i === 1 ? ' md:left-[132px]' : ''
-                  }`}
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
-                    background: 'var(--color-geg-bg-elev)',
-                    padding: '9px 12px',
-                    fontSize: 9.5,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    color: 'var(--color-geg-text-faint)',
-                    fontWeight: 500,
-                    textAlign: h.align ?? 'right',
-                    whiteSpace: 'nowrap',
-                    borderBottom: '1px solid var(--color-geg-border)',
-                  }}
-                >
-                  {h.label}
-                </th>
-              ))}
+              {HEADERS.map((h, i) => {
+                const active = sort?.idx === i
+                return (
+                  <th
+                    key={h.label}
+                    // Day (i=0) is sticky-left everywhere; Spend (i=1) joins it
+                    // on md+ (boss 2026-08-15, desktop only) — pinned at the Day
+                    // column's fixed 132px width.
+                    className={`${h.m ? 'geg-mono' : 'geg-mono hidden md:table-cell'}${
+                      i === 0 ? ' md:w-[132px]' : i === 1 ? ' md:left-[132px]' : ''
+                    }`}
+                    onClick={h.sort ? () => onSort(i) : undefined}
+                    title={h.sort ? 'Sort the days by this column — again for lowest first, once more for day order' : undefined}
+                    aria-sort={active ? (sort!.dir === 'desc' ? 'descending' : 'ascending') : undefined}
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      ...(i === 0 ? { left: 0, zIndex: 3 } : { zIndex: i === 1 ? 3 : 2 }),
+                      background: 'var(--color-geg-bg-elev)',
+                      padding: '9px 12px',
+                      fontSize: 9.5,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      color: active ? 'var(--color-geg-accent)' : 'var(--color-geg-text-faint)',
+                      fontWeight: 500,
+                      textAlign: h.align ?? 'right',
+                      whiteSpace: 'nowrap',
+                      borderBottom: '1px solid var(--color-geg-border)',
+                      ...(h.sort ? { cursor: 'pointer', userSelect: 'none' } : {}),
+                    }}
+                  >
+                    {h.label}
+                    {active ? (sort!.dir === 'desc' ? ' ▾' : ' ▴') : ''}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {sorted.map((r) => {
               const age = ageDays(r.etDate, todayEt)
               return (
                 <tr key={r.etDate}>

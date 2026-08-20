@@ -424,7 +424,12 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   excluded per the boss), **plus the Q-prefixed repeat of the speed set over that day's
   QUALIFIED leads only** (boss 2026-08-17; % of the day's Qualified count; `qspeed` on the row).
   **Day AND Spend are sticky-left on desktop** (boss 2026-08-17; Day width-fixed at 132px so
-  Spend pins beside it — md+ only, the phone's trimmed set doesn't scroll). Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
+  Spend pins beside it — md+ only, the phone's trimmed set doesn't scroll). **Column headers sort**
+  (boss 2026-08-20): click any metric header to rank the 30 days by it — highest first, a second
+  click flips to lowest first, a third restores day order (Day itself isn't clickable — day order
+  is the reset state). Client-side and display-only; the sort value is what the cell shows, so
+  dash cells (immature DN windows, zero denominators) sort as null and sink to the bottom in both
+  directions, and null spend sorts as the $0 it renders. Backed by the `dc_ads_daily()` RPC (0126→0142; still returns
   called/cash/dials for other consumers) + a per-day spend merge in `lib/db/dc-ads.ts`.
 - **Per-ad table** (boss item 10, 2026-08-15, migration 0147) — directly under the 30-day table:
   one row per AD with window activity (spend, opt-ins, or clicks — zero-opt-in spend is visible
@@ -440,7 +445,9 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   Narrowing (boss 2026-08-15): three **multi-select dropdown-toggle pickers** — Campaigns / Ad
   sets / Ads, checkbox panels with counts — union within a picker, AND across them, higher
   levels narrowing the lower pickers' options (and pruning invalidated deeper picks); list-only,
-  the page filter is untouched. Every row carries a campaign · ad set lineage sub-line
+  the page filter is untouched. **Column headers sort** here too (boss 2026-08-20, same three-state
+  contract as the daily table's): highest first → lowest first → back to the fetch order, applied
+  after the pickers' narrowing; '—' cells sort last in both directions. Every row carries a campaign · ad set lineage sub-line
   (full path on hover) so picks spanning ad sets stay legible. Follows the date picker + cascade + LP dropdown. Leads with no ad identity
   collapse into one **Non-attributed** row carrying the pseudo-campaign's identity (0148 — real
   stage numbers, no Meta-side numbers; selectable in the table's campaign picker). Per-ad UNIQUE clicks sum ~0.5–1% above
