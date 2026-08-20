@@ -26,7 +26,8 @@ type Panel = {
   empty: string
 }
 
-const PANEL_HEIGHT = 120
+// Full-width box, slightly taller + larger type (boss 2026-08-19 round 2).
+const PANEL_HEIGHT = 150
 
 export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }) {
   const [idx, setIdx] = useState(0)
@@ -46,10 +47,9 @@ export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }
     <div
       style={{
         marginTop: 24,
-        maxWidth: 560,
         border: '1px solid var(--color-geg-border-strong)',
         borderRadius: 8,
-        padding: '12px 16px 14px',
+        padding: '14px 18px 16px',
       }}
     >
       {/* Header: identity + the active section + pager. The grounding note
@@ -58,14 +58,14 @@ export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }
         <span
           className="geg-mono"
           title="Generated nightly from the daily table + AI call-review aggregates (never raw transcripts). Small review-n days read as directional."
-          style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)', whiteSpace: 'nowrap' }}
+          style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-geg-text-3)', whiteSpace: 'nowrap' }}
         >
           AI summary · {monthDay(exec.forDate)}
         </span>
         <span
           className="geg-mono"
           style={{
-            fontSize: 9.5,
+            fontSize: 10.5,
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
             color:
@@ -109,7 +109,7 @@ export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }
               style={{ flex: '0 0 100%', minWidth: 0, height: PANEL_HEIGHT, overflowY: 'auto', paddingRight: 6 }}
             >
               {p.items.length === 0 ? (
-                <div className="geg-serif" style={{ fontSize: 12.5, fontStyle: 'italic', color: 'var(--color-geg-text-3)', padding: '2px 0' }}>
+                <div className="geg-serif" style={{ fontSize: 13.5, fontStyle: 'italic', color: 'var(--color-geg-text-3)', padding: '2px 0' }}>
                   {p.empty}
                 </div>
               ) : (
@@ -117,7 +117,7 @@ export function DcAdsExecSummaryCard({ exec }: { exec: DcAdsExecSummary | null }
                   <div
                     key={i}
                     className="geg-serif"
-                    style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--color-geg-text-2)', padding: '2px 0' }}
+                    style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--color-geg-text-2)', padding: '2px 0' }}
                   >
                     {p.items.length > 1 ? '· ' : ''}
                     {item}
