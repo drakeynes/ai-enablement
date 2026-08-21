@@ -26,7 +26,9 @@ type NavItem = {
 // rep no longer needs admin tier to see Sales, and a sales-only rep doesn't see
 // Fulfillment). CEO/Content/Tasks remain tier-only.
 const NAV_ITEMS: ReadonlyArray<NavItem> = [
-  { href: '/clients', label: 'Fulfillment', requiredTier: 'csm', requiredArea: 'fulfillment', hidden: true },
+  // Fulfillment unhidden 2026-08-21 (partial DC-era restore): area-gated, so
+  // sales-only DC reps still never see it. middleware.ts is the enforcement twin.
+  { href: '/clients', label: 'Fulfillment', requiredTier: 'csm', requiredArea: 'fulfillment' },
   { href: '/control-center', label: 'CEO', requiredTier: 'admin', hidden: true },
   { href: '/sales-dashboard', label: 'Sales', requiredTier: 'csm', requiredArea: 'sales' },
   { href: '/content', label: 'Content', requiredTier: 'admin', hidden: true },

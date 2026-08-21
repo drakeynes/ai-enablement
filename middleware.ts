@@ -7,6 +7,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 // To bring the full dashboard back: delete this file and unhide the nav
 // entries.
 //
+// Partial restore (2026-08-21): the Fulfillment section is back for users
+// holding the 'fulfillment' area — without it, fulfillment-only accounts had
+// no destination at all (they dead-ended on /no-access). The fulfillment
+// layout still enforces the area gate; sales-only users who hit these paths
+// get bounced to their own home. CEO/Content/Tasks stay hidden.
+//
 // No Supabase import on purpose — auth stays in the server layouts (the
 // middleware auth gate was dropped because @supabase/ssr can't bundle for the
 // Edge runtime; see app/(authenticated)/layout.tsx). This is pure path
@@ -21,9 +27,16 @@ const ALLOWED_PREFIXES = [
   // not the full-dashboard unhide.
   '/sales-dashboard/leads',
   '/sales-dashboard/calls',
+  // The Fulfillment section (route group app/(authenticated)/(fulfillment)):
+  // restored 2026-08-21 for fulfillment-area users. /teams still enforces its
+  // head_csm tier gate in its own layout.
+  '/clients',
+  '/calls',
+  '/teams',
+  '/dashboard',
   '/login',
-  // Terminal page for authenticated users WITHOUT the sales area (CSMs) —
-  // without it they'd loop: sales layout → home → guard → sales layout.
+  // Terminal page for authenticated users with NO area at all — without it
+  // they'd loop: sales layout → home → guard → sales layout.
   '/no-access',
 ]
 

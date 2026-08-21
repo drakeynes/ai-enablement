@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 
-// Terminal page for authenticated users without the sales area. The DC-era
-// guard (middleware.ts) funnels everything to /sales-dashboard/dc-ads, whose
-// layout bounces non-sales users to homePathForAreas() — which sends them
-// here instead of back into the loop. Lives outside (authenticated) so it
-// renders without the top nav.
+// Terminal page for authenticated users with NO area at all (since the
+// 2026-08-21 fulfillment restore, fulfillment-area users go to /clients
+// instead). The DC-era guard (middleware.ts) funnels unknown paths to
+// /sales-dashboard/dc-ads, whose layout bounces area-less users to
+// homePathForAreas() — which sends them here instead of back into the loop.
+// Lives outside (authenticated) so it renders without the top nav.
 
 export default function NoAccessPage() {
   const router = useRouter()
@@ -42,11 +43,11 @@ export default function NoAccessPage() {
           No access
         </div>
         <div className="geg-serif" style={{ fontSize: 20, lineHeight: 1.3, marginBottom: 10 }}>
-          This dashboard is currently limited to the DC Ads team.
+          Your account doesn&apos;t have a dashboard area yet.
         </div>
         <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--color-geg-text-2)', marginBottom: 18 }}>
-          Your account doesn&apos;t have the sales area. If you think you should have
-          access, contact Drake or Nabeel.
+          You&apos;re signed in, but no area (sales or fulfillment) is assigned to
+          your account. If you think you should have access, contact Drake or Nabeel.
         </p>
         <Button
           variant="outline"

@@ -34,12 +34,13 @@ export function hasArea(areas: readonly string[] | null | undefined, area: Area)
 }
 
 // Where to send a user who lacks access to the page they hit — their own home.
-// DC-era (2026-08-15): the dashboard is DC-only (middleware.ts), so sales-area
-// users land on DC Ads and everyone else gets the terminal /no-access page —
-// NOT a fulfillment page, which the guard would bounce straight back into the
-// sales segment and loop. (Pre-DC behavior: fulfillment → '/clients', sales →
-// '/sales-dashboard', neither → '/login?error=no_area_access'.)
+// Sales-area users land on DC Ads (the dashboard's sales side is DC-only,
+// middleware.ts). Fulfillment-area users land on /clients — the Fulfillment
+// section was restored 2026-08-21 (middleware.ts allowlists it), so this no
+// longer loops. Only users with NO area at all get the terminal /no-access
+// page. Sales is checked first so dual-area users keep DC Ads as home.
 export function homePathForAreas(areas: readonly string[] | null | undefined): string {
   if (hasArea(areas, 'sales')) return '/sales-dashboard/dc-ads'
+  if (hasArea(areas, 'fulfillment')) return '/clients'
   return '/no-access'
 }

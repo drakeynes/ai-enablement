@@ -6,12 +6,21 @@ Every sales page, what it shows, and what was removed. All routes live under
 > **DC-era (2026-08-15): the dashboard is DC-only.** Every page except **DC Ads**
 > and **DC Setup** is HIDDEN, not deleted (boss directive): nav entries carry
 > `hidden: true` (`components/top-nav.tsx`, `sales-dashboard/sidebar.tsx`) and a
-> root `middleware.ts` redirects every other path to `/sales-dashboard/dc-ads`
-> (authenticated users without the sales area land on the terminal `/no-access`
-> page). All root/login/home redirects point at DC Ads. To restore a page: unhide
+> root `middleware.ts` redirects every other path to `/sales-dashboard/dc-ads`.
+> All root/login/home redirects point at DC Ads. To restore a page: unhide
 > its nav entry + allow its path in `middleware.ts` (or delete that file to
 > restore everything). The sections below describe every page as built — hidden
 > pages' code and loaders are untouched.
+>
+> **Fulfillment partial restore (2026-08-21):** the Fulfillment section
+> (`/clients`, `/calls`, `/teams`, `/dashboard` — route group
+> `app/(authenticated)/(fulfillment)`) is allowlisted in `middleware.ts` again
+> and its top-nav entry is unhidden, because fulfillment-only accounts had no
+> destination at all (they dead-ended on `/no-access`, which broke their login).
+> It stays **area-gated**: sales-only DC reps never see it, and
+> `homePathForAreas()` now sends fulfillment-area users to `/clients`. Only
+> users with NO area land on `/no-access`. The sales side remains DC-only;
+> CEO / Content / Tasks stay hidden.
 >
 > **Mobile / PWA (2026-08-15):** the dashboard installs from the browser as a home-screen app
 > (`app/manifest.ts`, standalone, opens on DC Ads; icons in `public/icons/`; install steps in
