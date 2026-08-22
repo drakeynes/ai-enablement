@@ -630,15 +630,6 @@ export type DcAdsDailyRow = {
   // Non-qual→Close inputs (the daily NonQ→C column).
   unqualified: number
   unqualifiedClosed: number
-  // Close-rate-over-CONNECTED inputs (Drake 2026-08-21): the qualified /
-  // unqualified splits of connected leads and closes, so the table can show
-  // three close rates with the same denominator kind — closes ÷ leads
-  // connected (the global one reuses the row's closed/connected counts).
-  // "unqualified" = answered the qualify question, missed (qualState) —
-  // partial-survey leads count only in the global rate.
-  qualifiedConnected: number
-  qualifiedClosed: number
-  unqualifiedConnected: number
   // The same speed block computed over the day's QUALIFIED leads only (boss
   // 2026-08-17) — percent denominators are the row's `qualified` count.
   qspeed: DcAdsDaySpeed
@@ -660,9 +651,6 @@ export type DcAdsDaySpeed = Pick<
   | 'smsTexted'
   | 'unqualified'
   | 'unqualifiedClosed'
-  | 'qualifiedConnected'
-  | 'qualifiedClosed'
-  | 'unqualifiedConnected'
 >
 
 // YYYY-MM-DD shifted by n days (UTC-noon arithmetic — DST-safe for date-only).
@@ -714,9 +702,6 @@ function summarizeDaySpeed(dayRows: DcAdsLeadRow[]): DcAdsDaySpeed {
     smsTexted: dayRows.filter((r) => r.smsOut || r.sms).length,
     unqualified: dayRows.filter((r) => r.qualState === 'unqualified').length,
     unqualifiedClosed: dayRows.filter((r) => r.qualState === 'unqualified' && r.closed).length,
-    qualifiedConnected: dayRows.filter((r) => r.qualState === 'qualified' && r.connected).length,
-    qualifiedClosed: dayRows.filter((r) => r.qualState === 'qualified' && r.closed).length,
-    unqualifiedConnected: dayRows.filter((r) => r.qualState === 'unqualified' && r.connected).length,
   }
 }
 
@@ -1301,9 +1286,6 @@ export type DcAdsAdTableRow = {
   smsTexted: number
   unqualified: number
   unqualifiedClosed: number
-  qualifiedConnected: number
-  qualifiedClosed: number
-  unqualifiedConnected: number
 }
 
 type AdAggRow = {

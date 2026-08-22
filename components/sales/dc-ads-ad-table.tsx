@@ -128,12 +128,7 @@ const HEADERS: AdHeader[] = [
   { label: 'MQL→C', sort: (r) => share(r.closed, r.qualified) },
   { label: 'NonQ→C', sort: (r) => share(r.unqualifiedClosed, r.unqualified) },
   { label: 'HVC→C', sort: (r) => share(r.closed, r.hvc) },
-  // The close-rate trio (Drake 2026-08-21): closes ÷ leads CONNECTED (lead
-  // count, not connection count) — global, then the qualified / unqualified
-  // splits (both sides of the fraction segment; partials only in the global).
   { label: 'Conn→C', sort: (r) => share(r.closed, r.connected) },
-  { label: 'Q Conn→C', sort: (r) => share(r.qualifiedClosed, r.qualifiedConnected) },
-  { label: 'NonQ Conn→C', sort: (r) => share(r.unqualifiedClosed, r.unqualifiedConnected) },
 ]
 
 type MsOption = { id: string; label: string; sub?: string; count?: number }
@@ -292,11 +287,7 @@ export function DcAdsAdTable({
         each lead&apos;s own opt-in. <b>AI Q</b> = the ad&apos;s average AI lead-quality score (0–10)
         from the call reviews, one count per reviewed lead (newest reviewed call wins); sub-line =
         the qualified-only average — only connected calls get reviews (scored from 2026-08-18), so
-        read cells over few reviews with care. The <b>close-rate trio</b>: <b>Conn→C</b> = the
-        ad&apos;s closes ÷ leads connected (each lead counts once); <b>Q Conn→C</b> and{' '}
-        <b>NonQ Conn→C</b> are the same rate over the ad&apos;s qualified / unqualified leads only
-        (both closes and connects restricted to the segment; leads with no completed survey count
-        only in the global rate). The three pickers narrow this list only (the page filter above
+        read cells over few reviews with care. The three pickers narrow this list only (the page filter above
         is untouched): tick any mix — within a picker selections add together, across pickers they
         combine, and higher levels narrow what the lower ones offer. Each row&apos;s sub-line says
         which campaign · ad set the ad lives in (hover for the full path). Follows the date picker
@@ -331,7 +322,7 @@ export function DcAdsAdTable({
         {/* min-width only from md up — on a phone the visible column set is
             small enough to fit, and forcing 3150px would stretch it absurdly. */}
         <table
-          className="md:min-w-[3330px]"
+          className="md:min-w-[3150px]"
           style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}
         >
           <thead>
@@ -472,8 +463,6 @@ export function DcAdsAdTable({
                     <Td top={rate1(r.unqualifiedClosed, r.unqualified)} sub={`${r.unqualifiedClosed} / ${r.unqualified}`} />
                     <Td top={rate1(r.closed, r.hvc)} sub={`${r.closed} / ${r.hvc}`} />
                     <Td top={rate1(r.closed, r.connected)} sub={`${r.closed} / ${r.connected}`} />
-                    <Td top={rate1(r.qualifiedClosed, r.qualifiedConnected)} sub={`${r.qualifiedClosed} / ${r.qualifiedConnected}`} />
-                    <Td top={rate1(r.unqualifiedClosed, r.unqualifiedConnected)} sub={`${r.unqualifiedClosed} / ${r.unqualifiedConnected}`} />
                   </tr>
                 )
               })

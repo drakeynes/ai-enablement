@@ -172,12 +172,7 @@ const HEADERS: DailyHeader[] = [
   { label: 'MQL→C', sort: (r) => share(r.closed, r.qualified) },
   { label: 'NonQ→C', sort: (r) => share(r.unqualifiedClosed, r.unqualified) },
   { label: 'HVC→C', sort: (r) => share(r.closed, r.hvc) },
-  // The close-rate trio (Drake 2026-08-21): closes ÷ leads CONNECTED (lead
-  // count, not connection count) — global, then the qualified / unqualified
-  // splits (both sides of the fraction segment; partials only in the global).
   { label: 'Conn→C', sort: (r) => share(r.closed, r.connected) },
-  { label: 'Q Conn→C', sort: (r) => share(r.qualifiedClosed, r.qualifiedConnected) },
-  { label: 'NonQ Conn→C', sort: (r) => share(r.unqualifiedClosed, r.unqualifiedConnected) },
   // Qualified-only speed block (boss 2026-08-17): the same speed set over
   // that day's tf-qualified leads only — % denominators are the day's
   // Qualified count. Desktop-only like the rest of the speed columns.
@@ -269,11 +264,7 @@ export function DcAdsDailyTable({
         only ever appears final (early closes show in the stage columns meanwhile); the
         matching ROAS columns = those units × $300 ÷ the day&apos;s spend. The right block is the
         speed-to-lead set per day (12p–12a ET clock, same math as the boxes below): dialed-within
-        shares are % of that day&apos;s opt-ins. The <b>close-rate trio</b>: <b>Conn→C</b> = the
-        day&apos;s closes ÷ leads connected (each lead counts once, however many calls it took);{' '}
-        <b>Q Conn→C</b> and <b>NonQ Conn→C</b> are the same rate over the day&apos;s qualified /
-        unqualified leads only (both closes and connects restricted to the segment; leads with no
-        completed survey count only in the global rate). The <b>Q-prefixed block</b> repeats the speed set
+        shares are % of that day&apos;s opt-ins. The <b>Q-prefixed block</b> repeats the speed set
         over that day&apos;s QUALIFIED leads only (% of the day&apos;s Qualified count). Follows the
         ad chooser and landing-page dropdown.
       </FineNote>
@@ -283,7 +274,7 @@ export function DcAdsDailyTable({
       <div style={{ maxHeight: SCROLL_MAX_HEIGHT, overflow: 'auto', border: '1px solid var(--color-geg-border)', borderRadius: 8 }}>
         {/* min-width from md up only — the phone's six-column set fits as-is. */}
         <table
-          className="md:min-w-[3800px]"
+          className="md:min-w-[3620px]"
           style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}
         >
           <thead>
@@ -398,8 +389,6 @@ export function DcAdsDailyTable({
                   <Td top={rate1(r.unqualifiedClosed, r.unqualified)} sub={`${r.unqualifiedClosed} / ${r.unqualified}`} />
                   <Td top={rate1(r.closed, r.hvc)} sub={`${r.closed} / ${r.hvc}`} />
                   <Td top={rate1(r.closed, r.connected)} sub={`${r.closed} / ${r.connected}`} />
-                  <Td top={rate1(r.qualifiedClosed, r.qualifiedConnected)} sub={`${r.qualifiedClosed} / ${r.qualifiedConnected}`} />
-                  <Td top={rate1(r.unqualifiedClosed, r.unqualifiedConnected)} sub={`${r.unqualifiedClosed} / ${r.unqualifiedConnected}`} />
                   <Td top={fmtDur(r.qspeed.avgSpeedSec)} />
                   <Td top={fmtDur(r.qspeed.medianDialSec)} />
                   <Td top={r.qspeed.avgIntensity !== null ? `${r.qspeed.avgIntensity.toFixed(1)}×` : '—'} />

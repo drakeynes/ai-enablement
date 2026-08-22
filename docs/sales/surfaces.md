@@ -432,13 +432,6 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   `dc_ads_lead_roster()` per-lead rows + 12p–12a clock math as the speed boxes (cohort size
   excluded per the boss), **plus the Q-prefixed repeat of the speed set over that day's
   QUALIFIED leads only** (boss 2026-08-17; % of the day's Qualified count; `qspeed` on the row).
-  **Close-rate trio** (Drake 2026-08-21, both tables): Conn→C (already present) is the GLOBAL
-  close rate — closes ÷ leads connected (lead count, each lead once, not connection count) —
-  and gains **Q Conn→C** / **NonQ Conn→C** beside it: the same rate with BOTH sides of the
-  fraction restricted to the day's qualified / unqualified (answered-but-missed) leads
-  (`qualifiedClosed/qualifiedConnected`, `unqualifiedClosed/unqualifiedConnected` from
-  `summarizeDaySpeed()`'s qualState splits); no-completed-survey (partial) leads count only in
-  the global rate, so Q + NonQ don't sum to it.
   **Day AND Spend are sticky-left on desktop** (boss 2026-08-17; Day width-fixed at 132px so
   Spend pins beside it — md+ only, the phone's trimmed set doesn't scroll). **Column headers sort**
   (boss 2026-08-20): click any metric header to rank the 30 days by it — highest first, a second
@@ -456,8 +449,7 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   (Spend / Impr / unique Clicks / CTR / CPM / $-per-click) → the stage set (Opt-ins → Closed,
   each with that ad's cost-per) → Cash / ROAS / D0-D3-D7 units (each lead's window relative to
   its own opt-in; no maturity dash here — a per-ad DN mixes lead ages) → the full per-ad
-  speed-to-lead block (same roster rows + 12p–12a clock as the boxes), ending in the same
-  **close-rate trio** as the daily table (Conn→C / Q Conn→C / NonQ Conn→C — see there). Assembled by
+  speed-to-lead block (same roster rows + 12p–12a clock as the boxes). Assembled by
   `getDcAdsAdTable()` from `dc_ads_ad_table()` (facts grouped by ad) + `dc_meta_ads` (identity,
   status, LP, campaign/ad-set names) + `cortana_ad_daily` (spend side) + the page's roster rows.
   Narrowing (boss 2026-08-15): three **multi-select dropdown-toggle pickers** — Campaigns / Ad
