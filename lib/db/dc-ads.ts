@@ -93,6 +93,16 @@ export type DcAdsRepRow = {
   // never count (forward-only).
   aiRepScore: number | null
   aiRepN: number
+  // Close-rate inputs for the By rep table (0157): DISTINCT leads the rep
+  // connected with (≥90s call — lead count, unlike `connections` which counts
+  // per CALL) plus the qualified / non-qualified splits of both the connects
+  // and the rep's closes. Non-qualified includes partial-survey leads (user
+  // 2026-08-22), so the splits partition the cohort: Q + NonQ = the global.
+  leadsConnected: number
+  qualifiedConnected: number
+  unqualifiedConnected: number
+  qualifiedClosed: number
+  unqualifiedClosed: number
 }
 
 export type DcAdsRepTotals = {

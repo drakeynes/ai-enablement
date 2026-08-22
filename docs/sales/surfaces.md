@@ -295,7 +295,18 @@ the same ad account runs the unrelated Closer Funnel motion against `theaipartne
   credits both while the header totals count deals once.
   Connections are counted **per call** (a lead reached twice counts twice; inbound ≥90s pickups
   count), so the column sum runs higher than the funnel's lead-level Connected — footnoted on the
-  page. Only CONFIRMED team members render (Drake 2026-08-14): active members are the main rows,
+  page. **Close-rate trio** (user 2026-08-22, migration 0157 — moved here from the daily/ads
+  tables, where 907b7ea had landed it by mistake before being reverted): **Close rate** = the
+  rep's closes ÷ **distinct leads they connected with** (≥90s call; LEAD count — the per-call
+  Connections column is deliberately NOT the denominator; `leadsConnected` on the rep row), plus
+  **Q close rate** / **NonQ close rate** splitting both sides of the fraction by the lead's
+  survey qualification (`qualifiedClosed/qualifiedConnected`,
+  `unqualifiedClosed/unqualifiedConnected`). **Partial-survey leads count as non-qualified** here
+  (unlike the lead roster's three-state qualState), so the splits partition the cohort and the Q +
+  NonQ fractions sum to the global one. Closes credit via the closer forms while connects come
+  from `close_calls`, so a rate can top 100% on small numbers — each cell shows the raw fraction
+  beside the percent (desktop-only columns, like Talk time). Only CONFIRMED team members render
+  (Drake 2026-08-14): active members are the main rows,
   deactivated members collapse into the "Former reps" group, and activity from identities with no
   `team_members` row is not shown at all — adding someone to the Airtable roster + verifying in DC
   Setup makes their history appear retroactively. **Clicking a rep name expands their EOD

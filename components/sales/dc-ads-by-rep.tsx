@@ -60,6 +60,25 @@ function Cell({ value, strong = false, muted = false, m = false }: { value: stri
   )
 }
 
+// Close-rate cell (0157): percent + the raw fraction beside it — rep-level n
+// is small, so the counts carry the meaning. Denominators are DISTINCT leads
+// connected (not the per-call Connections column). Desktop-only.
+function RateCell({ n, d, muted = false }: { n: number; d: number; muted?: boolean }) {
+  return (
+    <td
+      className="geg-numeric-serif hidden md:table-cell"
+      style={{ padding: '9px 14px', textAlign: 'right', fontSize: 14, whiteSpace: 'nowrap' }}
+    >
+      <span style={{ color: d > 0 && !muted ? 'var(--color-geg-text)' : 'var(--color-geg-text-faint)' }}>
+        {d > 0 ? `${((n / d) * 100).toFixed(1)}%` : '—'}
+      </span>
+      <span style={{ fontSize: 10.5, color: 'var(--color-geg-text-faint)', marginLeft: 6 }}>
+        {n}/{d}
+      </span>
+    </td>
+  )
+}
+
 function PlanChip({ label, count }: { label: string; count: number }) {
   const zero = count === 0
   return (
@@ -76,7 +95,7 @@ function PlanChip({ label, count }: { label: string; count: number }) {
 
 // Column count for the expanded EOD row's colSpan — keep in sync with the
 // header row below.
-const COL_COUNT = 12
+const COL_COUNT = 15
 
 function RepTr({
   r,
@@ -129,6 +148,12 @@ function RepTr({
       <Cell value={fmtTalk(r.talkSeconds ?? 0)} muted={!r.talkSeconds} />
       <Cell value={r.aiRepScore != null ? r.aiRepScore.toFixed(1) : '—'} muted={!r.aiRepN} />
       <Cell value={r.closes.toLocaleString('en-US')} strong m />
+      {/* The close-rate trio (user 2026-08-22, 0157): closes ÷ distinct leads
+          connected. NonQ includes partial-survey leads, so Q + NonQ fractions
+          sum to the global one. */}
+      <RateCell n={r.closes} d={r.leadsConnected} />
+      <RateCell n={r.qualifiedClosed} d={r.qualifiedConnected} />
+      <RateCell n={r.unqualifiedClosed} d={r.unqualifiedConnected} />
       <Cell value={r.units.toLocaleString('en-US')} />
       <Cell value={r.base44Monthly.toLocaleString('en-US')} muted={r.base44Monthly === 0} />
       <Cell value={r.base44Yearly.toLocaleString('en-US')} muted={r.base44Yearly === 0} />
@@ -216,10 +241,29 @@ export function DcAdsByRepSection({
       aiScoreSum: a.aiScoreSum + (r.aiRepScore ?? 0) * (r.aiRepN ?? 0),
       aiN: a.aiN + (r.aiRepN ?? 0),
       closes: a.closes + r.closes,
+      leadsConnected: a.leadsConnected + r.leadsConnected,
+      qualifiedConnected: a.qualifiedConnected + r.qualifiedConnected,
+      unqualifiedConnected: a.unqualifiedConnected + r.unqualifiedConnected,
+      qualifiedClosed: a.qualifiedClosed + r.qualifiedClosed,
+      unqualifiedClosed: a.unqualifiedClosed + r.unqualifiedClosed,
       units: a.units + r.units,
       cash: a.cash + r.cash,
     }),
-    { dials: 0, connections: 0, talkSeconds: 0, aiScoreSum: 0, aiN: 0, closes: 0, units: 0, cash: 0 },
+    {
+      dials: 0,
+      connections: 0,
+      talkSeconds: 0,
+      aiScoreSum: 0,
+      aiN: 0,
+      closes: 0,
+      leadsConnected: 0,
+      qualifiedConnected: 0,
+      unqualifiedConnected: 0,
+      qualifiedClosed: 0,
+      unqualifiedClosed: 0,
+      units: 0,
+      cash: 0,
+    },
   )
 
   return (
@@ -266,6 +310,9 @@ export function DcAdsByRepSection({
                 <HeadCell label="Talk time" />
                 <HeadCell label="AI Rep" />
                 <HeadCell label="Closes" m />
+                <HeadCell label="Close rate" />
+                <HeadCell label="Q close rate" />
+                <HeadCell label="NonQ close rate" />
                 <HeadCell label="Units" />
                 <HeadCell label="B44·Mo" />
                 <HeadCell label="B44·Yr" />
@@ -304,6 +351,9 @@ export function DcAdsByRepSection({
                   muted
                 />
                 <Cell value={colTotals.closes.toLocaleString('en-US')} strong m />
+                <RateCell n={colTotals.closes} d={colTotals.leadsConnected} muted />
+                <RateCell n={colTotals.qualifiedClosed} d={colTotals.qualifiedConnected} muted />
+                <RateCell n={colTotals.unqualifiedClosed} d={colTotals.unqualifiedConnected} muted />
                 <Cell value={colTotals.units.toLocaleString('en-US')} strong />
                 <Cell value={totals.base44Monthly.toLocaleString('en-US')} muted />
                 <Cell value={totals.base44Yearly.toLocaleString('en-US')} muted />
@@ -368,7 +418,13 @@ export function DcAdsByRepSection({
         phone (sum of call durations, all calls both directions) · <b>AI Rep</b> = the rep&apos;s average
         AI execution score (0–10) over their reviewed calls in the window — per call, from the call
         reviews (scored from 2026-08-18; a dash = no reviewed calls yet, not a zero)
-        · <b>Closes</b> = DC closes with a plan · <b>Units</b> = plan units
+        · <b>Closes</b> = DC closes with a plan · <b>Close rate</b> = the rep&apos;s closes ÷ the
+        <i> distinct leads</i> they connected with (a lead counts once however many calls it took —
+        so the denominator runs lower than Connections) · <b>Q / NonQ close rate</b> = the same
+        rate split by the lead&apos;s survey qualification — a lead with no completed survey counts
+        as non-qualified, so the Q and NonQ fractions add up to the global one. A close credits the
+        closer form&apos;s reps while connects come from calls, so a rate can top 100% on small
+        numbers — read the fraction beside each percent. · <b>Units</b> = plan units
         (the B44/Wix columns are their split) · <b>Cash</b> = $300 per unit. A deal with two closers credits
         both; the header totals count each deal once. The main rows are the CURRENT team (DC Setup);
         people deactivated there collapse into the &ldquo;Former reps&rdquo; group, still counted in
