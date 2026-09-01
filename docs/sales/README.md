@@ -49,6 +49,7 @@ reference Ella, Clients, CSM, or Gregory.
 | [`ingestion.md`](./ingestion.md) | Every data source, its webhook/cron model, and the **ops traps** (the env gotcha, the migration apply path). |
 | [`surfaces.md`](./surfaces.md) | The page-by-page UI map — routes, what each shows, what was removed. |
 | [`landing-pages.md`](./landing-pages.md) | How landing pages work + **the checklist for adding a new one** (the 5 things to collect, what's deferred). |
+| [`clickfunnels-forms-plan.md`](./clickfunnels-forms-plan.md) | **Future work, not built** — the plan to replace the DC Typeform with ClickFunnels forms: API findings, the adapter contract, backfill, and what it's blocked on. |
 
 The sales Slack bot (text-to-SQL, read-only) is documented in
 [`docs/agents/sales_bot.md`](../agents/sales_bot.md) (agent) and
