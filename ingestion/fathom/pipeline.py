@@ -193,8 +193,16 @@ def ingest_call(
     embed_fn: Callable[[str], list[float]] | None = None,
     file_size_bytes: int | None = None,
     dry_run: bool = True,
+    post_cs_summary: bool = True,
 ) -> IngestOutcome:
-    """Run the full per-call flow. See module docstring."""
+    """Run the full per-call flow. See module docstring.
+
+    post_cs_summary=False suppresses ONLY the CS Slack-summary hook
+    (call row, summary doc, chunks, and auto-review all still happen).
+    The backfill sweep passes False so gap-healing after an outage
+    doesn't flood the CS channel with stale summaries; the live webhook
+    path keeps the default True.
+    """
     validation_failures: list[str] = []
     errors: list[str] = []
 
@@ -298,27 +306,30 @@ def ingest_call(
     # try/except so a Slack-post failure NEVER fails the Fathom webhook
     # delivery — the call row + summary doc + chunks are more important
     # than the Slack message. Audit trail via webhook_deliveries with
-    # source='cs_call_summary_slack_post'.
-    try:
-        from agents.gregory.cs_call_summary_post import (
-            maybe_post_cs_call_summary,
-        )
+    # source='cs_call_summary_slack_post'. Suppressed (no Slack call, no
+    # audit row) when the caller is healing an outage gap — see the
+    # post_cs_summary docstring note.
+    if post_cs_summary:
+        try:
+            from agents.gregory.cs_call_summary_post import (
+                maybe_post_cs_call_summary,
+            )
 
-        maybe_post_cs_call_summary(
-            db,
-            call_id=call_id,
-            call_category=classification.call_category,
-            primary_client_id=classification.primary_client_id,
-            summary_text=record.summary_text,
-            fathom_external_id=record.external_id,
-        )
-    except Exception as exc:
-        logger.warning(
-            "cs_call_summary_post hook raised for call %s: %s — "
-            "ingest continues",
-            call_id,
-            exc,
-        )
+            maybe_post_cs_call_summary(
+                db,
+                call_id=call_id,
+                call_category=classification.call_category,
+                primary_client_id=classification.primary_client_id,
+                summary_text=record.summary_text,
+                fathom_external_id=record.external_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "cs_call_summary_post hook raised for call %s: %s — "
+                "ingest continues",
+                call_id,
+                exc,
+            )
 
     return IngestOutcome(
         external_id=record.external_id,

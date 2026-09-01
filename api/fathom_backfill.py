@@ -196,6 +196,14 @@ class handler(BaseHTTPRequestHandler):
                     embed_fn=embed,
                     file_size_bytes=None,
                     dry_run=False,
+                    # Sweep-ingested calls never post to the CS Slack
+                    # channel: after an outage this cron heals weeks of
+                    # backlog (50/day) and would flood it with stale
+                    # summaries. A fresh call the webhook truly missed
+                    # gets no CS post either — re-deliver it from the
+                    # Fathom UI if one is wanted (runbook
+                    # cs_call_summary.md § re-fire).
+                    post_cs_summary=False,
                 )
                 _write_cron_delivery(
                     db, cron_webhook_id, external_id,

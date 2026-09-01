@@ -14,6 +14,13 @@ lands a `call_category='client'` call.
 
 ## Trigger conditions
 
+**The hook is bypassed entirely** (no Slack call, no audit row) when the ingest comes from the
+daily backfill sweep — `api/fathom_backfill.py` passes `ingest_call(..., post_cs_summary=False)`
+(added 2026-09-01) so gap-healing after an outage doesn't flood the channel with stale summaries.
+Consequence: a fresh call that the webhook missed and the sweep picked up gets NO CS post; if one
+is wanted, re-deliver it from the Fathom UI (§ "Debug a missing post" step 3). The live webhook
+path (`api/fathom_events.py`) always runs the hook.
+
 The hook fires inside `ingest_call` for every call regardless of category, but only POSTS to Slack when:
 
 1. `classification.call_category == 'client'` (other categories silently skip — no Slack call, no audit row).

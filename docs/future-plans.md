@@ -62,10 +62,22 @@ the Sheet. The capture receiver is `api/clickfunnels_events.py` (`X-Relay-Secret
 replay queue for the future pipeline). Preferred wiring (user's call, later same day): Zain adds a **second Webhook step directly in the
 ClickFunnels workflow** pointing at us — no Make change at all, the Make→Sheet leg untouched. The
 secret then travels as `?secret=<value>` appended to the URL (the endpoint accepts header OR query
-param). The Make-module route stays documented above as the fallback. Handoff: set the env var
-(owner Vercel account) + redeploy, Zain clones his existing webhook step with our URL+secret,
-fire one test submission, then inspect the captured payload and the Sheet columns against the
-contract above.
+param). The Make-module route stays documented above as the fallback.
+
+**End-of-day state 2026-09-01 — capture endpoint LIVE and verified** (deploy `success`; GET → 200
+health, POST without secret → 503), handoff issued, waiting on people:
+
+1. **Zain**: invents the secret, adds the second CF webhook step with URL
+   `https://ai-enablement-sigma.vercel.app/api/clickfunnels_events?secret=<his value>` (POST,
+   JSON, same trigger/payload as his existing Make webhook step), sends Drake the secret value.
+2. **Drake (owner Vercel login)**: puts that same value in `CLICKFUNNELS_WEBHOOK_SECRET`
+   (Production) + Redeploy, then gives Zain the go-ahead.
+3. **Zain**: one test submission — success = `{"captured": true}`; `unauthorized` = secret
+   mismatch; `receiver not configured` = env var not live yet.
+4. Then: inspect the captured row (`webhook_deliveries` `source='clickfunnels_webhook'`) against
+   the § contract (phone, email, both scoring answers, hidden ad ids) and build the real parser.
+5. Still wanted independently: the **Google Sheet view link** (historical backfill + gap checks)
+   and the **switch date**.
 
 Everything else in this section (the contract in § "The contract the adapter must satisfy", the
 storage decision, the registry wiring, the Blocked-on asks about question copy / hidden-field
@@ -263,9 +275,12 @@ Two levers, independent, either can ship alone:
 
 ## 3. Restore the #cs-call-summaries Slack channel
 
-> **Status: SCOPED 2026-09-01 — blocked on Fathom credentials** (the same credentials item open
-> since July; as of 2026-09-01 the key is expected to come **via Zain**). The code path is intact
-> and unchanged since it last worked; nothing to build except a small backfill-suppression flag.
+> **Status: IN PROGRESS 2026-09-01 — the API key is in hand (Drake has it); the
+> backfill-suppression flag is BUILT** (`ingest_call(post_cs_summary=False)` from the daily
+> sweep — flood risk closed, so the key can go live safely). Remaining: key into `.env.local`
+> (verify with one real call) → `FATHOM_API_KEY` + `FATHOM_WEBHOOK_SECRET` into Vercel via the
+> owner login (Drake's seat is gone) → re-register the webhook → live verification → the
+> beyond-30-days manual backfill (the daily sweep self-heals the newest 30 days at 50/day).
 > Working-system reference: `docs/runbooks/cs_call_summary.md` (message format, audit trail,
 > debug table) and `docs/runbooks/fathom_webhook.md` (webhook registration history).
 
