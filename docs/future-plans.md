@@ -275,14 +275,45 @@ Two levers, independent, either can ship alone:
 
 ## 3. Restore the #cs-call-summaries Slack channel
 
-> **Status: IN PROGRESS 2026-09-01 — the API key is in hand (Drake has it); the
-> backfill-suppression flag is BUILT** (`ingest_call(post_cs_summary=False)` from the daily
-> sweep — flood risk closed, so the key can go live safely). Remaining: key into `.env.local`
-> (verify with one real call) → `FATHOM_API_KEY` + `FATHOM_WEBHOOK_SECRET` into Vercel via the
-> owner login (Drake's seat is gone) → re-register the webhook → live verification → the
-> beyond-30-days manual backfill (the daily sweep self-heals the newest 30 days at 50/day).
+> **Status: READY TO EXECUTE — everything verifiable tonight was verified 2026-09-01 evening;
+> the remaining steps need only the owner Vercel login (Drake gets it 2026-09-02).**
 > Working-system reference: `docs/runbooks/cs_call_summary.md` (message format, audit trail,
 > debug table) and `docs/runbooks/fathom_webhook.md` (webhook registration history).
+
+**Verified 2026-09-01 evening:**
+
+- **The new Fathom API key WORKS** — live `GET /external/v1/meetings` returned 200; the account
+  is actively recording (newest meeting 22:27 UTC same day, 10+ in the prior 7 days), so the
+  outage-window recordings exist on Fathom's side and are backfillable. The key sits in Drake's
+  local `.env.local` (`FATHOM_API_KEY`) — **local-only; if that file is lost, get the key again
+  from Zain/Nabeel.** It is NOT in Vercel yet.
+- **Backfill flood-guard shipped** (`cc8ec50`): `ingest_call(post_cs_summary=False)` from the
+  daily sweep — swept/backfilled calls generate all data but never post to the CS channel (see
+  the note in `cs_call_summary.md`). Deploy was still `pending` at session close — **confirm it
+  reads `success` (GitHub commit ✓ on `cc8ec50`) before putting the key into Vercel.**
+- Registration mechanics confirmed against the live API: **no list endpoint** (GET /webhooks
+  404s, documented quirk); create = `POST /external/v1/webhooks` (exact body in
+  `fathom_webhook.md` ~line 212) whose **response contains the new `whsec_…` signing secret**;
+  the dead registration's id from the last rotation was `FTVBjD_JqTfjEzVA` (delete it if Fathom
+  ever complains about a duplicate destination).
+- **Deliberately NOT registered yet**: registering mints a new secret and starts deliveries
+  immediately, which would all 401 against the stale `FATHOM_WEBHOOK_SECRET` in Vercel until the
+  owner login can update it — a day of rejected deliveries risks Fathom auto-disable. Register
+  and paste as one tight sequence instead.
+
+**The go-live sequence (five minutes, with the owner Vercel login open):**
+
+1. Register the webhook (`POST /external/v1/webhooks`, destination
+   `https://ai-enablement-sigma.vercel.app/api/fathom_events`, body per the runbook); capture
+   the returned webhook id + `whsec_…` secret.
+2. Paste `FATHOM_API_KEY` (from `.env.local`) and `FATHOM_WEBHOOK_SECRET` (the fresh `whsec_…`)
+   into Vercel env (Production) → **Redeploy**.
+3. Verify: POST with a bad signature → 401; then the next real client call end-to-end:
+   `webhook_deliveries` `source='fathom_webhook'` processed row → `cs_call_summary_slack_post`
+   processed row → message in the CS channel.
+4. Aftermath: the daily 08:00 UTC sweep quietly heals the newest 30 days at ≤50 calls/day (no
+   channel posts); the older chunk (Jul 2 → early Aug) needs one supervised manual backfill run
+   (lift the 30-day/50-call caps for one run, or a one-shot script) — schedule whenever.
 
 ### What broke (verified against the live DB 2026-09-01)
 
