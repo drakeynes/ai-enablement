@@ -172,6 +172,11 @@
       "maxDuration": 60,
       "excludeFiles": "{.next,node_modules}/**"
     },
+    "api/clickfunnels_events.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 60,
+      "excludeFiles": "{.next,node_modules}/**"
+    },
     "api/dc_exec_summary_cron.py": {
       "runtime": "@vercel/python@4.3.1",
       "maxDuration": 120,

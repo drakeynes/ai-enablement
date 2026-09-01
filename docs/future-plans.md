@@ -47,8 +47,21 @@ pending Nabeel's go-ahead (Zain would then create the webhook):
   sheet headers, or configure `qualify_field_ref` + `qualify_answers` manually once in DC Setup.
 - **First discovery step becomes**: get one test submission flowing (webhook to a capture
   endpoint + a look at the Sheet's columns) and confirm phone, email, both scoring answers, and
-  the hidden campaign/adset/ad ids all arrive. Find out **what populates the Sheet** — if it's a
-  step in the same workflow, webhook + sheet-row in one workflow is the whole architecture.
+  the hidden campaign/adset/ad ids all arrive.
+
+**2026-09-01 later same day — the mechanism is known and the capture stub is live.** The flow is
+**ClickFunnels workflow → Make.com inbound hook (Zain's, `hook.us2.make.com/…`) → Google Sheet.**
+Hard requirement from the user: **the Sheet flow must keep working unchanged — we want BOTH
+outputs.** So the wiring is additive: one HTTP "Make a request" module appended to the same Make
+scenario **after** the existing Google Sheets module (sheet row is already written before our
+module runs), with an **Ignore error handler** attached to our module so that even if our endpoint
+is down/misconfigured, the scenario run still completes and never pauses — strictly zero risk to
+the Sheet. The capture receiver is `api/clickfunnels_events.py` (`X-Relay-Secret` header vs
+`CLICKFUNNELS_WEBHOOK_SECRET`; 503 until the env var is set in Vercel; captured payloads land in
+`webhook_deliveries` `source='clickfunnels_webhook'`, status `received` — they double as the
+replay queue for the future pipeline). Handoff: set the env var (owner Vercel account) + redeploy,
+add the Make module (URL + header), fire one test submission, then inspect the captured payload
+and the Sheet columns against the contract above.
 
 Everything else in this section (the contract in § "The contract the adapter must satisfy", the
 storage decision, the registry wiring, the Blocked-on asks about question copy / hidden-field
