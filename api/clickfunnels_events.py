@@ -16,8 +16,10 @@ mirrors it yet — rows deliberately stay `received` until the
 `ingestion/clickfunnels/` pipeline exists to process them (they are its
 future replay queue).
 
-Auth: shared secret in the `X-Relay-Secret` header (set on the Make HTTP
-module), constant-time-compared against `CLICKFUNNELS_WEBHOOK_SECRET`.
+Auth: shared secret, constant-time-compared against
+`CLICKFUNNELS_WEBHOOK_SECRET` — either the `X-Relay-Secret` header (a
+Make HTTP module) or `?secret=` in the URL (a ClickFunnels workflow
+Webhook step pointed directly at us, which may not support headers).
 Env var unset → 503 (endpoint dark until configured). Bad secret → 401,
 no DB write. After auth, the house always-200 posture applies: internal
 failures log + return 200 so Make's error handling doesn't disable the
@@ -37,6 +39,7 @@ import json
 import logging
 import os
 import sys
+import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
@@ -64,7 +67,13 @@ class handler(BaseHTTPRequestHandler):
         if not secret:
             self._respond(503, {"error": "receiver not configured"})
             return
+        # Secret arrives as the X-Relay-Secret header (Make HTTP module)
+        # or as ?secret= in the URL (CF workflow webhook steps may not
+        # support custom headers).
         provided = self.headers.get(_SECRET_HEADER) or ""
+        if not provided:
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            provided = (query.get("secret") or [""])[0]
         if not hmac.compare_digest(provided.encode(), secret.encode()):
             logger.warning("clickfunnels_webhook: bad or missing relay secret")
             self._respond(401, {"error": "unauthorized"})

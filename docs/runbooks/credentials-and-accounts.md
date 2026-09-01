@@ -75,7 +75,7 @@ For each: purpose · env var(s) · account owner · where to mint/rotate.
 | `AIRTABLE_ONBOARDING_WEBHOOK_SECRET` | Make.com onboarding receiver | Shared with Make.com. |
 | `AIRTABLE_NPS_WEBHOOK_SECRET` | NPS webhook receiver | Shared with Make.com. |
 | `SPEED_TO_LEAD_API_KEY` | Bearer for `/api/speed-to-lead` (Zain) | Hand the new value to Zain after rotation. |
-| `CLICKFUNNELS_WEBHOOK_SECRET` | Relay auth for `/api/clickfunnels_events` (capture stub, 2026-09-01) | Shared secret; goes in the `X-Relay-Secret` header of the Make.com HTTP module that forwards CF submissions to us. Rotate = change in Vercel + update the Make module. |
+| `CLICKFUNNELS_WEBHOOK_SECRET` | Relay auth for `/api/clickfunnels_events` (capture stub, 2026-09-01) | Shared secret; either the `X-Relay-Secret` header (Make HTTP module) or `?secret=` on the URL (CF workflow Webhook step pointed directly at us — the preferred wiring). Rotate = change in Vercel + update the CF step / Make module. |
 | `GHL_WEBHOOK_SECRET` | Bearer for the `/api/ghl_events` webhook receiver | We choose the value; the team puts it in the GHL Workflow → Custom Webhook header. Rotate = change in Vercel + update the GHL workflow header. |
 
 ## Webhooks — re-register ONLY if the Vercel URL changes
@@ -91,7 +91,7 @@ Vercel (several mint one-time secrets):
 | Typeform | `/api/typeform_events` | `scripts/register_typeform_webhooks.py` | Per-form; auto-selects forms active in the last 30 days. |
 | Airtable | `/api/airtable_events` | `scripts/register_airtable_webhook.py` | Base-level; `macSecretBase64` returned once. Needs `webhook:manage` scope on the PAT. |
 | Close | `/api/close_events` | `scripts/register_close_webhook.py` | Registration infra ready; not yet live. |
-| ClickFunnels (via Make.com) | `/api/clickfunnels_events` | (Make UI) | Capture stub (see `docs/future-plans.md` §1). CF workflow webhooks into a Make scenario (Zain's; also feeds the Google Sheet); an HTTP module there forwards each submission here with the `X-Relay-Secret` header. URL change = edit the Make module. |
+| ClickFunnels (via Make.com) | `/api/clickfunnels_events` | (Make UI) | Capture stub (see `docs/future-plans.md` §1). Preferred: a second Webhook step in the CF workflow (Zain's) POSTing straight here with `?secret=` on the URL; the existing CF→Make→Google-Sheet leg stays untouched. Fallback: an HTTP module in the Make scenario with the `X-Relay-Secret` header. URL change = edit the Make module. |
 | GHL | `/api/ghl_events` | (GHL UI — no API) | **RETIRED 2026-09-01 — endpoint deleted; never went live.** Was: not API-registrable. Configured in GHL as a Workflow → Custom Webhook (Contact Created / changed / Customer Replied), auth via `GHL_WEBHOOK_SECRET` header. URL change = edit the workflow in GHL. Optional layer on top of `ghl_sync_cron`; not live until the team builds the workflows. |
 
 ## Make.com

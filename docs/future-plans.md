@@ -59,9 +59,13 @@ is down/misconfigured, the scenario run still completes and never pauses — str
 the Sheet. The capture receiver is `api/clickfunnels_events.py` (`X-Relay-Secret` header vs
 `CLICKFUNNELS_WEBHOOK_SECRET`; 503 until the env var is set in Vercel; captured payloads land in
 `webhook_deliveries` `source='clickfunnels_webhook'`, status `received` — they double as the
-replay queue for the future pipeline). Handoff: set the env var (owner Vercel account) + redeploy,
-add the Make module (URL + header), fire one test submission, then inspect the captured payload
-and the Sheet columns against the contract above.
+replay queue for the future pipeline). Preferred wiring (user's call, later same day): Zain adds a **second Webhook step directly in the
+ClickFunnels workflow** pointing at us — no Make change at all, the Make→Sheet leg untouched. The
+secret then travels as `?secret=<value>` appended to the URL (the endpoint accepts header OR query
+param). The Make-module route stays documented above as the fallback. Handoff: set the env var
+(owner Vercel account) + redeploy, Zain clones his existing webhook step with our URL+secret,
+fire one test submission, then inspect the captured payload and the Sheet columns against the
+contract above.
 
 Everything else in this section (the contract in § "The contract the adapter must satisfy", the
 storage decision, the registry wiring, the Blocked-on asks about question copy / hidden-field
