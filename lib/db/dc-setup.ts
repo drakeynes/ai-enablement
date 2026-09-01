@@ -167,13 +167,13 @@ export type DcHealthRow = {
 }
 
 const HEALTH_SOURCES: { key: string; label: string; detail: string; staleAfterMin: number }[] = [
-  { key: 'meta_leads_sync', label: 'Meta Ads', detail: 'leads + campaign detection', staleAfterMin: 60 },
+  { key: 'meta_leads_sync', label: 'Meta Ads', detail: 'leads + campaign detection', staleAfterMin: 120 },
   { key: 'meta_sync', label: 'Meta Ads spend', detail: 'adspend mirrors', staleAfterMin: 240 },
   { key: 'close_webhook', label: 'Close CRM', detail: 'leads · calls · SMS', staleAfterMin: 360 },
-  { key: 'typeform_sync_cron', label: 'Typeform', detail: 'form submissions', staleAfterMin: 60 },
-  { key: 'airtable_sync_cron', label: 'Airtable', detail: 'sale forms · closer reports', staleAfterMin: 60 },
-  { key: 'wistia_sync', label: 'Wistia', detail: 'video stats', staleAfterMin: 720 },
-  { key: 'outbound_facts_refresh', label: 'Dashboard numbers', detail: 'DC Ads page refresh', staleAfterMin: 60 },
+  { key: 'typeform_sync_cron', label: 'Typeform', detail: 'form submissions', staleAfterMin: 120 },
+  { key: 'airtable_sync_cron', label: 'Airtable', detail: 'sale forms · closer reports', staleAfterMin: 120 },
+  { key: 'wistia_sync', label: 'Wistia', detail: 'video stats', staleAfterMin: 1440 },
+  { key: 'outbound_facts_refresh', label: 'Dashboard numbers', detail: 'DC Ads page refresh', staleAfterMin: 120 },
 ]
 
 export async function getDcSystemHealth(): Promise<DcHealthRow[]> {
