@@ -56,9 +56,12 @@ vercel metrics vercel.function_invocation.function_duration_gbhr \
 memory, …). Seat count: the team members list in the Vercel dashboard, or
 `GET https://api.vercel.com/v2/teams/{teamId}/members` with the CLI token.
 
-## Levers to lower it (analyzed 2026-08, deliberately NOT applied)
+## Levers to lower it (analyzed 2026-08; lever 1 APPLIED 2026-09-01)
 
-**Plan of record for acting on these: `docs/future-plans.md` § "Vercel bill reduction".**
+**Plan of record + applied-status detail: `docs/future-plans.md` § "Vercel bill reduction".**
+Applied 2026-09-01 (user-directed): cadence stretch on the heavy syncs, full GHL-sync removal,
+and Drake's team seat removed (future re-runs of the analysis happen from the owner account).
+Lever 2 (Fluid) remains open.
 
 1. **Stretch cron schedules** — cheap, immediate, costs freshness. The big three
    (`meta_leads_sync` `*/15`, `ghl_sync` `*/15`, `wistia_sync` hourly) are ~61% of the line;
@@ -72,4 +75,4 @@ memory, …). Seat count: the team members list in the Vercel dashboard, or
    `vercel_python_bundle_size.md` for why the runtime config looks the way it does before
    changing it.
 
-Neither has been applied; nobody has asked for the trade-off yet.
+Lever 1 was applied 2026-09-01; lever 2 has not been.
