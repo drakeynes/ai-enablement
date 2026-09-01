@@ -17,10 +17,42 @@ Items:
 ## 1. ClickFunnels forms — replace the DC Typeform
 
 > **Status: PLANNED — not started, no timeline** (scoped 2026-08-31 from API-doc research plus a
-> full code map of the Typeform integration). Nothing in the repo ingests ClickFunnels yet. Blocked
-> on four inputs from Nabeel (see [Blocked on](#blocked-on-inputs-from-nabeel)). If/when this gets
-> picked up: read this section, run the [discovery checklist](#discovery-checklist-do-this-first)
-> before writing any adapter code, then follow `docs/runbooks/adding_new_ingestion_source.md`.
+> full code map of the Typeform integration; **transport settled 2026-09-01, see the update box
+> below**). Nothing in the repo ingests ClickFunnels yet. If/when this gets picked up: read this
+> section, run the [discovery checklist](#discovery-checklist-do-this-first) before writing any
+> adapter code, then follow `docs/runbooks/adding_new_ingestion_source.md`.
+
+### 2026-09-01 update — transport settled: webhook + Google Sheet (no API)
+
+The account's ClickFunnels plan has **no API access**, so every API-based mechanism below
+(list-endpoint backfill, reconcile poll, field-set fetch) is **reference-only unless the plan is
+upgraded**. Workflow **webhooks ARE available** on their plan (verified in practice — Zain already
+runs one), and Nabeel also has the submissions landing in a **Google Sheet**. The plan of record,
+pending Nabeel's go-ahead (Zain would then create the webhook):
+
+- **Live path**: a ClickFunnels workflow Webhook step POSTing each submission to our receiver
+  (`api/clickfunnels_events.py`). Workflow-step POSTs may be unsigned — put a secret in the URL
+  and validate payload shape.
+- **Durable backlog**: the Google Sheet. It covers the two things the missing API cost us:
+  the **historical backfill** (switch date → go-live) and **gap-patching** when the webhook
+  misses deliveries. Read it via a poll cron (15–30 min) using a **dedicated Google service
+  account** the sheet is shared with (NOT a publish-to-web CSV link — it's lead PII; and NOT the
+  existing Google OAuth, which is the dead ~Jul-20 credential). Upsert key: submission timestamp
+  + phone/email hash. Parser must be defensive: Sheets mangle phones/dates (populate as plain
+  text), humans rename columns (validate headers), treat the sheet as append-only.
+- **Monitoring** (replaces the API reconcile): staleness tile in DC Setup health (no new
+  submission in N hours while ads run) + a daily divergence check against Close DC opt-ins,
+  which we already mirror.
+- **Field definitions**: no field-set API — derive the field inventory from observed payloads /
+  sheet headers, or configure `qualify_field_ref` + `qualify_answers` manually once in DC Setup.
+- **First discovery step becomes**: get one test submission flowing (webhook to a capture
+  endpoint + a look at the Sheet's columns) and confirm phone, email, both scoring answers, and
+  the hidden campaign/adset/ad ids all arrive. Find out **what populates the Sheet** — if it's a
+  step in the same workflow, webhook + sheet-row in one workflow is the whole architecture.
+
+Everything else in this section (the contract in § "The contract the adapter must satisfy", the
+storage decision, the registry wiring, the Blocked-on asks about question copy / hidden-field
+passthrough / switch date) is transport-independent and stands unchanged.
 
 ### Why
 
@@ -181,9 +213,14 @@ Asked 2026-08-29:
 
 ## 2. Vercel bill reduction
 
-> **Status: ANALYZED 2026-08-29, deliberately not applied** — nobody has asked for the trade-off
-> yet. The bill explanation and the commands to re-run the analysis live in
-> `docs/runbooks/vercel_cost_analysis.md`; this section is the plan of record for acting on it.
+> **Status: PARTIALLY APPLIED 2026-09-01** (user-directed): the schedule lever shipped —
+> meta_leads/typeform/airtable/outbound_facts `*/15`→`*/30`, typeform_insights 4×/hr→hourly,
+> wistia hourly→6-hourly, and the GHL sync removed entirely (~18% of the line; the planned GHL
+> motion was dropped). Drake's team seat was also removed (~$20/mo; he works via Nabeel's seat
+> now — **CLI access from Drake's machine is gone**, so future `vercel usage` checks run from
+> Nabeel's account). Estimated combined effect: roughly half the Function Duration line + the
+> seat. **Still open: the Fluid Compute migration below (lever 2).** The bill explanation and
+> re-run commands live in `docs/runbooks/vercel_cost_analysis.md`.
 
 The bill ≈ 2 Pro seats ($40/mo fixed) + the **Function Duration** usage line ($42 effective in
 July, $57+ and rising in August). ~99.8% of the function compute is the cron/webhook ingestion
@@ -209,11 +246,11 @@ Two levers, independent, either can ship alone:
 
 ## 3. Restore the #cs-call-summaries Slack channel
 
-> **Status: SCOPED 2026-09-01 — blocked on Fathom credentials from Nabeel** (the same credentials
-> item open since July). The code path is intact and unchanged since it last worked; nothing to
-> build except a small backfill-suppression flag. Working-system reference:
-> `docs/runbooks/cs_call_summary.md` (message format, audit trail, debug table) and
-> `docs/runbooks/fathom_webhook.md` (webhook registration history).
+> **Status: SCOPED 2026-09-01 — blocked on Fathom credentials** (the same credentials item open
+> since July; as of 2026-09-01 the key is expected to come **via Zain**). The code path is intact
+> and unchanged since it last worked; nothing to build except a small backfill-suppression flag.
+> Working-system reference: `docs/runbooks/cs_call_summary.md` (message format, audit trail,
+> debug table) and `docs/runbooks/fathom_webhook.md` (webhook registration history).
 
 ### What broke (verified against the live DB 2026-09-01)
 
