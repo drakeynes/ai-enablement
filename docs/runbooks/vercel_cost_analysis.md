@@ -58,6 +58,8 @@ memory, …). Seat count: the team members list in the Vercel dashboard, or
 
 ## Levers to lower it (analyzed 2026-08, deliberately NOT applied)
 
+**Plan of record for acting on these: `docs/future-plans.md` § "Vercel bill reduction".**
+
 1. **Stretch cron schedules** — cheap, immediate, costs freshness. The big three
    (`meta_leads_sync` `*/15`, `ghl_sync` `*/15`, `wistia_sync` hourly) are ~61% of the line;
    halving their frequency roughly halves it. Business call — the DC dashboard's 15-minute

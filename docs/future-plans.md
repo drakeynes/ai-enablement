@@ -1,12 +1,27 @@
-# ClickFunnels forms — plan to replace the DC Typeform (future work)
+# Future plans
 
-> **Status: PLANNED — not started, no timeline.** Written 2026-08-31 from API-doc research plus a
-> full code map of the Typeform integration. Nothing in the repo ingests ClickFunnels yet. Blocked
+> The parking lot for **planned-but-not-started** work, one section per item. Each section carries
+> enough scoping that whoever picks it up later (human or AI) can start without re-research —
+> but always re-verify claims against the live code/DB first; these are point-in-time snapshots.
+> Nothing here has a timeline or a commitment. When an item ships, delete its section and let the
+> permanent docs (runbooks / schema / sales) take over.
+
+Items:
+
+1. [ClickFunnels forms — replace the DC Typeform](#1-clickfunnels-forms--replace-the-dc-typeform)
+2. [Vercel bill reduction](#2-vercel-bill-reduction)
+
+---
+
+## 1. ClickFunnels forms — replace the DC Typeform
+
+> **Status: PLANNED — not started, no timeline** (scoped 2026-08-31 from API-doc research plus a
+> full code map of the Typeform integration). Nothing in the repo ingests ClickFunnels yet. Blocked
 > on four inputs from Nabeel (see [Blocked on](#blocked-on-inputs-from-nabeel)). If/when this gets
-> picked up: read this doc, run the [discovery checklist](#discovery-checklist-do-this-first) before
-> writing any adapter code, then follow `docs/runbooks/adding_new_ingestion_source.md`.
+> picked up: read this section, run the [discovery checklist](#discovery-checklist-do-this-first)
+> before writing any adapter code, then follow `docs/runbooks/adding_new_ingestion_source.md`.
 
-## Why
+### Why
 
 The DC ads funnel is switching (per Nabeel, relayed 2026-08-29) from Typeform to **ClickFunnels
 forms** for the post-opt-in survey. Until a ClickFunnels source ships, every lead who submits the
@@ -20,7 +35,7 @@ current blind spot.
 Scope: **DC ads only.** The high-ticket side (`lead_cycles` via `shared/lead_tagging.py`,
 `landing_page_forms`) stays on Typeform and is not part of this plan.
 
-## What Typeform feeds today (the thing that must keep working)
+### What Typeform feeds today (the thing that must keep working)
 
 Full detail: `docs/runbooks/typeform_ingestion.md`, `docs/schema/typeform_responses.md`,
 `docs/schema/dc_ads_lead_facts.md`, and the current facts refresh in
@@ -38,7 +53,7 @@ Full detail: `docs/runbooks/typeform_ingestion.md`, `docs/schema/typeform_respon
 - Downstream: qualState 3-state, Tier A–D, HVC, the Q-prefixed speed blocks, the 0157 by-rep
   close-rate trio, and the LP-summary submission counts (filtered by `hidden->>'ad_id'` etc.).
 
-## ClickFunnels 2.0 API (verified from docs 2026-08-29 — NOT yet against the live workspace)
+### ClickFunnels 2.0 API (verified from docs 2026-08-29 — NOT yet against the live workspace)
 
 Docs index: <https://developers.myclickfunnels.com/llms.txt> (append `.md` to any doc URL).
 
@@ -69,7 +84,7 @@ Docs index: <https://developers.myclickfunnels.com/llms.txt> (append `.md` to an
   `typeform_sync_cron`).
 - **Rate limiting**: "dynamic with a generous quota", no published numbers.
 
-## The contract the adapter must satisfy
+### The contract the adapter must satisfy
 
 Condensed from the code map (verified 2026-08-29). The cheapest integration keeps
 `refresh_dc_ads_facts()` and every dashboard surface untouched by normalizing ClickFunnels
@@ -101,7 +116,7 @@ submissions **into the exact response shape the tf CTEs read**:
    tiles (`lib/db/dc-setup.ts`); post-upsert `refresh_dc_ads_facts()` (or let
    `outbound_facts_refresh_cron` `*/15` pick it up).
 
-## Proposed design
+### Proposed design
 
 - **`ingestion/clickfunnels/`** — `client.py` / `parser.py` / `pipeline.py`, mirroring
   `ingestion/typeform/` (stdlib urllib client, retry/429 handling, cursor walk with a safety max).
@@ -128,14 +143,14 @@ submissions **into the exact response shape the tf CTEs read**:
 - **Env vars**: `CLICKFUNNELS_API_TOKEN`, `CLICKFUNNELS_SUBDOMAIN` (or full base URL),
   `CLICKFUNNELS_WEBHOOK_SECRET`.
 
-## Backfill
+### Backfill
 
 Window = switch date → now. Walk the submissions cursor ascending, filter `created_at >= switch
 date` client-side, upsert, then run `refresh_dc_ads_facts()` once and verify the lead-roster
 tier/qualState counts move. House rule applies: **real-API `--smoke` on one record end-to-end
 against the real DB before `--apply`**.
 
-## Discovery checklist (do this FIRST)
+### Discovery checklist (do this FIRST)
 
 Per the discovery-before-build rule — no adapter code until one real authenticated call has been
 inspected:
@@ -148,7 +163,7 @@ inspected:
    webhook-vs-poll and which parser to write.
 4. Register a webhook endpoint against a test URL and verify the signature scheme end-to-end.
 
-## Blocked on (inputs from Nabeel)
+### Blocked on (inputs from Nabeel)
 
 Asked 2026-08-29:
 
@@ -160,3 +175,31 @@ Asked 2026-08-29:
    Nabeel's web person, without which new submissions lose LP-summary ad attribution (the old
    ~1-in-6 untagged caveat becomes ~all).
 4. **The switch date** — backfill window, and the size of the dashboard gap accruing now.
+
+---
+
+## 2. Vercel bill reduction
+
+> **Status: ANALYZED 2026-08-29, deliberately not applied** — nobody has asked for the trade-off
+> yet. The bill explanation and the commands to re-run the analysis live in
+> `docs/runbooks/vercel_cost_analysis.md`; this section is the plan of record for acting on it.
+
+The bill ≈ 2 Pro seats ($40/mo fixed) + the **Function Duration** usage line ($42 effective in
+July, $57+ and rising in August). ~99.8% of the function compute is the cron/webhook ingestion
+fleet (top burners: `meta_leads_sync` 24%, `wistia_sync` 19%, `ghl_sync` 18%, `close_events` 10%);
+dashboard users round to zero. The Python functions bill **wall-clock** GB-hours on the pinned
+legacy `@vercel/python@4.3.1` runtime while mostly idle-waiting on external APIs.
+
+Two levers, independent, either can ship alone:
+
+1. **Stretch cron schedules** — cheap, immediate, costs data freshness. The big three
+   (`meta_leads_sync_cron` `*/15`, `ghl_sync_cron` `*/15`, `wistia_sync_cron` hourly) are ~61% of
+   the line; halving their frequency roughly halves it. Business call — the DC dashboard's
+   15-minute freshness is a feature, so get sign-off on the new cadence before editing
+   `vercel.json` (and update `docs/runbooks/cron_schedule.md` in the same commit).
+2. **Migrate the Python functions to Fluid Compute** — the structural fix. Fluid bills active CPU
+   instead of wall-clock, so IO-bound syncs could get ~an order of magnitude cheaper on this line.
+   Treat as a real migration: verify current Vercel guidance for Python on Fluid, read
+   `docs/runbooks/vercel_python_bundle_size.md` for why the runtime config is pinned the way it
+   is, smoke ONE cron end-to-end in a preview deploy, then roll the fleet. Verify the effect with
+   `vercel usage` after a full day of production traffic.
