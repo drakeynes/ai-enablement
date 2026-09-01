@@ -65,7 +65,7 @@ For each: purpose · env var(s) · account owner · where to mint/rotate.
 | **Meta Marketing API** | Meta ad spend/performance (replaced Cortana 2026-06-30) + lead-form (instant form) ingestion for the DC ads funnel | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_LEADGEN_PAGE_ID`, `META_API_VERSION` | Company (Meta Business "AI Arbitrage") | Token via Business Settings. Since **2026-07-10** a **never-expiring USER token** (person-tied to Zain; scopes incl. `leads_retrieval` + pages; `data_access_expires_at` renews on his re-auth) — a permanent **System User** token is still the better shape once the app is registered. Account `act_2293461684485411`, page `627212320483048` (The AI Partner). See `docs/runbooks/meta_ads_ingestion.md` + `meta_leads_ingestion.md`. |
 | **Cortana** (RETIRED 2026-06-30) | Meta ad attribution — superseded by the Meta API above; code kept for revert | `CORTANA_API_KEY`, `CORTANA_BUSINESS_ID` | Company | Cortana settings. Keep set in Vercel until Meta cutover confirmed stable. |
 | **Deepgram** | Setter-call transcription | `DEEPGRAM_API_KEY` | Company (confirm billing owner) | console.deepgram.com. |
-| **GHL / GoHighLevel** | Outbound CRM mirror (read-only); sub-account "Digital College" `X8hfgbsfvZWAauZHxK9S` | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID` | Company | GHL → Settings → **Private Integrations** → create (read-only scopes: contacts, conversations, conversations/message, locations, locations/customFields, users). Editing scopes may regenerate the token. v2 auth = `Bearer` + `Version: 2021-07-28`. See `docs/runbooks/ghl_ingestion.md`. |
+| **GHL / GoHighLevel** | **Sync RETIRED 2026-09-01** (cron + endpoints removed; token may be revoked). Was: outbound CRM mirror (read-only); sub-account "Digital College" `X8hfgbsfvZWAauZHxK9S` | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID` | Company | GHL → Settings → **Private Integrations** → create (read-only scopes: contacts, conversations, conversations/message, locations, locations/customFields, users). Editing scopes may regenerate the token. v2 auth = `Bearer` + `Version: 2021-07-28`. See `docs/runbooks/ghl_ingestion.md`. |
 
 ### Glue / internal-issued secrets (rotate, hand to the right person)
 | Var | Purpose | Notes |
@@ -90,7 +90,7 @@ Vercel (several mint one-time secrets):
 | Typeform | `/api/typeform_events` | `scripts/register_typeform_webhooks.py` | Per-form; auto-selects forms active in the last 30 days. |
 | Airtable | `/api/airtable_events` | `scripts/register_airtable_webhook.py` | Base-level; `macSecretBase64` returned once. Needs `webhook:manage` scope on the PAT. |
 | Close | `/api/close_events` | `scripts/register_close_webhook.py` | Registration infra ready; not yet live. |
-| GHL | `/api/ghl_events` | (GHL UI — no API) | **Not API-registrable.** Configured in GHL as a Workflow → Custom Webhook (Contact Created / changed / Customer Replied), auth via `GHL_WEBHOOK_SECRET` header. URL change = edit the workflow in GHL. Optional layer on top of `ghl_sync_cron`; not live until the team builds the workflows. |
+| GHL | `/api/ghl_events` | (GHL UI — no API) | **RETIRED 2026-09-01 — endpoint deleted; never went live.** Was: not API-registrable. Configured in GHL as a Workflow → Custom Webhook (Contact Created / changed / Customer Replied), auth via `GHL_WEBHOOK_SECRET` header. URL change = edit the workflow in GHL. Optional layer on top of `ghl_sync_cron`; not live until the team builds the workflows. |
 
 ## Make.com
 

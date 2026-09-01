@@ -38,7 +38,6 @@ the UTC instant is fixed (a deliberate, accepted trade-off — see ADR 0003).
 | `/api/typeform_insights_cron` | `7 * * * *` | hourly at :07 past | Snapshot Typeform lifetime insight totals |
 | `/api/engagement_ping_cron` | `*/5 * * * *` | every 5 min | Engagement / missing-form pinger |
 | `/api/outbound_facts_refresh_cron` | `*/30 * * * *` | every 30 min | Rebuild `outbound_lead_facts` (Outbound funnel) + `dc_ads_lead_facts` (DC Ads funnel) — off-page; the pages read the precomputed tables |
-| `/api/ghl_sync_cron` | `*/15 * * * *` | every 15 min | GHL contacts/conversations mirror |
 
 ## Adding or rescheduling a cron
 

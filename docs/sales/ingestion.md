@@ -15,7 +15,14 @@ Mirrors leads, calls, SMS, status changes, opportunities → `close_leads`, `clo
 (`close_users_sync_cron`, `30 11 * * *`). Connected = `close_calls.duration >= 90`.
 **`status_label` is unreliable — never use it** for DQ/funnel state.
 
-### GHL / GoHighLevel — `ingestion/ghl/` (read-only)
+### GHL / GoHighLevel — `ingestion/ghl/` (read-only) — **RETIRED 2026-09-01**
+**The sync is off**: the planned GHL outbound motion never happened (decisions changed), so
+the `ghl_sync_cron` entry + `api/ghl_sync_cron.py` + `api/ghl_events.py` were removed in the
+2026-09-01 Vercel cost cut. The `ghl_*` mirror tables keep their last-synced data (frozen)
+and every read path below still works against it; `ingestion/ghl/` + `scripts/backfill_ghl.py`
+stay in the repo for a re-enable (restore the two api files from git history + the
+`vercel.json` entries). Historical description:
+
 The outbound CRM for **new** outbound campaigns (Close keeps the advertising funnel + the
 two finished Close pools). Read-only mirror via a Private Integration Token
 (`GHL_PRIVATE_TOKEN` + `GHL_LOCATION_ID`): contacts → `ghl_contacts`, conversations →

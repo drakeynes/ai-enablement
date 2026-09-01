@@ -1,4 +1,12 @@
-# Runbook — GHL (GoHighLevel) ingestion
+# Runbook — GHL (GoHighLevel) ingestion — **RETIRED 2026-09-01**
+
+> **The sync no longer runs.** The planned GHL outbound motion was dropped, so the cron entry
+> and both endpoints (`api/ghl_sync_cron.py`, `api/ghl_events.py`) were removed from
+> `vercel.json` + the repo in the 2026-09-01 Vercel cost cut (~18% of function GB-hours).
+> The `ghl_*` mirror tables keep their last-synced data; `ingestion/ghl/` and
+> `scripts/backfill_ghl.py` remain for a future re-enable (restore the api files from git
+> history + re-add the `vercel.json` entries). Everything below describes the system as it
+> ran.
 
 Read-only mirror of the GHL sub-account into Supabase. New **outbound** campaigns
 run in GHL (Close keeps the advertising funnel + the two finished Close outbound
