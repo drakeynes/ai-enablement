@@ -126,7 +126,11 @@ class handler(BaseHTTPRequestHandler):
             self._respond(401, {"error": "unauthorized"})
             return
 
-        api_key = os.environ.get("FATHOM_API_KEY")
+        # FATHOM_API_KEY1 is the live value (see the matching note in
+        # api/fathom_events.py — 1-suffixed during the 2026-09-02 restore).
+        api_key = os.environ.get("FATHOM_API_KEY1") or os.environ.get(
+            "FATHOM_API_KEY"
+        )
         if not api_key:
             logger.error("fathom_backfill: FATHOM_API_KEY not configured")
             self._respond(500, {"error": "misconfigured"})

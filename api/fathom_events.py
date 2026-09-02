@@ -123,7 +123,14 @@ class handler(BaseHTTPRequestHandler):
         # Signature verification is the gate. Do this BEFORE any DB writes
         # so a flood of bad signatures can't bloat webhook_deliveries with
         # junk rows. Bad signature → 401, drop the request entirely.
-        secret = os.environ.get("FATHOM_WEBHOOK_SECRET")
+        # FATHOM_WEBHOOK_SECRET1 is the live value: during the 2026-09-02
+        # credential restore the Vercel UI wouldn't smoothly replace the
+        # stale var, so the fresh secret was added under a 1-suffixed name.
+        # Prefer it; fall back to the canonical name so a later env cleanup
+        # (delete the stale var, rename 1 → canonical) needs no code change.
+        secret = os.environ.get("FATHOM_WEBHOOK_SECRET1") or os.environ.get(
+            "FATHOM_WEBHOOK_SECRET"
+        )
         if not secret:
             logger.error("fathom_webhook: FATHOM_WEBHOOK_SECRET not configured")
             self._respond(500, {"error": "misconfigured"})

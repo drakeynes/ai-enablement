@@ -46,7 +46,7 @@ For each: purpose · env var(s) · account owner · where to mint/rotate.
 ### Owned on others' accounts — document, don't migrate
 | Service | Purpose | Var(s) | Owner | Mint/rotate |
 |---|---|---|---|---|
-| **Fathom** | Call recordings/transcripts | `FATHOM_API_KEY`, `FATHOM_WEBHOOK_SECRET` | **Nabeel** (account-owner-only) | Fathom Settings → API Access. Webhook secret = delete+recreate the webhook. |
+| **Fathom** | Call recordings/transcripts | `FATHOM_API_KEY1`, `FATHOM_WEBHOOK_SECRET1` (the LIVE vars since the 2026-09-02 restore — the un-suffixed names hold stale values in Vercel; code prefers the `1` names and falls back, so deleting the stale vars + renaming `1`→canonical is a safe future cleanup) | **Nabeel** (account-owner-only) | Fathom Settings → API Access. Webhook secret = delete+recreate the webhook. |
 | **Wistia** | Video analytics | `WISTIA_API_TOKEN` | **Nabeel** (account-owner-only) | Wistia → Account Settings → API Access. |
 | **Microsoft Clarity** | Page metrics | `CLARITY_API_KEY` | **Admin-only (Nabeel)** | Clarity → Settings → Data Export. 10 req/project/day cap. |
 
