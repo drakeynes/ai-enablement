@@ -71,83 +71,14 @@ Two levers, independent, either can ship alone:
 
 ---
 
-## 3. Restore the #cs-call-summaries Slack channel
+## 3. Restore the #cs-call-summaries Slack channel — **DONE 2026-09-02**
 
-> **Status: EXECUTED 2026-09-02 — everything on our side is live and verified; the ONLY
-> remaining step is un-archiving the Slack channel (user-side).** Permanent record:
-> `docs/runbooks/cs_call_summary.md` + `docs/runbooks/fathom_webhook.md`.
-
-**Done + verified 2026-09-02:**
-
-- Fathom webhook re-registered (`POST /external/v1/webhooks`, id **`F8gszQFknRvwMtFN`**, old
-  dead registration was already gone). Fresh `whsec_…` secret captured; live values in Vercel
-  under **`FATHOM_API_KEY1` / `FATHOM_WEBHOOK_SECRET1`** (the un-suffixed names hold stale
-  values; code prefers the `1` names with fallback — see `credentials-and-accounts.md`).
-  `.env.local` holds both under the canonical names.
-- Receiver verified on prod: bad-signature POST → 401.
-- Full pipeline verified with REAL same-day calls delivered signed to prod: sales call →
-  correctly `external`, no post; coaching call → **`client`**, review generated, CSM + client
-  resolved ("Lou Perez" / "Eric Washington"), summary built and sent to Slack — **Slack
-  returned `is_archived`: the channel was archived during the outage.** Unarchive it (or point
-  `SLACK_CS_CALL_SUMMARIES_CHANNEL_ID` at a new channel + invite the bot), then re-fire that
-  call (delete its failed `cs_call_summary_slack_post` audit row, re-deliver — payload shape +
-  signing recipe are in `fathom_webhook.md` / this session's history) and the channel is back.
-- **User decision 2026-09-02: NO manual backfill** — forward-only. The daily 08:00 UTC sweep
-  still quietly heals the newest 30 days of dashboard data (≤50 calls/day, zero channel posts
-  thanks to the flood-guard); the Jul 2 → early-Aug chunk stays unrecovered by choice.
-
-### What broke (verified against the live DB 2026-09-01)
-
-The channel is fed by a hook inside **Fathom ingestion** — `agents/gregory/cs_call_summary_post.py`,
-fired from `ingestion/fathom/pipeline.py:ingest_call` for every `call_category='client'` call with
-a usable review. No Fathom deliveries → no ingest → no posts. Evidence:
-
-- Last `fathom_webhook` delivery: **2026-07-02 15:24 UTC** (14–20/day before that). Last ingested
-  Fathom call started 2026-07-02. Last successful channel post: **2026-07-01**.
-- The daily `fathom_cron` safety-net sweep has written **zero** audit rows since Jul 2 08:00 — it
-  dies on the dead API key.
-- The Slack side is healthy: `SLACK_CS_CALL_SUMMARIES_CHANNEL_ID` + `SLACK_BOT_TOKEN` are still
-  set in Vercel, and the hook kept writing (correctly-skipped `malformed` / `no_summary_text`)
-  audit rows when old TXT transcripts were re-ingested in mid-August — proving the code path still
-  executes.
-- Pre-outage volume: ~400 Fathom calls/month, **~210–225 client-category/month**. The gap
-  (Jul 2 → restore date) is therefore roughly **~800 calls / ~430 client calls** as of Sep 1 and
-  growing.
-- Related but **separate** break, don't conflate: the `cs_missed_recording` cron's audit trail
-  stopped 2026-07-24 — that one is the Google Calendar OAuth death (~Jul 20), a different
-  credential (fix via `/api/auth/google/connect`).
-
-### Restore steps
-
-1. **From Nabeel: a working Fathom API key** (and pick a fresh `FATHOM_WEBHOOK_SECRET`). Confirm
-   the Fathom workspace that records CS calls, and that the current Fathom plan still includes
-   API + webhook access (find out *why* it died Jul 2 — key revoked vs plan/account change —
-   because that decides whether it can die again).
-2. Set `FATHOM_API_KEY` + `FATHOM_WEBHOOK_SECRET` in Vercel env, redeploy.
-3. **Re-register the webhook via Fathom's API** (`POST /external/v1/webhooks`, destination
-   `https://ai-enablement-sigma.vercel.app/api/fathom_events`) — it was re-registered via API
-   before; `docs/runbooks/fathom_webhook.md` documents the exact call.
-4. **Verify live end-to-end on the next real client call**: `fathom_webhook` processed row →
-   `cs_call_summary_slack_post` processed row → message visible in the channel. If the Slack leg
-   fails, the runbook's error table covers it (`not_in_channel` → `/invite` the bot, etc.).
-5. **Backfill the gap** (Jul 2 → restore date) — this fills the DB/dashboards, *not* the channel:
-   - The built-in daily sweep cannot do it alone: `api/fathom_backfill.py` caps lookback at
-     `_MAX_LOOKBACK_DAYS = 30` and ingests `_MAX_INGESTS_PER_SWEEP = 50` per run. A ~2-month /
-     ~800-call gap needs a dedicated run — repeated invocations with the window lifted, or a
-     one-shot script. House rule: real-API `--smoke` on one record before the full run.
-   - **Suppress the CS Slack hook during the backfill, or the channel gets ~430 stale summaries.**
-     Backfill ingests are deliberately bit-for-bit identical to webhook ingests, and no suppress
-     flag exists today. Smallest change: a `post_cs_summary: bool = True` param on `ingest_call`
-     threaded from the backfill path (or an env kill-switch checked inside
-     `maybe_post_cs_call_summary`). **Do not run the backfill before this exists.**
-   - Cost: the pipeline auto-generates a Claude review per client call — expect the same order as
-     the DC review backfill (471 reviews ≈ $13), so roughly **$10–30** plus embeddings.
-6. After the backfill: spot-check the Gregory dashboard (calls list, client health) across the gap
-   window, and confirm the daily `fathom_cron` writes audit rows again.
-
-### Effort + what else comes back
-
-Once credentials exist: env + webhook + live verification is **~an hour**; the suppression flag +
-supervised backfill is **a few more hours**. Note the channel is just the visible symptom — the
-entire Fathom-fed fulfillment side (call ingestion, summaries, reviews, Gregory scoring inputs)
-has been blind since Jul 2, and this restore brings all of it back.
+> Fully restored and verified: Fathom webhook live (id `F8gszQFknRvwMtFN`, env vars under the
+> `1`-suffixed names), receiver enforcing signatures, and the first summary **posted to the
+> unarchived channel** (the channel had been archived during the outage — Zain unarchived it).
+> Forward-only by user decision: no manual backfill of the Jul 2 → Aug outage window; the daily
+> sweep silently heals the newest 30 days of dashboard data. Permanent record:
+> `docs/runbooks/cs_call_summary.md` + `docs/runbooks/fathom_webhook.md` +
+> `docs/runbooks/credentials-and-accounts.md` (env-var naming note). Known cosmetic residue: one
+> pre-go-live call (`179301765`) repeatedly 504s at the gateway on re-delivery and never got a
+> channel post — irrelevant under forward-only.
