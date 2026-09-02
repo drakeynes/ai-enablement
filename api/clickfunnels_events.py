@@ -1,20 +1,20 @@
-"""ClickFunnels submission capture endpoint — DISCOVERY STUB.
+"""ClickFunnels form-submission webhook receiver.
 
 Deployed by Vercel as a serverless Python function at
-`/api/clickfunnels_events`. This is the capture half of the ClickFunnels
-plan in `docs/future-plans.md` §1: the DC funnel's ClickFunnels workflow
-already webhooks each form submission into a Make.com scenario (which
-populates a Google Sheet); a forwarding module in that scenario relays
-the same payload here so we can inspect real payloads before writing the
-adapter (discovery-before-build), and so no submission is lost while the
-real pipeline is built.
+`/api/clickfunnels_events`. A Webhook step in the DC ClickFunnels
+workflow POSTs one flat JSON object per form submission (a parallel
+step feeds Make.com → the Google Sheet; the two deliveries are
+independent). See docs/runbooks/clickfunnels_ingestion.md.
 
-CAPTURE ONLY for now: every accepted POST lands as a
-`webhook_deliveries` row (`source='clickfunnels_webhook'`,
-`processing_status='received'`) with the raw payload. Nothing parses or
-mirrors it yet — rows deliberately stay `received` until the
-`ingestion/clickfunnels/` pipeline exists to process them (they are its
-future replay queue).
+Two-phase, audit-first (house webhook pattern): every accepted POST is
+FIRST captured raw into `webhook_deliveries`
+(source='clickfunnels_webhook', status='received', dedup on body hash),
+THEN `ingestion.clickfunnels.pipeline.process_pending` normalizes the
+capture (plus any backlog) into the `typeform_responses` mirror — the
+same table Typeform lives in, so the facts refresh and every dashboard
+read both sources identically. A processing failure never fails the
+delivery; unprocessed captures are the replay queue and drain on the
+next submission.
 
 Auth: shared secret, constant-time-compared against
 `CLICKFUNNELS_WEBHOOK_SECRET` — either the `X-Relay-Secret` header (a
@@ -117,11 +117,33 @@ class handler(BaseHTTPRequestHandler):
                 )
                 .execute()
             )
-            if not insert_resp.data:
-                self._respond(200, {"deduplicated": True})
-                return
-            logger.info("clickfunnels_webhook: captured %s", webhook_id)
-            self._respond(200, {"captured": True, "id": webhook_id})
+            deduplicated = not insert_resp.data
+            if not deduplicated:
+                logger.info("clickfunnels_webhook: captured %s", webhook_id)
+
+            # Normalize this capture (and drain any backlog) into the
+            # typeform_responses mirror. Fail-soft: the capture row is
+            # the replay queue, so a processing failure never fails the
+            # delivery.
+            counts: dict[str, int] = {}
+            try:
+                from ingestion.clickfunnels.pipeline import process_pending
+
+                counts = process_pending(db, limit=20)
+            except Exception as exc:
+                logger.exception(
+                    "clickfunnels_webhook: processing failed (capture kept): %s", exc
+                )
+
+            self._respond(
+                200,
+                {
+                    "captured": not deduplicated,
+                    "deduplicated": deduplicated,
+                    "id": webhook_id,
+                    "processed": counts,
+                },
+            )
         except Exception as exc:  # always-200 after auth (house posture)
             logger.exception("clickfunnels_webhook: capture failed: %s", exc)
             self._respond(200, {"captured": False})

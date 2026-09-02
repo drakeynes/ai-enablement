@@ -5,6 +5,10 @@ the DC Ads page's landing-page dropdown and its Ads & Landing-Page summary
 section. One row per ad-destination landing page on `digitalcollege.ai`.
 Migration 0132.
 
+> **`typeform_id` can also hold a ClickFunnels form id** (`cf:` prefix) since 2026-09-02 — the
+> column means "the form this LP embeds," whichever system hosts it. First live: `go-lp-v2` →
+> `cf:aman-vsl-funnel` with `qualify_field_ref='cf_has_budget_200'`, `qualify_answers={Yes}`.
+
 Landing pages are named by their **actual URLs**, shortened (`join/training`,
 `go`) — Drake 2026-08-13 — never by the Close `funnel_name` (which cross-tags
 a handful of leads and can't be derived for a brand-new campaign until Close

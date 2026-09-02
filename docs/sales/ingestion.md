@@ -73,9 +73,20 @@ on the provider side and can be deactivated. For the booking→close mechanism s
 [`logic.md`](./logic.md) / [`surfaces.md`](./surfaces.md).
 
 ### Typeform — `ingestion/typeform/`
-Webhook (real-time primary) + cron backstop (`typeform_sync_cron`, `*/15`) + insights
+Webhook (real-time primary) + cron backstop (`typeform_sync_cron`, `*/30`) + insights
 cron + full backfill → `typeform_responses`, `typeform_forms`. **Active HT opt-in gate =
 form `SFedWelr`.** `PWSNd0h2` is the dormant Setter Funnel.
+
+### ClickFunnels — `ingestion/clickfunnels/` (LIVE 2026-09-02)
+The DC funnel's opt-in survey moved from Typeform to a ClickFunnels form (~Sep 2026). A CF
+workflow **Webhook step** POSTs each submission to `api/clickfunnels_events.py`
+(secret-gated; audit-first capture into `webhook_deliveries` `source='clickfunnels_webhook'`,
+then normalized inline into **the same `typeform_responses` / `typeform_forms` tables** with
+`cf:`-prefixed ids — e.g. form `cf:aman-vsl-funnel` from the payload's `funnel` label).
+Downstream (facts refresh 0154, DC Setup pickers, all DC Ads surfaces) reads both sources
+identically; Typeform keeps working unchanged. Event-driven, no cron; independent parallel leg:
+CF → Make.com → Google Sheet (Zain's) = the recovery record. Runbook:
+`docs/runbooks/clickfunnels_ingestion.md`.
 
 ### Meta ads — `ingestion/meta_ads/`
 `api/meta_sync_cron.py`, **3-hour cron** (`0 */3 * * *`). **Source changed

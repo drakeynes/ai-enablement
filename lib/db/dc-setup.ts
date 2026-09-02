@@ -171,6 +171,9 @@ const HEALTH_SOURCES: { key: string; label: string; detail: string; staleAfterMi
   { key: 'meta_sync', label: 'Meta Ads spend', detail: 'adspend mirrors', staleAfterMin: 240 },
   { key: 'close_webhook', label: 'Close CRM', detail: 'leads · calls · SMS', staleAfterMin: 360 },
   { key: 'typeform_sync_cron', label: 'Typeform', detail: 'form submissions', staleAfterMin: 120 },
+  // Event-driven (no cron): a quiet overnight is normal, so the threshold is
+  // half a day — a red tile here means the CF workflow webhook step died.
+  { key: 'clickfunnels_webhook', label: 'ClickFunnels', detail: 'form submissions', staleAfterMin: 720 },
   { key: 'airtable_sync_cron', label: 'Airtable', detail: 'sale forms · closer reports', staleAfterMin: 120 },
   { key: 'wistia_sync', label: 'Wistia', detail: 'video stats', staleAfterMin: 1440 },
   { key: 'outbound_facts_refresh', label: 'Dashboard numbers', detail: 'DC Ads page refresh', staleAfterMin: 120 },

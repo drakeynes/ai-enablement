@@ -85,8 +85,9 @@ The picker only offers forms our system has actually seen submissions from (same
 so you can't attach a wrong or misspelled id — if the new ClickFunnels form isn't in the list
 yet, send one test submission through it and re-open the picker.
 
-> Status note: ClickFunnels ingestion goes live with the first captured submissions
-> (rollout tracked in `docs/future-plans.md` §1); this section describes the behavior once live.
+> Live since 2026-09-02 — the first ClickFunnels form (`cf:aman-vsl-funnel`, the Aman VSL
+> Funnel on `go/lp-v2`) is attached and qualifying leads. Ops detail:
+> `docs/runbooks/clickfunnels_ingestion.md`.
 
 ## Scenario 5 — a landing page or campaign is being retired
 

@@ -2,6 +2,12 @@
 
 Per-submission mirror of Typeform form responses. One row per opt-in / lead form submission. Idempotent on `response_id`.
 
+> **Since 2026-09-02 this table also holds ClickFunnels submissions**, normalized into the same
+> shape by `ingestion/clickfunnels/` — rows with `response_id`/`form_id` prefixed `cf:`
+> (e.g. form `cf:aman-vsl-funnel`). Same answers/hidden contract, same consumers; the Typeform
+> sync never touches `cf:` rows (it iterates the Typeform API's own form list). See
+> `docs/runbooks/clickfunnels_ingestion.md`.
+
 ## Purpose
 
 The lead stream. Top-of-funnel opt-ins flow in via webhook (real-time, primary) + cron backstop (last-N-hours safety sweep) + full-history backfill. The future sales dashboard reads from this table to show closers fresh leads + slice the funnel by question / time / attribution.

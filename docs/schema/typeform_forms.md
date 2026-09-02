@@ -2,6 +2,11 @@
 
 Reference table mirroring Typeform form definitions. Refreshed each cron tick from `GET /forms` + `GET /forms/{form_id}`.
 
+> **Since 2026-09-02 this table also holds ClickFunnels form definitions** (`form_id` prefixed
+> `cf:`), synthesized by `ingestion/clickfunnels/parser.form_definition_row` so the DC Setup
+> form + qualification pickers offer CF forms exactly like Typeforms. The cron never overwrites
+> them (it upserts only ids returned by the Typeform API).
+
 ## Purpose
 
 The question-ref dictionary for the lead-stream mirror. `typeform_responses.answers[]` reference questions by `field.ref` — this table is where future dashboard / aggregation queries resolve those refs to human-readable titles + question types + choice labels without re-fetching from Typeform.
