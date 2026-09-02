@@ -63,6 +63,31 @@ the videos attach once Wistia sees them play on the page. Afterwards, in the
 - Add **videos** that haven't auto-attached, and the **extra funnel pages**
   (pages after the opt-in that show the funnel's video — e.g. Luke's `/t-2`).
 
+### Attaching a ClickFunnels form — funnel ID vs form ID (added 2026-09-02)
+
+ClickFunnels forms attach the **same way a Typeform does**: same picker on the landing-page row,
+same qualification question + answer checkboxes. Typeforms keep working unchanged — a page can
+use either kind. The one thing to get right is **which ClickFunnels id identifies the form**,
+because ClickFunnels shows several ids side by side:
+
+- The **form ID** is the identity of the actual questionnaire (the set of questions). **This is
+  the one that matters** — it's the equivalent of a Typeform id.
+- The **funnel ID** (and the **page ID**) identify the *container* the form sits in. They are NOT
+  the form: the funnel keeps its id while the form inside it gets swapped, and one form can be
+  reused across several pages. Never attach a funnel id as if it were the form.
+- Forms built **directly on a funnel page** (not as a standalone ClickFunnels "Form") have no
+  separate form id — there the *page* is the identity, and the picker will show it that way.
+- **Editing a form in place** (same id, new/changed questions) is **not** a new form — the
+  attachment keeps working; just re-pick the qualification question if that question changed.
+  **Creating a new form or page** = new id = attach it here like any new form.
+
+The picker only offers forms our system has actually seen submissions from (same as Typeform),
+so you can't attach a wrong or misspelled id — if the new ClickFunnels form isn't in the list
+yet, send one test submission through it and re-open the picker.
+
+> Status note: ClickFunnels ingestion goes live with the first captured submissions
+> (rollout tracked in `docs/future-plans.md` §1); this section describes the behavior once live.
+
 ## Scenario 5 — a landing page or campaign is being retired
 
 - **Landing page** → Landing pages section → **Retire**. It leaves the DC Ads

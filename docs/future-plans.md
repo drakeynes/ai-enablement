@@ -64,6 +64,16 @@ ClickFunnels workflow** pointing at us — no Make change at all, the Make→She
 secret then travels as `?secret=<value>` appended to the URL (the endpoint accepts header OR query
 param). The Make-module route stays documented above as the fallback.
 
+**2026-09-02: the relay is ARMED end-to-end.** Zain produced the secret+URL, Drake set
+`CLICKFUNNELS_WEBHOOK_SECRET` in Vercel (owner login) and redeployed; Drake smoke-tested the full
+path with the real secret (authenticated POST → `captured:true` → row in `webhook_deliveries` →
+test row deleted). Waiting only on the **first real submission** through Zain's CF webhook step —
+a DB watcher notifies the session; then: inspect payload → build `ingestion/clickfunnels/`
+normalizer → register the form in DC Setup. Also 2026-09-02: **Tier A–D is NOT in use** (Drake:
+his misread) — the tf_experience label-copy concern is void; qualify/can-pay (registry-driven) is
+the only live survey logic. Admin guidance for funnel-ID-vs-form-ID written into
+`docs/runbooks/dc_setup_admin.md` § Scenario 4. Original handoff list below for reference:
+
 **End-of-day state 2026-09-01 — capture endpoint LIVE and verified** (deploy `success`; GET → 200
 health, POST without secret → 503), handoff issued, waiting on people:
 
