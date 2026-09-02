@@ -73,45 +73,28 @@ Two levers, independent, either can ship alone:
 
 ## 3. Restore the #cs-call-summaries Slack channel
 
-> **Status: READY TO EXECUTE — everything verifiable tonight was verified 2026-09-01 evening;
-> the remaining steps need only the owner Vercel login (Drake gets it 2026-09-02).**
-> Working-system reference: `docs/runbooks/cs_call_summary.md` (message format, audit trail,
-> debug table) and `docs/runbooks/fathom_webhook.md` (webhook registration history).
+> **Status: EXECUTED 2026-09-02 — everything on our side is live and verified; the ONLY
+> remaining step is un-archiving the Slack channel (user-side).** Permanent record:
+> `docs/runbooks/cs_call_summary.md` + `docs/runbooks/fathom_webhook.md`.
 
-**Verified 2026-09-01 evening:**
+**Done + verified 2026-09-02:**
 
-- **The new Fathom API key WORKS** — live `GET /external/v1/meetings` returned 200; the account
-  is actively recording (newest meeting 22:27 UTC same day, 10+ in the prior 7 days), so the
-  outage-window recordings exist on Fathom's side and are backfillable. The key sits in Drake's
-  local `.env.local` (`FATHOM_API_KEY`) — **local-only; if that file is lost, get the key again
-  from Zain/Nabeel.** It is NOT in Vercel yet.
-- **Backfill flood-guard shipped** (`cc8ec50`): `ingest_call(post_cs_summary=False)` from the
-  daily sweep — swept/backfilled calls generate all data but never post to the CS channel (see
-  the note in `cs_call_summary.md`). Deploy was still `pending` at session close — **confirm it
-  reads `success` (GitHub commit ✓ on `cc8ec50`) before putting the key into Vercel.**
-- Registration mechanics confirmed against the live API: **no list endpoint** (GET /webhooks
-  404s, documented quirk); create = `POST /external/v1/webhooks` (exact body in
-  `fathom_webhook.md` ~line 212) whose **response contains the new `whsec_…` signing secret**;
-  the dead registration's id from the last rotation was `FTVBjD_JqTfjEzVA` (delete it if Fathom
-  ever complains about a duplicate destination).
-- **Deliberately NOT registered yet**: registering mints a new secret and starts deliveries
-  immediately, which would all 401 against the stale `FATHOM_WEBHOOK_SECRET` in Vercel until the
-  owner login can update it — a day of rejected deliveries risks Fathom auto-disable. Register
-  and paste as one tight sequence instead.
-
-**The go-live sequence (five minutes, with the owner Vercel login open):**
-
-1. Register the webhook (`POST /external/v1/webhooks`, destination
-   `https://ai-enablement-sigma.vercel.app/api/fathom_events`, body per the runbook); capture
-   the returned webhook id + `whsec_…` secret.
-2. Paste `FATHOM_API_KEY` (from `.env.local`) and `FATHOM_WEBHOOK_SECRET` (the fresh `whsec_…`)
-   into Vercel env (Production) → **Redeploy**.
-3. Verify: POST with a bad signature → 401; then the next real client call end-to-end:
-   `webhook_deliveries` `source='fathom_webhook'` processed row → `cs_call_summary_slack_post`
-   processed row → message in the CS channel.
-4. Aftermath: the daily 08:00 UTC sweep quietly heals the newest 30 days at ≤50 calls/day (no
-   channel posts); the older chunk (Jul 2 → early Aug) needs one supervised manual backfill run
-   (lift the 30-day/50-call caps for one run, or a one-shot script) — schedule whenever.
+- Fathom webhook re-registered (`POST /external/v1/webhooks`, id **`F8gszQFknRvwMtFN`**, old
+  dead registration was already gone). Fresh `whsec_…` secret captured; live values in Vercel
+  under **`FATHOM_API_KEY1` / `FATHOM_WEBHOOK_SECRET1`** (the un-suffixed names hold stale
+  values; code prefers the `1` names with fallback — see `credentials-and-accounts.md`).
+  `.env.local` holds both under the canonical names.
+- Receiver verified on prod: bad-signature POST → 401.
+- Full pipeline verified with REAL same-day calls delivered signed to prod: sales call →
+  correctly `external`, no post; coaching call → **`client`**, review generated, CSM + client
+  resolved ("Lou Perez" / "Eric Washington"), summary built and sent to Slack — **Slack
+  returned `is_archived`: the channel was archived during the outage.** Unarchive it (or point
+  `SLACK_CS_CALL_SUMMARIES_CHANNEL_ID` at a new channel + invite the bot), then re-fire that
+  call (delete its failed `cs_call_summary_slack_post` audit row, re-deliver — payload shape +
+  signing recipe are in `fathom_webhook.md` / this session's history) and the channel is back.
+- **User decision 2026-09-02: NO manual backfill** — forward-only. The daily 08:00 UTC sweep
+  still quietly heals the newest 30 days of dashboard data (≤50 calls/day, zero channel posts
+  thanks to the flood-guard); the Jul 2 → early-Aug chunk stays unrecovered by choice.
 
 ### What broke (verified against the live DB 2026-09-01)
 
