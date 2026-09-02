@@ -197,7 +197,6 @@
     { "path": "/api/fathom_backfill", "schedule": "0 8 * * *" },
     { "path": "/api/gregory_brain_cron", "schedule": "0 9 * * *" },
     { "path": "/api/accountability_notification_cron", "schedule": "0 12 * * *" },
-    { "path": "/api/passive_ella_cron", "schedule": "* * * * *" },
     { "path": "/api/teams_calendar_sync_cron", "schedule": "*/30 * * * *" },
     { "path": "/api/client_meetings_sync_cron", "schedule": "30 4 * * *" },
     { "path": "/api/faq_digest_cron", "schedule": "0 19 * * 5" },

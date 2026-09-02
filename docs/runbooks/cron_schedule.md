@@ -28,7 +28,6 @@ the UTC instant is fixed (a deliberate, accepted trade-off — see ADR 0003).
 | `/api/meta_sync_cron` | `0 */3 * * *` | every 3h (UTC-anchored: 00,03,…) | Meta ad spend/delivery → the four ad mirrors (replaced `/api/cortana_sync_cron` 2026-06-30; Cortana code kept unscheduled for revert) |
 | `/api/meta_leads_sync_cron` | `*/30 * * * *` | every 30 min | Meta instant-form leads → `meta_form_leads` (+ forms + leadgen-campaign scan) + DC-ads facts refresh |
 | `/api/wistia_sync_cron` | `30 */6 * * *` | every 6 h at :30 past | Wistia stats pull |
-| `/api/passive_ella_cron` | `* * * * *` | every minute | Drains the Ella passive-response queue (legacy/no-op) |
 | `/api/teams_calendar_sync_cron` | `*/30 * * * *` | every 30 min | Google Calendar → `calendar_events` (/teams) |
 | `/api/ella_unanswered_flagger_cron` | `*/15 * * * *` | every 15 min | Flag >2h-unanswered client messages → #unanswered-channels |
 | `/api/cs_missed_recording_cron` | `*/15 * * * *` | every 15 min | Post "recording not available" notices |
