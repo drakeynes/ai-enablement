@@ -8,7 +8,7 @@
 
 Items:
 
-1. [ClickFunnels forms — replace the DC Typeform](#1-clickfunnels-forms--replace-the-dc-typeform)
+1. [ClickFunnels forms — remaining work](#1-clickfunnels-forms--remaining-work-core-shipped-2026-09-02)
 2. [Vercel bill reduction](#2-vercel-bill-reduction)
 3. [Restore the #cs-call-summaries Slack channel](#3-restore-the-cs-call-summaries-slack-channel)
 
