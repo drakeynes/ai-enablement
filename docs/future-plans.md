@@ -23,14 +23,13 @@ Items:
 > `docs/runbooks/clickfunnels_ingestion.md` (+ `dc_setup_admin.md` § Scenario 4, schema-doc
 > notes). What remains here:
 
-1. **Historical backfill from the Google Sheet** — **switch date derived from data 2026-09-02:
-   the Aman Typeform fell off a cliff Aug 29** (76–97 responses/day through Aug 28 → 1–2/day
-   after), so the backfill window is only **~Aug 29 → Sep 2 go-live**. The degradation is
-   visible in facts: cohort tf_answered coverage 84% on Aug 28 → ~8–10% Aug 31–Sep 2 (the
-   residue = leads matching their own older Typeform responses + stragglers). Needs: the Sheet
-   view link, a column↔payload-key mapping, then a one-shot script that replays rows as POSTs
-   to the endpoint (or inserts via the parser) — idempotent either way. `--smoke` one row
-   first, per house rule.
+1. ~~Historical backfill from the Google Sheet~~ — **DONE 2026-09-02**: all 434 sheet rows
+   (Aug 28 → Sep 2; sheet id `1JrvsOxiL76w_v32qwNHJffR7kSfzW6wBH8d2VIqTvP8`) replayed through
+   the live endpoint via `scripts/backfill_clickfunnels_sheet.py` (kept for reuse — the sheet
+   keeps logging, so it can patch any future webhook gap). Result: Sep-1 cohort tf_answered
+   went 18 → **215/215**, qualified 12 → **160**; Aug-31 and Sep-2 similarly healed. Event-ID
+   dedupe against live captures confirmed. Timestamp quirk documented in the script: the
+   sheet's "Local Time" column is actually UTC ISO; "Time Lead Came In" is ET.
 2. **Daily Close-divergence check** — the promised no-API safety net: compare new DC opt-ins in
    Close vs CF submissions received; alert on drift (piggyback an existing daily cron; the DC
    Setup ClickFunnels health tile added 2026-09-02 covers gross staleness already).

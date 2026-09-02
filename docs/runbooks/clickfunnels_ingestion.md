@@ -73,7 +73,15 @@ rotate both together). `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` via `shared.
 `tests/ingestion/clickfunnels/test_parser.py` — the payload fixture mirrors the first live
 capture; update it if the workflow mapping changes.
 
+## Backfill / gap-patching from the Google Sheet
+
+`scripts/backfill_clickfunnels_sheet.py --csv <export> --smoke|--apply` replays sheet rows
+through the live endpoint (same capture→normalize path; Event-ID dedupe makes it idempotent
+against live captures). Executed 2026-09-02 for the switch gap: 434 rows, Aug 28 → Sep 2,
+zero errors; Sep-1 cohort answered coverage went 18 → 215/215. The sheet keeps logging in
+parallel forever, so this same script patches any future webhook outage: export the sheet as
+CSV, `--smoke`, `--apply`, then `refresh_dc_ads_facts()`.
+
 ## Still open (tracked in `docs/future-plans.md` §1)
 
-Historical backfill from the Google Sheet (submissions between the Typeform switch and
-2026-09-02 go-live), and the daily Close-divergence cross-check.
+The daily Close-divergence cross-check.
