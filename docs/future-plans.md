@@ -23,11 +23,14 @@ Items:
 > `docs/runbooks/clickfunnels_ingestion.md` (+ `dc_setup_admin.md` § Scenario 4, schema-doc
 > notes). What remains here:
 
-1. **Historical backfill from the Google Sheet** — submissions between the Typeform→CF switch
-   (date still unconfirmed; ask Nabeel/Zain) and the 2026-09-02 go-live are only in the Sheet
-   (CF → Make → Sheet leg). Needs: the Sheet view link, a column↔payload-key mapping, then a
-   one-shot script that replays rows as POSTs to the endpoint (or inserts via the parser) —
-   idempotent either way. `--smoke` one row first, per house rule.
+1. **Historical backfill from the Google Sheet** — **switch date derived from data 2026-09-02:
+   the Aman Typeform fell off a cliff Aug 29** (76–97 responses/day through Aug 28 → 1–2/day
+   after), so the backfill window is only **~Aug 29 → Sep 2 go-live**. The degradation is
+   visible in facts: cohort tf_answered coverage 84% on Aug 28 → ~8–10% Aug 31–Sep 2 (the
+   residue = leads matching their own older Typeform responses + stragglers). Needs: the Sheet
+   view link, a column↔payload-key mapping, then a one-shot script that replays rows as POSTs
+   to the endpoint (or inserts via the parser) — idempotent either way. `--smoke` one row
+   first, per house rule.
 2. **Daily Close-divergence check** — the promised no-API safety net: compare new DC opt-ins in
    Close vs CF submissions received; alert on drift (piggyback an existing daily cron; the DC
    Setup ClickFunnels health tile added 2026-09-02 covers gross staleness already).
